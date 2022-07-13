@@ -1,83 +1,120 @@
-struct Branch
-    center
+abstract type Tree{dims} end
+
+struct Branch{dims} <: Tree{dims}
+    element
+    coefficients
     N
     LS
     SS
-    indices
+    parent
+    children
 end
 
-function Branch(dims)
-    Branch(zeros(dims), [0], zeros(dims), zeros(dims), Int32[])
+function get_X(branch::Branch)
+    get_X(branch.element)
 end
 
-struct Root
-    branch_system::Vector{Vector{Branch}}
+function get_q(branch::Branch)
+    get_q(branch.element)
+end
+
+function get_V(branch::Branch)
+    get_V(branch.element)
+end
+
+function add_V(branch::Branch, summand)
+    add_V(branch.element, summand)
+end
+
+function set_X(branch::Branch, new_X)
+    set_X(branch.element, new_X)
+end
+
+function Branch(element_type, p_expansion, dims)
+    Branch{dims}(element_type(dims), zeros(Complex{Float64},p_expansion), [0], zeros(dims), zeros(dims), CartesianIndex{dims}[], CartesianIndex{dims}[])
+end
+
+function Leaf(element_type, p_expansion, dims)
+    Branch{dims}(element_type(dims), zeros(Complex{Float64},p_expansion), [0], zeros(dims), zeros(dims), CartesianIndex{dims}[], Int32[])
+end
+
+struct Root{dims} <: Tree{dims}
+    branches::Vector{Array{Branch,dims}}
     branch_limit
     elements_per_leaf
+    p_expansion
 end
 
-function Root(elements::AbstractArray{e}, branch_limit, elements_per_leaf) where e<:Element
+function Root(elements::AbstractArray{e}, branch_limit, elements_per_leaf, p_expansion; n_divides=nothing, rect=nothing) where e<:Element
     # determine grid refinement
-    n_cells = length(elements) / elements_per_leaf
     dims = get_dims(elements)
-    n_divides = Int(floor(log2(n_cells)))
-    if isodd(n_divides); n_divides += 1; end
-    n_divides /= dims # number of levels in the tree to reach the desired elements per leaf (roughly)
+    if n_divides == nothing
+        n_cells = length(elements) / elements_per_leaf
+        n_divides = Int(floor(log2(n_cells)))
+        if isodd(n_divides); n_divides += 1; end
+        n_divides /= dims # number of levels in the tree to reach the desired elements per leaf (roughly)
+    end
 
     # bottom level cell discretization
-    rect = get_rectangle(elements)
+    if isnothing(rect)
+        rect = get_rectangle(elements)
+    end
     lengths = [rect[2,i] - rect[1,i] for i in 1:dims]
     size = Int(2^n_divides)
-    fences = [range(rect[1,i] - lengths[i]/100, stop=rect[2,i] + lengths[i]/100, length=1+size) for i in 1:dims]
-    leaves = [Branch(dims) for i in 1:size^dims]
+    fences = [range(rect[1,i], stop=rect[2,i], length=1+size) for i in 1:dims]
+    # fences = [range(rect[1,i] - lengths[i]/100, stop=rect[2,i] + lengths[i]/100, length=1+size) for i in 1:dims]
+    # initialize leaves
+    element_type = typeof(elements[1])
+    leaves = Array{Branch,dims}(undef,fill(size,dims)...)
+    for ci in CartesianIndices(leaves)
+        leaves[ci] = Leaf(element_type, p_expansion, dims)
+        set_X(leaves[ci], [(fences[i][ci[i]] + fences[i][ci[i]+1])/2 for i in 1:dims])
+    end
 
+    # assign leaf membership
     for (i_element,element) in enumerate(elements)
         X = get_X(element)
         cartesian_i = CartesianIndex([findfirst(x -> x>X[i], fences[i]) - 1 for i in 1:dims]...)
-        i_leaf = cartesian_2_linear(cartesian_i, size)
-        push!(leaves[i_leaf].indices, i_element)
-        leaves[i_leaf].N[1] += 1
+        push!(leaves[cartesian_i].children, i_element)
+        leaves[cartesian_i].N[1] += 1
     end
 
     # build branch system
-    top_size = length(fences[1]) - 1
-    branch_system = branch(leaves, top_size, dims)
+    branches = [leaves]
+    merge_branches!(branches, p_expansion, dims, element_type)
 
-    return Root(branch_system, branch_limit, elements_per_leaf)
+    return Root(branches, branch_limit, elements_per_leaf, p_expansion)
 end
 
-function branch(leaves::Vector{Branch}, top_size, dims)
-    branch_system = Vector{Vector{Branch}}(undef,1)
-    branch_system[1] = leaves
-    return branch(branch_system, top_size, dims)
-end
-
-function branch(branch_system::Vector{Vector{Branch}}, top_size, dims)
-    top_n = length(branch_system[end])
-    if top_n == 1
-        return branch_system
+function merge_branches!(branches, p_expansion, dims, element_type)
+    highest_level = branches[end]
+    top_size = size(highest_level)[1]
+    if top_size == 1 # note: if only 1 leaf exists, no branches are generated
+                     #     if more than 1 leaf exists, branches are generated
+        return branches
     else
         # merge branches/leaves
-        new_n = Int(top_n / 2^dims)
         new_size = Int(top_size / 2)
-        new_branch = Vector{Branch}(undef,new_n)
-        for (i,ci) in enumerate(CartesianIndices(Tuple(fill(new_size,dims))))
-            indices = [
-                cartesian_2_linear((2*ci[1]-1, 2*ci[2]-1), new_size),
-                cartesian_2_linear((2*ci[1], 2*ci[2]-1), new_size),
-                cartesian_2_linear((2*ci[1]-1, 2*ci[2]), new_size),
-                cartesian_2_linear((2*ci[1], 2*ci[2]), new_size)
-            ]
-            center = S.mean([branch.center for branch in branch_system[end][indices]])
-            # center = [fences[j][2*ci[j]] for j in 1:dims]
-            N = [sum([branch_system[end][j].N[1] for j in indices])]
+        next_level = Array{Branch,dims}(undef,fill(new_size,dims)...)
+        for ci in CartesianIndices(Tuple(fill(new_size,dims)))
+            children = CartesianIndices(Tuple([2*ci[j]-1:2*ci[j] for j in 1:dims]))
+            center = S.mean([get_X(branch) for branch in highest_level[children]])
+            element = element_type(dims)
+            set_X(element, center)
+            coefficients = zeros(Complex{eltype(center)}, p_expansion)
+            N = [sum([highest_level[j].N[1] for j in children])]
             LS = 0.0
             SS = 0.0
-            new_branch[i] = Branch(center, N, LS, SS, indices)
-        end
-        push!(branch_system, new_branch)
+            next_level[ci] = Branch{dims}(element, coefficients, N, LS, SS, CartesianIndex{dims}[], reshape(children,length(children)))
 
-        return branch(branch_system, Int(top_size/2), dims)
+            # update parent info
+            for child in highest_level[children]
+                push!(child.parent, ci)
+            end
+        end
+        push!(branches, next_level)
+
+        merge_branches!(branches, p_expansion, dims, element_type)
     end
 end
 
@@ -91,13 +128,18 @@ function cartesian_2_linear(cartesian_i, size)
     return linear_index
 end
 
-function get_rectangle(elements::AbstractArray{e}) where e<:Element
+function linear_2_cartesian(linear_i, size, dims)
+    cartesian_index = Base._ind2sub(fill(size, dims), linear_i)
+    return cartesian_index
+end
+
+function get_rectangle(elements::AbstractArray{e}; rel_offset = 1e-2) where e<:Element
     dims = get_dims(elements)
     rectangle = zeros(2, dims)
     for dim in 1:dims
         xs = [get_X(element)[dim] for element in elements]
-        rectangle[1,dim] = minimum(xs)
-        rectangle[2,dim] = maximum(xs)
+        rectangle[1,dim] = minimum(xs)*(1-rel_offset)
+        rectangle[2,dim] = maximum(xs)*(1+rel_offset)
     end
     return rectangle
 end

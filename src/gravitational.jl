@@ -4,10 +4,15 @@
 struct Mass{TF} <: Element{TF}
     X::Vector{TF} # location of each element
     m::Vector{TF} # mass of the element
+    V::Vector{TF} # potential induced by other elements
 end
 
-function Mass(X::Vector{TF}, m::TF) where TF
-    Mass(X, [m])
+function Mass(X::Vector{TF}, m::TF, V::TF=0.0) where TF
+    Mass(X, [m], [V])
+end
+
+function Mass{TF}(dims) where TF
+    Mass(zeros(dims), zeros(1), zeros(1))
 end
 
 function get_X(mass::Mass)
@@ -16,6 +21,30 @@ end
 
 function get_q(mass::Mass)
     return mass.m[1]
+end
+
+function get_V(mass::Mass)
+    return mass.V[1]
+end
+
+function set_X(mass::Mass, new_X)
+    mass.X .= new_X
+end
+
+function set_q(mass::Mass, new_q)
+    mass.m[1] = new_q
+end
+
+function add_q(mass::Mass, summand)
+    set_q(mass, get_q(mass) + summand)
+end
+
+function set_V(mass::Mass, new_V)
+    mass.V[1] = new_V
+end
+
+function add_V(mass::Mass, summand)
+    set_V(mass, get_V(mass) + summand)
 end
 
 #####

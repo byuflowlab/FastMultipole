@@ -31,6 +31,10 @@ function get_q(elements::AbstractArray{e}, i) where e<:Element
     return get_q(elements[i])
 end
 
+function get_V(elements::AbstractArray{e}, i) where e<:Element
+    return get_V(elements[i])
+end
+
 function get_dims(elements::AbstractArray{e}) where e<:Element
     return length(get_X(elements, 1))
 end
