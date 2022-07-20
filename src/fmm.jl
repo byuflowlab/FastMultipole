@@ -1,22 +1,27 @@
 "Sum charges at each level."
 function upward_pass!(root::Root, elements::AbstractArray{e}) where e<:Element
+    # reset coefficients
+    reset_multipole!(root)
+
     # iterate over branches/leaves
     for (i,level) in enumerate(root.branches)
         for branch in level
             X_branch = get_X(branch)
-            branch.coefficients .*= 0.0 # reset coefficients
             nursery = i > 1 ? root.branches[i-1][branch.children] : elements[branch.children]
             for child in nursery
                 q = get_q(child)
-                dx_complex = complexify(get_X(child) - X_branch)
                 set_q(branch.element, get_q(branch.element) + q)
+                dx_complex = complexify(get_X(child) - X_branch)
                 for i_coefficient in 1:root.p_expansion
-                    branch.coefficients[i_coefficient] -= q * dx_complex^i_coefficient / i_coefficient
+                    if i == 1
+                        branch.multipole_coefficients[i_coefficient] -= q * dx_complex^i_coefficient / i_coefficient
+                    else
+                        branch.multipole_coefficients[i_coefficient] += -q / i_coefficient * dx_complex^i_coefficient + sum([child.multipole_coefficients[k] * dx_complex^(i_coefficient-k) * binomial(i_coefficient-1,k-1) for k in 1:i_coefficient])
+                    end
                 end
             end
         end
     end
-    # THIS IS STILL MISSING A WAY OF TRANSLATING MULTIPOLE COEFFICIENTS TO PARENTS
 end
 
 function complexify(vec)
@@ -55,25 +60,77 @@ end
 
 "Approximate influence of all cells on all other cells"
 function downward_pass!(root, elements, kernel)
+    # reset local expansion coefficients
+    reset_local!(root)
+
+    # reset element potential
+    reset_potential!(elements)
+
     for i_level in length(root.branches):-1:1
-        # sibling interactions
+        # interactions caused by siblings in the interaction list
         for target_ci in CartesianIndices(root.branches[i_level])
             il = interaction_list(root, i_level, target_ci)
             for source_ci in il
-                direct!(root.branches[i_level][source_ci].element, root.branches[i_level][target_ci].element, kernel)
+                if abs(get_q(root.branches[i_level][source_ci])) > 0.0 # note that the local expansion is nonzero if there are 0 elements and must therefore be omitted
+                    # get z_0
+                    dx_complex = complexify(get_X(root.branches[i_level][source_ci]) - get_X(root.branches[i_level][target_ci]))
+                    q_source = get_q(root.branches[i_level][source_ci])
+
+                    # if source_ci == CartesianIndex(5,3) && target_ci == CartesianIndex(3,5)
+                    #     println("SHERLOCK!\n\tBEFORE: $(root.branches[i_level][target_ci].local_coefficients)")
+                    # end
+                    # 0th coefficient of the power series
+                    root.branches[i_level][target_ci].local_coefficients[1] += q_source * log(-dx_complex) +
+                        sum([root.branches[i_level][source_ci].multipole_coefficients[k] / (-dx_complex)^k for k in 1:root.p_expansion])
+
+                    # remainding coefficients
+                    for i_coefficient in 1:root.p_expansion
+                        root.branches[i_level][target_ci].local_coefficients[i_coefficient+1] += dx_complex^(-i_coefficient) * (
+                            -q_source/i_coefficient + sum([root.branches[i_level][source_ci].multipole_coefficients[k] * (-dx_complex)^(-k) * binomial(i_coefficient+k-1, k-1) for k in 1:root.p_expansion])
+                        )
+                    end
+                    # if source_ci == CartesianIndex(5,3) && target_ci == CartesianIndex(3,5)
+                    #     println("SHERLOCK!\n\tAFTER: $(root.branches[i_level][target_ci].local_coefficients)")
+                    # end
+                end
             end
         end
-
-        # translate to children
-        nursery = i_level > 1 ? root.branches[i_level-1] : elements
-        for branch in root.branches[i_level] # iterate over each branch after calculating sibling influence
-            for child_ci in branch.children # iterate over all children
-                add_V(nursery[child_ci], get_V(branch))
+        # translate local expansions to children; note that child local expansion coefficients should be zero at this point
+        if i_level > 1 # translate local expansion to children
+            for parent_ci in CartesianIndices(root.branches[i_level]) # select parent
+                branch = root.branches[i_level][parent_ci]
+                # for child_ci in CartesianIndices(root.branches[i_level-1][branch.children])
+                for child_ci in branch.children
+                    child = root.branches[i_level-1][child_ci]
+                    dx_complex = complexify(get_X(branch) - get_X(child))
+                    # if parent_ci == CartesianIndex(2,3) && child_ci == CartesianIndex(3,5)
+                    #     println("Sherlock!\n\tBEFORE: $(child.local_coefficients)")
+                    # end
+                    child.local_coefficients .+= branch.local_coefficients
+                    for j in 0:root.p_expansion-1
+                        for k in root.p_expansion-j:root.p_expansion
+                            child.local_coefficients[k] -= dx_complex * child.local_coefficients[k+1]
+                        end
+                    end
+                    # if parent_ci == CartesianIndex(2,3) && child_ci == CartesianIndex(3,5)
+                    #     println("\tAFTER: $(child.local_coefficients)")
+                    # end
+                end
             end
         end
     end
+end
 
-    # direct calculation at leaf level
+function evaluate!(root, elements, kernel)
+    # evaluate local expansion at each particle location
+    for leaf in root.branches[1]
+        for element in elements[leaf.children]
+            dx_complex = complexify(get_X(element) - get_X(leaf))
+            add_V(element, real(sum([leaf.local_coefficients[l+1] * dx_complex^l for l in 0:root.p_expansion])))
+        end
+    end
+
+    # direct calculation of nearest neighbors
     for target_ci in CartesianIndices(root.branches[1])
         target_i = root.branches[1][target_ci].children
         for source_ci in i_nearest_neighbors(root, 1, target_ci)
@@ -83,8 +140,34 @@ function downward_pass!(root, elements, kernel)
     end
 end
 
+function fmm!(root, elements, kernel)
+    upward_pass!(root, elements)
+    downward_pass!(root, elements, kernel)
+    evaluate!(root, elements, kernel)
+    return nothing
+end
 
+function reset_local!(root::Root)
+    for level in root.branches
+        for branch in level
+            branch.local_coefficients[:] *= 0
+        end
+    end
+end
 
+function reset_multipole!(root::Root)
+    for level in root.branches
+        for branch in level
+            branch.multipole_coefficients[:] *= 0
+        end
+    end
+end
+
+function reset_potential!(elements::AbstractArray{e}) where e<:Element
+    for element in elements
+        set_V(element, 0.0)
+    end
+end
 
 # function l2p(p, x_target, x_local, x_multipole, x_source, q_source, kernel::Kernel{TF,dims}; verbose=false, store_series=nothing) where {TF,dims}
 #     Rho = x_target - x_local

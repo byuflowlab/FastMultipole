@@ -2,7 +2,8 @@ abstract type Tree{dims} end
 
 struct Branch{dims} <: Tree{dims}
     element
-    coefficients
+    multipole_coefficients
+    local_coefficients
     N
     LS
     SS
@@ -31,11 +32,11 @@ function set_X(branch::Branch, new_X)
 end
 
 function Branch(element_type, p_expansion, dims)
-    Branch{dims}(element_type(dims), zeros(Complex{Float64},p_expansion), [0], zeros(dims), zeros(dims), CartesianIndex{dims}[], CartesianIndex{dims}[])
+    Branch{dims}(element_type(dims), zeros(Complex{Float64},p_expansion), zeros(Complex{Float64},p_expansion+1), [0], zeros(dims), zeros(dims), CartesianIndex{dims}[], CartesianIndex{dims}[])
 end
 
 function Leaf(element_type, p_expansion, dims)
-    Branch{dims}(element_type(dims), zeros(Complex{Float64},p_expansion), [0], zeros(dims), zeros(dims), CartesianIndex{dims}[], Int32[])
+    Branch{dims}(element_type(dims), zeros(Complex{Float64},p_expansion), zeros(Complex{Float64},p_expansion+1), [0], zeros(dims), zeros(dims), CartesianIndex{dims}[], Int32[])
 end
 
 struct Root{dims} <: Tree{dims}
@@ -101,11 +102,12 @@ function merge_branches!(branches, p_expansion, dims, element_type)
             center = S.mean([get_X(branch) for branch in highest_level[children]])
             element = element_type(dims)
             set_X(element, center)
-            coefficients = zeros(Complex{eltype(center)}, p_expansion)
+            multipole_coefficients = zeros(Complex{eltype(center)}, p_expansion)
+            local_coefficients = zeros(Complex{eltype(center)}, p_expansion+1)
             N = [sum([highest_level[j].N[1] for j in children])]
             LS = 0.0
             SS = 0.0
-            next_level[ci] = Branch{dims}(element, coefficients, N, LS, SS, CartesianIndex{dims}[], reshape(children,length(children)))
+            next_level[ci] = Branch{dims}(element, multipole_coefficients, local_coefficients, N, LS, SS, CartesianIndex{dims}[], reshape(children,length(children)))
 
             # update parent info
             for child in highest_level[children]
