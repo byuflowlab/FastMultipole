@@ -1,7 +1,7 @@
-function direct(sources::Vector{e}, x_target::Vector{TF}, kernel) where {e<:Element, TF}
+function direct(sources::Vector, x_target::Vector{TF}, kernel) where TF <: Number# where {e<:Element, TF}
     V = 0.0
     for source in sources
-        x_source = get_X(source)
+        x_source = get_x(source)
         q_source = get_q(source)
         Rho = x_target - x_source
         rho_squared = Rho' * Rho
@@ -21,10 +21,10 @@ function direct!(sources::Vector{e1}, targets::Vector{e2}, kernel) where {e1<:El
     return nothing
 end
 
-function direct(sources::Vector{e1}, targets::Vector{e2}, kernel) where {e1<:Element, e2<:Element}
+function direct(sources::Vector, targets::Vector, kernel) # where {e1<:Element, e2<:Element}
     Vs = zeros(length(targets))
     for (i,target) in enumerate(targets)
-        x_target = get_X(target)
+        x_target = get_x(target)
         Vs[i] = direct(sources, x_target, kernel)
     end
     return Vs
@@ -34,12 +34,12 @@ function direct!(sources::Vector{e}, kernel) where e <: Element
     direct!(sources, sources, kernel)
 end
 
-function direct(sources::Vector{e}, kernel) where e <: Element
+function direct(sources::Vector, kernel) # where e <: Element
     return direct(sources, sources, kernel)
 end
 
-function direct(source::e, target::Vector{TF}, kernel) where {e <: Element, TF}
-    x_source = get_X(source)
+function direct(source, target::Vector{TF}, kernel) where TF <: Number# where {e <: Element, TF}
+    x_source = get_x(source)
     q_source = get_q(source)
     Rho = x_target - x_source
     rho_squared = Rho' * Rho
@@ -47,9 +47,9 @@ function direct(source::e, target::Vector{TF}, kernel) where {e <: Element, TF}
 end
 
 function direct!(source::e1, target::e2, kernel) where {e1 <: Element, e2 <: Element}
-    x_source = get_X(source)
+    x_source = get_x(source)
     q_source = get_q(source)
-    x_target = get_X(target)
+    x_target = get_x(target)
     Rho = x_target - x_source
     rho_squared = Rho' * Rho
     V = rho_squared > 0.0 ? kernel(x_source, q_source, x_target) : 0.0

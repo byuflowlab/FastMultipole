@@ -2,20 +2,24 @@ function vectorial(n)
     prod(factorial.(n))
 end
 
-function ^(a::Vector{TF},b::Vector{TF}) where TF
-    prod([a[i]^b[i] for i in 1:length(a)])
-end
+# function ^(a::Vector{TF},b::Vector{TF}) where TF
+#     prod([a[i]^b[i] for i in 1:length(a)])
+# end
 
-function ^(a::Vector{TF1},b::Vector{TF2}) where {TF1,TF2}
-    prod([a[i]^b[i] for i in 1:length(a)])
-end
+# function ^(a::Vector{TF1},b::Vector{TF2}) where {TF1,TF2}
+#     prod([a[i]^b[i] for i in 1:length(a)])
+# end
 
-function ^(a::Vector{TF},b::TF) where TF
-    prod([a[i]^b for i in 1:length(a)])
-end
+# function ^(a::Vector{TF},b::TF) where TF
+#     prod([a[i]^b for i in 1:length(a)])
+# end
 
-function ^(a::Vector{TF1},b::TF2) where {TF1,TF2}
-    prod([a[i]^b for i in 1:length(a)])
+# function ^(a::Vector{TF1},b::TF2) where {TF1,TF2}
+#     prod([a[i]^b for i in 1:length(a)])
+# end
+
+function ^(a::V, i, j, k) where {V<:AbstractVector}
+    a[1]^i * a[2]^j * a[3]^k
 end
 
 ##

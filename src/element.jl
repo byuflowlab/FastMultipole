@@ -54,7 +54,3 @@ end
 function get_dims(elements::AbstractArray{e}) where e<:Element
     return length(get_X(elements, 1))
 end
-
-function eltype(elements::AbstractArray{e}) where e<:Element
-    return eltype(get_X(elements,1))
-end

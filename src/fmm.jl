@@ -1,198 +1,234 @@
-"Sum charges at each level."
-function upward_pass!(root::Root, elements::AbstractArray{e}) where e<:Element
-    # reset coefficients
-    reset_multipole!(root)
+function P2M!(i_branch, tree, elements)
+    branch = tree.branches[i_branch]
 
-    # iterate over branches/leaves
-    for (i,level) in enumerate(root.branches)
-        for branch in level
-            X_branch = get_X(branch)
-            nursery = i > 1 ? root.branches[i-1][branch.children] : elements[branch.children]
-            for child in nursery
-                q = get_q(child)
-                set_q(branch.element, get_q(branch.element) + q)
-                dx_complex = complexify(get_X(child) - X_branch)
-                for i_coefficient in 1:root.p_expansion
-                    if i == 1
-                        branch.multipole_coefficients[i_coefficient] -= q * dx_complex^i_coefficient / i_coefficient
-                    else
-                        branch.multipole_coefficients[i_coefficient] += -q / i_coefficient * dx_complex^i_coefficient + sum([child.multipole_coefficients[k] * dx_complex^(i_coefficient-k) * binomial(i_coefficient-1,k-1) for k in 1:i_coefficient])
-                    end
+    # iterate over coefficients
+    i_coeff = 1
+    for order in 0:get_expansion_order(tree)
+        for i in order:-1:0
+            for j in order-i:-1:0
+                k = order - i - j # constrained by i and j
+                # iterate over elements
+                for i_element in tree.indices[branch.first_element:branch.first_element + branch.n_elements-1]
+                    element = elements[i_element]
+                    dx = branch.center .- get_x(element)
+                    branch.multipole_expansion[i_coeff] += ^(dx,i,j,k) * get_q(element)
                 end
+                branch.multipole_expansion[i_coeff] /= factorial(i) * factorial(j) * factorial(k)
+                i_coeff += 1
             end
         end
     end
 end
 
-function complexify(vec)
-    @assert length(vec) == 2 "Cannot complexify vector of length $(length(vec))"
-    return vec[1] + vec[2] * im
-end
+function M2M!(i_branch, tree)
+    # expose objects
+    branch = tree.branches[i_branch]
 
-
-"returns the nearest neighbor list of the specified object"
-function i_nearest_neighbors(root, level, ci)
-    this_size = size(root.branches[level])[1]
-    nn = CartesianIndices(Tuple([(ci[i] > 1 ? ci[i] - 1 : ci[i]):(ci[i] < this_size ? ci[i] + 1 : ci[i]) for i in 1:length(ci)]))
-    # nearest_branches = root.branches[level][nn]
-    # return nearest_branches
-end
-
-"Interaction list consists of all children of the nearest neighbors of the specified cell's parents which are not the cell's nearest neighbors."
-function interaction_list(root, level, ci)
-    dims = length(ci)
-    if level >= length(root.branches) - 1 # empty interaction list at top 2 levels
-        return CartesianIndex{dims}[]
-    end
-
-    # nearest neighbors of the cell's parent (including the parent)
-    i_parent_nn = i_nearest_neighbors(root, level+1, root.branches[level][ci].parent[1])
-
-    # children of the parents nearest neighbors
-    candidates = vcat([root.branches[level+1][nn].children for nn in i_parent_nn]...)
-
-    # which ones are well separated
-    i_child_nn = i_nearest_neighbors(root, level, ci)
-    i_well_separated = candidates[findall(x -> !in(x, i_child_nn), candidates)]
-
-    return i_well_separated
-end
-
-"Approximate influence of all cells on all other cells"
-function downward_pass!(root, elements, kernel)
-    # reset local expansion coefficients
-    reset_local!(root)
-
-    # reset element potential
-    reset_potential!(elements)
-
-    for i_level in length(root.branches):-1:1
-        # interactions caused by siblings in the interaction list
-        for target_ci in CartesianIndices(root.branches[i_level])
-            il = interaction_list(root, i_level, target_ci)
-            for source_ci in il
-                if abs(get_q(root.branches[i_level][source_ci])) > 0.0 # note that the local expansion is nonzero if there are 0 elements and must therefore be omitted
-                    # get z_0
-                    dx_complex = complexify(get_X(root.branches[i_level][source_ci]) - get_X(root.branches[i_level][target_ci]))
-                    q_source = get_q(root.branches[i_level][source_ci])
-
-                    # if source_ci == CartesianIndex(5,3) && target_ci == CartesianIndex(3,5)
-                    #     println("SHERLOCK!\n\tBEFORE: $(root.branches[i_level][target_ci].local_coefficients)")
-                    # end
-                    # 0th coefficient of the power series
-                    root.branches[i_level][target_ci].local_coefficients[1] += q_source * log(-dx_complex) +
-                        sum([root.branches[i_level][source_ci].multipole_coefficients[k] / (-dx_complex)^k for k in 1:root.p_expansion])
-
-                    # remainding coefficients
-                    for i_coefficient in 1:root.p_expansion
-                        root.branches[i_level][target_ci].local_coefficients[i_coefficient+1] += dx_complex^(-i_coefficient) * (
-                            -q_source/i_coefficient + sum([root.branches[i_level][source_ci].multipole_coefficients[k] * (-dx_complex)^(-k) * binomial(i_coefficient+k-1, k-1) for k in 1:root.p_expansion])
-                        )
-                    end
-                    # if source_ci == CartesianIndex(5,3) && target_ci == CartesianIndex(3,5)
-                    #     println("SHERLOCK!\n\tAFTER: $(root.branches[i_level][target_ci].local_coefficients)")
-                    # end
-                end
-            end
-        end
-        # translate local expansions to children; note that child local expansion coefficients should be zero at this point
-        if i_level > 1 # translate local expansion to children
-            for parent_ci in CartesianIndices(root.branches[i_level]) # select parent
-                branch = root.branches[i_level][parent_ci]
-                # for child_ci in CartesianIndices(root.branches[i_level-1][branch.children])
-                for child_ci in branch.children
-                    child = root.branches[i_level-1][child_ci]
-                    dx_complex = complexify(get_X(branch) - get_X(child))
-                    # if parent_ci == CartesianIndex(2,3) && child_ci == CartesianIndex(3,5)
-                    #     println("Sherlock!\n\tBEFORE: $(child.local_coefficients)")
-                    # end
-                    child.local_coefficients .+= branch.local_coefficients
-                    for j in 0:root.p_expansion-1
-                        for k in root.p_expansion-j:root.p_expansion
-                            child.local_coefficients[k] -= dx_complex * child.local_coefficients[k+1]
+    # iterate over children
+    for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+        child = tree.branches[i_child]
+        # get distance vector
+        dx = branch.center - child.center
+        # iterate over coefficients
+        i_coeff = 1
+        for order in 0:get_expansion_order(tree)
+            for i in order:-1:0
+                for j in order-i:-1:0
+                    k = order - i - j # constrained by order, i, and j
+                    # iterate over child multipole expansion coefficients
+                    i_coeff_c = 1
+                    for order_c in 0:order
+                        for i_c in order_c:-1:0
+                            for j_c in order_c-i_c:-1:0
+                                k_c = order_c - i_c - j_c
+                                if i_c > i || j_c > j || k_c > k; i_coeff_c += 1; continue; end
+                                # perform translation of this coefficient
+                                branch.multipole_expansion[i_coeff] += ^(dx, i-i_c, j-j_c, k-k_c) * child.multipole_expansion[i_coeff_c] /
+                                    factorial(i-i_c) / factorial(j-j_c) / factorial(k-k_c)
+                                i_coeff_c += 1
+                            end
                         end
                     end
-                    # if parent_ci == CartesianIndex(2,3) && child_ci == CartesianIndex(3,5)
-                    #     println("\tAFTER: $(child.local_coefficients)")
-                    # end
+                    i_coeff += 1
                 end
             end
         end
     end
 end
 
-function evaluate!(root, elements, kernel)
-    # evaluate local expansion at each particle location
-    for leaf in root.branches[1]
-        for element in elements[leaf.children]
-            dx_complex = complexify(get_X(element) - get_X(leaf))
-            add_V(element, real(sum([leaf.local_coefficients[l+1] * dx_complex^l for l in 0:root.p_expansion])))
-        end
-    end
-
-    # direct calculation of nearest neighbors
-    for target_ci in CartesianIndices(root.branches[1])
-        target_i = root.branches[1][target_ci].children
-        for source_ci in i_nearest_neighbors(root, 1, target_ci)
-            source_i = root.branches[1][source_ci].children
-            direct!(elements[source_i], elements[target_i], kernel)
-        end
-    end
-end
-
-function fmm!(root, elements, kernel)
-    upward_pass!(root, elements)
-    downward_pass!(root, elements, kernel)
-    evaluate!(root, elements, kernel)
-    return nothing
-end
-
-function reset_local!(root::Root)
-    for level in root.branches
-        for branch in level
-            branch.local_coefficients[:] *= 0
-        end
-    end
-end
-
-function reset_multipole!(root::Root)
-    for level in root.branches
-        for branch in level
-            branch.multipole_coefficients[:] *= 0
-        end
-    end
-end
-
-function reset_potential!(elements::AbstractArray{e}) where e<:Element
-    for element in elements
-        set_V(element, 0.0)
-    end
-end
-
-#####
-##### taylor series cartesian fmm
-#####
-function cfmm_upward_pass!(root::CRoot, elements::AbstractArray{e}) where e<:Element
-    # reset coefficients
-    reset_multipole!(root)
-
-    # iterate over branches/leaves
-    for (i,level) in enumerate(root.branches)
-        for branch in level
-            X_branch = get_X(branch)
-            nursery = i > 1 ? root.branches[i-1][branch.children] : elements[branch.children]
-            for child in nursery
-                q = get_q(child)
-                set_q(branch.element, get_q(branch.element) + q)
-                dx_complex = complexify(get_X(child) - X_branch)
-                for i_coefficient in 1:root.p_expansion
-                    if i == 1
-                        branch.multipole_coefficients[i_coefficient] -= q * dx_complex^i_coefficient / i_coefficient
-                    else
-                        branch.multipole_coefficients[i_coefficient] += -q / i_coefficient * dx_complex^i_coefficient + sum([child.multipole_coefficients[k] * dx_complex^(i_coefficient-k) * binomial(i_coefficient-1,k-1) for k in 1:i_coefficient])
+function M2L!(i_local, j_multipole, tree, elements, kernel)
+    local_branch = tree.branches[i_local]
+    multipole_branch = tree.branches[j_multipole]
+    dx = local_branch.center - multipole_branch.center
+    local_coeff = 1 # iterate over local expansion coefficients
+    for order_local in 0:get_expansion_order(tree)
+        for i_local in order_local:-1:0
+            for j_local in order_local-i_local:-1:0
+                k_local = order_local - i_local - j_local
+                multipole_coeff = 1
+                for order_multipole in 0:get_expansion_order(tree) - order_local
+                    for i_multipole in order_multipole:-1:0
+                        for j_multipole in order_multipole-i_multipole:-1:0
+                            k_multipole = order_multipole - i_multipole - j_multipole
+                            gradient = kernel.potential_derivatives[i_multipole+i_local+1, j_multipole+j_local+1, k_multipole+k_local+1](dx,1,1)
+                            local_branch.local_expansion[local_coeff] += gradient * multipole_branch.multipole_expansion[multipole_coeff]
+                            multipole_coeff += 1
+                        end
                     end
                 end
+                local_coeff += 1
             end
         end
     end
+    # TODO: get gradients in a smarter way
+end
+
+function L2L!(j_source, tree)
+    # expose branch
+    branch = tree.branches[j_source]
+
+    # iterate over children
+    for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+        child = tree.branches[i_child]
+        dx = child.center - branch.center
+
+        # iterate over coefficients
+        i_coeff_child = 1
+        for order in 0:get_expansion_order(tree)
+            for i in order:-1:0
+                for j in order-i:-1:0
+                    k = order - i - j # constrained by order, i, and j
+
+                    # inner summation
+                    i_coeff_sum = 1
+                    for order_sum in 0:get_expansion_order(tree)
+                        for i_sum in order_sum:-1:0
+                            for j_sum in order_sum-i_sum:-1:0
+                                k_sum = order_sum - i_sum - j_sum
+
+                                # if out of bounds, skip this one
+                                if i_sum < i || j_sum < j || k_sum < k; i_coeff_sum += 1; continue; end
+
+                                # translate local expansion from source to child
+                                child.local_expansion[i_coeff_child] += ^(dx, i_sum-i, j_sum-j, k_sum-k) * branch.local_expansion[i_coeff_sum] /
+                                    (factorial(i_sum - i) * factorial(j_sum - j) * factorial(k_sum - k))
+
+                                i_coeff_sum += 1
+                            end
+                        end
+                    end
+
+                    i_coeff_child += 1
+                end
+            end
+        end
+    end
+end
+
+"Calculates the potential at all child elements of a branch."
+function L2P!(i_branch, tree, elements)
+    branch = tree.branches[i_branch]
+    for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
+        element = elements[tree.indices[i_element]]
+        dx = get_x(element) - branch.center
+        i_coeff = 1
+        for order in 0:get_expansion_order(tree)
+            for i in order:-1:0
+                for j in order-i:-1:0
+                    k = order - i - j
+                    element.potential .+= ^(dx, i, j, k) * branch.local_expansion[i_coeff] /
+                        (factorial(i) * factorial(j) * factorial(k))
+                    i_coeff += 1
+                end
+            end
+        end
+    end
+end
+
+function P2P!(i_target, j_source, tree, elements, kernel)
+    target_branch = tree.branches[i_target]
+    source_branch = tree.branches[j_source]
+    for source_element in elements[source_branch.first_element:source_branch.first_element+source_branch.n_elements-1]
+        for target_element in elements[target_branch.first_element:target_branch.first_element+target_branch.n_elements-1]
+            dx = get_x(target_element) - get_x(source_element)
+            kernel!(target_element, source_element)
+        end
+    end
+end
+
+function upward_pass!(tree::Tree, elements)
+    upward_pass!(1, tree, elements)
+end
+
+function upward_pass!(i_branch, tree, elements)
+    # recursively iterate through branches
+    branch = tree.branches[i_branch]
+    for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+        upward_pass!(i_child, tree, elements)
+    end
+
+    # perform P2M (leaf level) or M2M (not leaf level) translations
+    if branch.first_branch == -1 # no child branches
+        P2M!(i_branch, tree, elements)
+    else
+        M2M!(i_branch, tree)
+    end
+end
+
+function horizontal_pass!(tree, elements, kernel)
+    horizontal_pass!(1, 1, tree, elements, kernel)
+end
+
+function horizontal_pass!(i_target, j_source, tree, elements, kernel)
+    branches = tree.branches
+    source_branch = branches[j_source]
+    target_branch = branches[i_target]
+    spacing = source_branch.center - target_branch.center
+    spacing_squared = spacing' * spacing
+    threshold_squared = (target_branch.radius + source_branch.radius) * (target_branch.radius + source_branch.radius) * 4 # default buffer to twice cell radius
+    if spacing_squared >= threshold_squared # meet separation criteria
+        M2L!(i_target, j_source, tree, elements, kernel)
+    elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
+        P2P!(i_target, j_source, tree, elements, kernel)
+    elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
+        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+            horizontal_pass!(i_child, j_source, tree, elements, kernel)
+        end
+    else
+        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+            horizontal_pass!(i_target, j_child, tree, elements, kernel)
+        end
+    end
+end
+
+function downward_pass!(tree, elements)
+    downward_pass!(1, tree, elements)
+end
+
+function downward_pass!(j_source, tree, elements)
+    # expose branch
+    branch = tree.branches[j_source]
+
+    # if a leaf, perform L2P on
+    if branch.first_branch == -1 # leaf
+        L2P!(j_source, tree, elements)
+    else # not a leaf, so perform L2L! and recurse
+        L2L!(j_source, tree)
+        for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+            downward_pass!(i_child, tree, elements)
+        end
+    end
+end
+
+function fmm!(tree::Tree, elements, kernel; reset=true)
+    if reset; clear_expansions(tree); end
+    upward_pass!(tree, elements)
+    horizontal_pass!(tree, elements, kernel)
+    downward_pass!(tree, elements)
+end
+
+function fmm!(elements, kernel, expansion_order, n_per_branch)
+    tree = Tree(elements; expansion_order, n_per_branch)
+    fmm!(tree, elements, kernel)
+    return tree
 end

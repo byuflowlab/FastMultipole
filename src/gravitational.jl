@@ -1,6 +1,8 @@
 #####
 ##### gravitational elements
 #####
+function get_x end
+
 struct Mass{TF} <: Element{TF}
     X::Vector{TF} # location of each element
     m::Vector{TF} # mass of the element
@@ -50,16 +52,20 @@ end
 #####
 ##### gravitational kernel
 #####
+# function kernel!(target::Mass, source::Mass)
+
+# end
+
+
 struct Gravitational{TF,dims} <: Kernel{TF,dims}
     parameters::TF # Universal gravitational constant
     potential_derivatives::Array{Function,dims}
     order::UInt8
 end
 
-function Gravitational(dims=3; G=1.0, order=5)
+function Gravitational(dims=3; G=1.0, order=4)
     @assert dims == 3 || dims == 2 "requested Gravitational kernel of dimensions $dims which is not yet supported"
     potential_derivatives = Array{Function, dims}(undef, (order+1) * ones(UInt8,dims)...) # default through 4th derivatives
-
     if dims == 3
         # raw potential
         potential_derivatives[1,1,1] = gravitational_potential_3D
@@ -237,12 +243,12 @@ end
 
 function gravitational_dx4(Rho, m_source, G)
     rho_sq = Rho' * Rho
-    dx4 = -3 * G * m_source * (8 * Rho[1]^4 - 24 * x[1]^2 * (x[2]^2 + x[3]^2) + 3 * (x[2]^2 + x[3]^2)^2) / rho_sq^4.5
+    dx4 = -3 * G * m_source * (8 * Rho[1]^4 - 24 * Rho[1]^2 * (Rho[2]^2 + Rho[3]^2) + 3 * (Rho[2]^2 + Rho[3]^2)^2) / rho_sq^4.5
 end
 
 function gravitational_dy4(Rho, m_source, G)
     rho_sq = Rho' * Rho
-    dy4 = -3 * G * m_source * (8 * Rho[2]^4 - 24 * x[2]^2 * (x[3]^2 + x[1]^2) + 3 * (x[1]^2 + x[1]^2)^2) / rho_sq^4.5
+    dy4 = -3 * G * m_source * (8 * Rho[2]^4 - 24 * Rho[2]^2 * (Rho[3]^2 + Rho[1]^2) + 3 * (Rho[3]^2 + Rho[1]^2)^2) / rho_sq^4.5
 end
 
 function gravitational_dz4(Rho, m_source, G)

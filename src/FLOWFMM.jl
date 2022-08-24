@@ -1,10 +1,10 @@
 module FLOWFMM
 
-import Base:iterate, length, ^, eltype
+import Base:^
 import Statistics
 S = Statistics
 
-for file in ["misc", "kernel", "element", "tree", "fmm", "direct", "gravitational"]
+for file in ["misc", "kernel", "element", "tree", "direct", "fmm", "gravitational"]
     include(file*".jl")
 end
 
