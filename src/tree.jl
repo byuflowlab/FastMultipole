@@ -172,7 +172,7 @@ function get_expansion_order(tree::Tree)
     tree.expansion_order[1]
 end
 
-function clear_expansions(tree)
+function reset_expansions!(tree)
     for branch in tree.branches
         branch.multipole_expansion .*= 0
         branch.local_expansion .*= 0

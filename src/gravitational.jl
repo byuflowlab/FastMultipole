@@ -59,8 +59,12 @@ end
 
 struct Gravitational{TF,dims} <: Kernel{TF,dims}
     parameters::TF # Universal gravitational constant
-    potential_derivatives::Array{Function,dims}
+    potential_derivatives::Array{Function,1}
     order::UInt8
+end
+
+function Gravitational(gravitation_constant, derivatives::Vector{Function}, order)
+    Gravitational{Float64,3}(gravitation_constant, derivatives, Int8(order))
 end
 
 function Gravitational(dims=3; G=1.0, order=4)

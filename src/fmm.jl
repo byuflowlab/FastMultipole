@@ -57,6 +57,7 @@ function M2M!(i_branch, tree)
 end
 
 function M2L!(i_local, j_multipole, tree, elements, kernel)
+    # if i_local == 3 && j_multipole == 5; println("M2L a on b"); end
     local_branch = tree.branches[i_local]
     multipole_branch = tree.branches[j_multipole]
     dx = local_branch.center - multipole_branch.center
@@ -70,7 +71,9 @@ function M2L!(i_local, j_multipole, tree, elements, kernel)
                     for i_multipole in order_multipole:-1:0
                         for j_multipole in order_multipole-i_multipole:-1:0
                             k_multipole = order_multipole - i_multipole - j_multipole
-                            gradient = kernel.potential_derivatives[i_multipole+i_local+1, j_multipole+j_local+1, k_multipole+k_local+1](dx,1,1)
+                            # gradient = kernel.potential_derivatives[i_multipole+i_local+1, j_multipole+j_local+1, k_multipole+k_local+1](dx,1,1)
+                            gradient_index = ijk_2_index(i_multipole+i_local, j_multipole+j_local, k_multipole+k_local)
+                            gradient = kernel.potential_derivatives[gradient_index](dx)
                             local_branch.local_expansion[local_coeff] += gradient * multipole_branch.multipole_expansion[multipole_coeff]
                             multipole_coeff += 1
                         end
@@ -89,6 +92,8 @@ function L2L!(j_source, tree)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+        # if i_child == 3; println("L2L Branch $j_source on b"); end
+        # if i_child == 3; println("\tBEFORE: local = $(tree.branches[3].local_expansion)"); end
         child = tree.branches[i_child]
         dx = child.center - branch.center
 
@@ -122,6 +127,7 @@ function L2L!(j_source, tree)
                 end
             end
         end
+        # if i_child == 3; println("\tAFTER: local = $(tree.branches[3].local_expansion)"); end
     end
 end
 
@@ -130,6 +136,7 @@ function L2P!(i_branch, tree, elements)
     branch = tree.branches[i_branch]
     for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
         element = elements[tree.indices[i_element]]
+        # if tree.indices[i_element] == 2; println("L2P: _ on b"); end
         dx = get_x(element) - branch.center
         i_coeff = 1
         for order in 0:get_expansion_order(tree)
@@ -146,12 +153,21 @@ function L2P!(i_branch, tree, elements)
 end
 
 function P2P!(i_target, j_source, tree, elements, kernel)
+    # if i_target == 3 && j_source == 5
+        # println("P2P: a on b")
+    # end
     target_branch = tree.branches[i_target]
     source_branch = tree.branches[j_source]
-    for source_element in elements[source_branch.first_element:source_branch.first_element+source_branch.n_elements-1]
-        for target_element in elements[target_branch.first_element:target_branch.first_element+target_branch.n_elements-1]
+    for source_element in elements[tree.indices[source_branch.first_element:source_branch.first_element+source_branch.n_elements-1]]
+        for target_element in elements[tree.indices[target_branch.first_element:target_branch.first_element+target_branch.n_elements-1]]
             dx = get_x(target_element) - get_x(source_element)
+            # if i_target == 3 && j_source == 5
+                # println("\tBEFORE: b = $(target_element.potential[1])")
+            # end
             kernel!(target_element, source_element)
+            # if i_target == 3 && j_source == 5
+                # println("\tAFTER: b = $(target_element.potential[1])")
+            # end
         end
     end
 end
@@ -220,14 +236,16 @@ function downward_pass!(j_source, tree, elements)
     end
 end
 
-function fmm!(tree::Tree, elements, kernel; reset=true)
-    if reset; clear_expansions(tree); end
+function fmm!(tree::Tree, elements, kernel; reset_tree=true, reset_elements=false)
+    if reset_elements; reset_elements!(elements); end
+    if reset_tree; reset_expansions!(tree); end
     upward_pass!(tree, elements)
     horizontal_pass!(tree, elements, kernel)
     downward_pass!(tree, elements)
 end
 
-function fmm!(elements, kernel, expansion_order, n_per_branch)
+function fmm!(elements, kernel, expansion_order, n_per_branch; reset_elements=false)
+    if reset_elements; reset_elements!(elements); end
     tree = Tree(elements; expansion_order, n_per_branch)
     fmm!(tree, elements, kernel)
     return tree

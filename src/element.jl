@@ -54,3 +54,9 @@ end
 function get_dims(elements::AbstractArray{e}) where e<:Element
     return length(get_X(elements, 1))
 end
+
+function reset_elements!(elements)
+    for element in elements
+        element.potential .*= 0
+    end
+end
