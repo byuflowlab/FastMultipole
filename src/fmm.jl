@@ -57,7 +57,6 @@ function M2M!(i_branch, tree)
 end
 
 function M2L!(i_local, j_multipole, tree, elements, kernel)
-    # if i_local == 3 && j_multipole == 5; println("M2L a on b"); end
     local_branch = tree.branches[i_local]
     multipole_branch = tree.branches[j_multipole]
     dx = local_branch.center - multipole_branch.center
@@ -83,8 +82,13 @@ function M2L!(i_local, j_multipole, tree, elements, kernel)
             end
         end
     end
-    # TODO: get gradients in a smarter way
 end
+
+# test_d10dz10(x,y,z) = (14175 * (5760 * z^8 * (x^2 + y^2) - 20160 * z^6 * (x^2 + y^2)^2 + 16800 * z^4 * (x^2 + y^2)^3 - 3150 * z^2 * (x^2 + y^2)^4 + 63 * (x^2 + y^2)^5 - 256 * z^10)) / (x^2 + y^2 + z^2)^(21/2)
+
+# test_d6dz6(x,y,z) = (45 * (120 * z^4 * (x^2 + y^2) - 90 * z^2 * (x^2 + y^2)^2 + 5 * (x^2 + y^2)^3 - 16 * z^6))/(x^2 + y^2 + z^2)^(13/2)
+
+# test_d6dx2dy2dz2(x,y,z) = (45* (-2* x^6 + 15* x^4* y^2 + 15* x^2* y^4 + 15* z^4 * (x^2 + y^2) + 15* z^2 * (x^4 - 12* x^2* y^2 + y^4) - 2* y^6 - 2* z^6))/(x^2 + y^2 + z^2)^(13/2)
 
 function L2L!(j_source, tree)
     # expose branch
@@ -92,8 +96,6 @@ function L2L!(j_source, tree)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
-        # if i_child == 3; println("L2L Branch $j_source on b"); end
-        # if i_child == 3; println("\tBEFORE: local = $(tree.branches[3].local_expansion)"); end
         child = tree.branches[i_child]
         dx = child.center - branch.center
 
@@ -127,7 +129,6 @@ function L2L!(j_source, tree)
                 end
             end
         end
-        # if i_child == 3; println("\tAFTER: local = $(tree.branches[3].local_expansion)"); end
     end
 end
 
@@ -136,7 +137,6 @@ function L2P!(i_branch, tree, elements)
     branch = tree.branches[i_branch]
     for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
         element = elements[tree.indices[i_element]]
-        # if tree.indices[i_element] == 2; println("L2P: _ on b"); end
         dx = get_x(element) - branch.center
         i_coeff = 1
         for order in 0:get_expansion_order(tree)
@@ -153,21 +153,12 @@ function L2P!(i_branch, tree, elements)
 end
 
 function P2P!(i_target, j_source, tree, elements, kernel)
-    # if i_target == 3 && j_source == 5
-        # println("P2P: a on b")
-    # end
     target_branch = tree.branches[i_target]
     source_branch = tree.branches[j_source]
     for source_element in elements[tree.indices[source_branch.first_element:source_branch.first_element+source_branch.n_elements-1]]
         for target_element in elements[tree.indices[target_branch.first_element:target_branch.first_element+target_branch.n_elements-1]]
             dx = get_x(target_element) - get_x(source_element)
-            # if i_target == 3 && j_source == 5
-                # println("\tBEFORE: b = $(target_element.potential[1])")
-            # end
             kernel!(target_element, source_element)
-            # if i_target == 3 && j_source == 5
-                # println("\tAFTER: b = $(target_element.potential[1])")
-            # end
         end
     end
 end
