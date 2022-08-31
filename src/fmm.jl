@@ -1,3 +1,13 @@
+# struct Options{TF} where TF
+#     expansion_order::Int8
+#     n_per_branch::Int16
+#     threshold_squared::TF
+# end
+
+# function Options(expansion_order, n_per_branch, threshold_squared)
+#     Options(Int8(expansion_order), Int16(n_per_branch), threshold_squared)
+# end
+
 function P2M!(i_branch, tree, elements)
     branch = tree.branches[i_branch]
 
@@ -56,7 +66,7 @@ function M2M!(i_branch, tree)
     end
 end
 
-function M2L!(i_local, j_multipole, tree, elements, kernel)
+function M2L!(i_local, j_multipole, tree, elements, derivatives)
     local_branch = tree.branches[i_local]
     multipole_branch = tree.branches[j_multipole]
     dx = local_branch.center - multipole_branch.center
@@ -72,7 +82,7 @@ function M2L!(i_local, j_multipole, tree, elements, kernel)
                             k_multipole = order_multipole - i_multipole - j_multipole
                             # gradient = kernel.potential_derivatives[i_multipole+i_local+1, j_multipole+j_local+1, k_multipole+k_local+1](dx,1,1)
                             gradient_index = ijk_2_index(i_multipole+i_local, j_multipole+j_local, k_multipole+k_local)
-                            gradient = kernel.potential_derivatives[gradient_index](dx)
+                            gradient = derivatives[gradient_index](dx)
                             local_branch.local_expansion[local_coeff] += gradient * multipole_branch.multipole_expansion[multipole_coeff]
                             multipole_coeff += 1
                         end
@@ -152,7 +162,7 @@ function L2P!(i_branch, tree, elements)
     end
 end
 
-function P2P!(i_target, j_source, tree, elements, kernel)
+function P2P!(i_target, j_source, tree, elements)
     target_branch = tree.branches[i_target]
     source_branch = tree.branches[j_source]
     for source_element in elements[tree.indices[source_branch.first_element:source_branch.first_element+source_branch.n_elements-1]]
@@ -182,28 +192,28 @@ function upward_pass!(i_branch, tree, elements)
     end
 end
 
-function horizontal_pass!(tree, elements, kernel)
-    horizontal_pass!(1, 1, tree, elements, kernel)
+function horizontal_pass!(tree, elements, derivatives, theta)
+    horizontal_pass!(1, 1, tree, elements, derivatives, theta)
 end
 
-function horizontal_pass!(i_target, j_source, tree, elements, kernel)
+function horizontal_pass!(i_target, j_source, tree, elements, derivatives, theta)
     branches = tree.branches
     source_branch = branches[j_source]
     target_branch = branches[i_target]
     spacing = source_branch.center - target_branch.center
     spacing_squared = spacing' * spacing
-    threshold_squared = (target_branch.radius + source_branch.radius) * (target_branch.radius + source_branch.radius) * 4 # default buffer to twice cell radius
+    threshold_squared = (target_branch.radius + source_branch.radius) * (target_branch.radius + source_branch.radius) * theta # theta is the number of radii squared
     if spacing_squared >= threshold_squared # meet separation criteria
-        M2L!(i_target, j_source, tree, elements, kernel)
+        M2L!(i_target, j_source, tree, elements, derivatives)
     elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
-        P2P!(i_target, j_source, tree, elements, kernel)
+        P2P!(i_target, j_source, tree, elements)
     elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
         for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-            horizontal_pass!(i_child, j_source, tree, elements, kernel)
+            horizontal_pass!(i_child, j_source, tree, elements, derivatives, theta)
         end
     else
         for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-            horizontal_pass!(i_target, j_child, tree, elements, kernel)
+            horizontal_pass!(i_target, j_child, tree, elements, derivatives, theta)
         end
     end
 end
@@ -227,17 +237,17 @@ function downward_pass!(j_source, tree, elements)
     end
 end
 
-function fmm!(tree::Tree, elements, kernel; reset_tree=true, reset_elements=false)
+function fmm!(tree::Tree, elements, derivatives, theta; reset_tree=true, reset_elements=true)
     if reset_elements; reset_elements!(elements); end
     if reset_tree; reset_expansions!(tree); end
     upward_pass!(tree, elements)
-    horizontal_pass!(tree, elements, kernel)
+    horizontal_pass!(tree, elements, derivatives, theta)
     downward_pass!(tree, elements)
 end
 
-function fmm!(elements, kernel, expansion_order, n_per_branch; reset_elements=false)
+function fmm!(elements, derivatives, expansion_order, n_per_branch, theta=4; reset_elements=true)
     if reset_elements; reset_elements!(elements); end
     tree = Tree(elements; expansion_order, n_per_branch)
-    fmm!(tree, elements, kernel)
+    fmm!(tree, elements, derivatives, theta)
     return tree
 end

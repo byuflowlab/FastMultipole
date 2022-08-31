@@ -1,14 +1,46 @@
 #####
-##### KERNELS
+##### kernel related functions
 #####
-abstract type Kernel{TF,dims} end
+"""
+    kernel!(target, source)
 
-(K::Kernel{TF,dims})(n, x_source, q_source, x_target) where {TF,dims} =
-    K.potential_derivatives[n...](x_target - x_source) * q_source
+Describes the interaction of a source element on a target element.
 
-(K::Kernel{TF,dims})(x_source, q_source, x_target) where {TF,dims} =
-    K.potential_derivatives[1](x_target - x_source) * q_source
+# Inputs
 
-function kernel end
+- `target`- a user-defined element for which the functions `FLOWFMM.get_x` and `FLOWFMM.get_q` have been defined.
 
+"""
 function kernel! end
+
+"""
+    get_x(element)
+
+Returns the location of an element.
+
+# Inputs
+
+- `element`- a user-defined object for which the functions `FLOWFMM.kernel!` and `FLOWFMM.get_q` have been defined.
+
+Outputs:
+
+- `x::Vector{Float64}`- a vector of length 3 containing the Cartesian coordinates of the element's location
+
+"""
+function get_x end
+
+"""
+get_q(element)
+
+Returns the strength of an element.
+
+# Inputs
+
+- `element`- a user-defined object for which the functions `FLOWFMM.kernel!` and `FLOWFMM.get_x` have been defined.
+
+Outputs:
+
+- `Float64`- the elements strength
+
+"""
+function get_q end

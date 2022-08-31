@@ -4,7 +4,9 @@ import Base:^
 import Statistics
 S = Statistics
 
-for file in ["misc", "kernel", "element", "tree", "direct", "fmm", "gravitational"]
+const THETA = 4
+
+for file in ["misc", "kernel", "element", "tree", "direct", "fmm"]
     include(file*".jl")
 end
 

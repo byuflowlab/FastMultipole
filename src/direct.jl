@@ -1,58 +1,36 @@
-function direct(sources::Vector, x_target::Vector{TF}, kernel) where TF <: Number# where {e<:Element, TF}
-    V = 0.0
-    for source in sources
-        x_source = get_x(source)
-        q_source = get_q(source)
-        Rho = x_target - x_source
-        rho_squared = Rho' * Rho
-        if rho_squared > 0.0
-            V += kernel(x_source, q_source, x_target)
+"""
+    direct!(targets, source)
+
+Uses a naive direct algorithm to evaluate the influence of all sources on all targets.
+
+# Inputs
+
+- `targets::Vector{element}`- a vector of target elements
+- `sources::Vector{element}`- a vector of source elements
+
+"""
+function direct!(targets::Vector, sources::Vector)
+    for (i,target) in enumerate(targets)
+        for (j,source) in enumerate(sources)
+            kernel!(target, source)
         end
     end
-    return V
 end
 
-function direct!(sources::Vector{e1}, targets::Vector{e2}, kernel) where {e1<:Element, e2<:Element}
-    for (i,target) in enumerate(targets)
-        x_target = get_X(target)
-        V = direct(sources, x_target, kernel)
-        add_V(target, V)
+"""
+    direct!(elements)
+
+Assumes sources and targets are identical sets.
+
+# Optional Arguments
+
+- `reflex`- if `true`, includes interactions of each element on itself
+
+"""
+function direct!(elements::Vector; reflex=false)
+    for (i,target) in enumerate(elements)
+        for (j,source) in enumerate(elements)
+            if i!=j || reflex; kernel!(target, source); end
+        end
     end
-    return nothing
-end
-
-function direct(sources::Vector, targets::Vector, kernel) # where {e1<:Element, e2<:Element}
-    Vs = zeros(length(targets))
-    for (i,target) in enumerate(targets)
-        x_target = get_x(target)
-        Vs[i] = direct(sources, x_target, kernel)
-    end
-    return Vs
-end
-
-function direct!(sources::Vector{e}, kernel) where e <: Element
-    direct!(sources, sources, kernel)
-end
-
-function direct(sources::Vector, kernel) # where e <: Element
-    return direct(sources, sources, kernel)
-end
-
-function direct(source, target::Vector{TF}, kernel) where TF <: Number# where {e <: Element, TF}
-    x_source = get_x(source)
-    q_source = get_q(source)
-    Rho = x_target - x_source
-    rho_squared = Rho' * Rho
-    V = rho_squared > 0.0 ? kernel(x_source, q_source, x_target) : 0.0
-end
-
-function direct!(source::e1, target::e2, kernel) where {e1 <: Element, e2 <: Element}
-    x_source = get_x(source)
-    q_source = get_q(source)
-    x_target = get_x(target)
-    Rho = x_target - x_source
-    rho_squared = Rho' * Rho
-    V = rho_squared > 0.0 ? kernel(x_source, q_source, x_target) : 0.0
-    add_V(target, V)
-    return nothing
 end

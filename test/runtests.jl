@@ -11,70 +11,12 @@ import PyPlot
 plt = PyPlot
 using LaTeXStrings
 
-struct Mass{TF}
-    x::Array{TF,1}
-    mass::Array{TF,1}
-    potential::Array{TF,1}
-    force::Array{TF,1}
-end
+test_dir = @__DIR__
 
-function fmm.kernel!(target::Mass, source::Mass)
-    dx = fmm.get_x(target) - fmm.get_x(source)
-    r = sqrt(dx' * dx)
-    if r > 0
-        dV = -source.mass[1] / r
-        target.potential[1] += dV
-    end
-end
-
-function fmm.get_x(mass::Mass)
-    mass.x
-end
-
-function fmm.get_q(mass::Mass)
-    mass.mass[1]
-end
-
-function symbolic_derivative_kernel(expansion_order)
-    sym.@variables x y z
-    kernel = -1/sqrt(x^2 + y^2 + z^2)
-    n_derivs = fmm.n_terms(expansion_order, 3)
-    derivatives = Vector{Function}(undef,n_derivs)
-    index = 1
-    for order in 0:expansion_order
-        for i in order:-1:0
-            for j in order-i:-1:0
-                k = order - i - j
-                this_kernel = deepcopy(kernel)
-                for ii in 1:i
-                    this_kernel = sym.derivative(this_kernel, x)
-                end
-                for jj in 1:j
-                    this_kernel = sym.derivative(this_kernel, y)
-                end
-                for kk in 1:k
-                    this_kernel = sym.derivative(this_kernel, z)
-                end
-                derivatives[index] = (dx) -> sym.substitute(this_kernel, Dict(x=>dx[1],y=>dx[2],z=>dx[3])).val
-                index += 1
-            end
-        end
-    end
-    return derivatives
-end
-
-expansion_order = 10
-
-# global derivatives, kernel
-# try
-#     if typeof(derivatives) != Vector{Function} || length(derivatives) != fmm.n_terms(expansion_order)
-#         derivatives = symbolic_derivative_kernel(expansion_order)
-#         kernel = fmm.Gravitational(1.0,derivatives,expansion_order)
-#     end
-# catch
-#     derivatives = symbolic_derivative_kernel(expansion_order)
-#     kernel = fmm.Gravitational(1.0,derivatives,expansion_order)
-# end
+#####
+##### define gravitational kernel and mass elements
+#####
+include(joinpath(test_dir, "gravitational.jl"))
 
 @testset "direct" begin
 
@@ -122,14 +64,12 @@ expansion_order = 10
 
     mass = [Mass(x[:,i], [m[i]], zeros(1), zeros(3)) for i in 1:length(m)]
 
-    # kernel = fmm.Gravitational(3)
-
-    V_tots_direct = fmm.direct(mass, kernel)
+    fmm.direct!(mass)
+    V_tots_direct = [m.potential[1] for m in mass]
 
     for i in 1:length(V_tots)
         @test isapprox(V_tots[i], V_tots_direct[i]; atol=1e-4)
     end
-
 end
 
 #####
@@ -530,10 +470,9 @@ end
 
     i_local = 7
     j_multipole = 1
-    # kernel = fmm.Gravitational()
 
     # @show tree.branches[7].local_expansion
-    fmm.M2L!(i_local, j_multipole, tree, masses, kernel)
+    fmm.M2L!(i_local, j_multipole, tree, masses, derivatives)
     # @show tree.branches[7].local_expansion
 
     local_coeff_check = [
@@ -582,11 +521,9 @@ end
     end
 
     tree = fmm.Tree(masses)
-    # kernel = fmm.Gravitational()
-
 
     fmm.upward_pass!(tree, masses)
-    fmm.M2L!(2, 1, tree, masses, kernel)
+    fmm.M2L!(2, 1, tree, masses, derivatives)
 
     multipole_1 = [
         6.5
@@ -669,11 +606,9 @@ end
     end
 
     tree = fmm.Tree(masses)
-    # kernel = fmm.Gravitational()
-
 
     fmm.upward_pass!(tree, masses)
-    fmm.M2L!(2, 1, tree, masses, kernel)
+    fmm.M2L!(2, 1, tree, masses, derivatives)
     fmm.L2L!(2, tree)
     fmm.L2P!(7, tree, masses)
 
@@ -731,12 +666,13 @@ end
     end
 
     tree = fmm.Tree(masses)
-    # kernel = fmm.Gravitational()
 
 
-    fmm.P2P!(1,1,tree, masses, kernel)
+    fmm.P2P!(1,1,tree, masses)
     potential_p2p = [mass.potential[1] for mass in masses]
-    potential_direct = fmm.direct(masses, kernel)
+    for mass in masses; mass.potential .*= 0; end
+    fmm.direct!(masses)
+    potential_direct = [mass.potential[1] for mass in masses]
 
     for i in 1:length(potential_p2p)
         @test isapprox(potential_p2p[i], potential_direct[i]; atol=1e-8)
@@ -771,7 +707,6 @@ end
     end
 
     tree = fmm.Tree(masses)
-    # kernel = fmm.Gravitational()
 
 
     fmm.P2M!(3, tree, masses)
@@ -827,7 +762,6 @@ end
     end
 
     tree = fmm.Tree(masses)
-    # kernel = fmm.Gravitational()
 
 
     fmm.upward_pass!(tree, masses)
@@ -851,27 +785,27 @@ end
     end
 
     # P2P
-    fmm.P2P!(3, 3, tree, masses, kernel)
-    fmm.P2P!(3, 4, tree, masses, kernel)
-    fmm.P2P!(3, 5, tree, masses, kernel)
-    fmm.P2P!(4, 3, tree, masses, kernel)
-    fmm.P2P!(5, 3, tree, masses, kernel)
-    fmm.P2P!(4, 4, tree, masses, kernel)
-    fmm.P2P!(5, 4, tree, masses, kernel)
-    fmm.P2P!(6, 4, tree, masses, kernel)
-    fmm.P2P!(7, 4, tree, masses, kernel)
-    fmm.P2P!(4, 5, tree, masses, kernel)
-    fmm.P2P!(4, 6, tree, masses, kernel)
-    fmm.P2P!(4, 7, tree, masses, kernel)
-    fmm.P2P!(5, 5, tree, masses, kernel)
-    fmm.P2P!(6, 6, tree, masses, kernel)
-    fmm.P2P!(6, 7, tree, masses, kernel)
-    fmm.P2P!(7, 6, tree, masses, kernel)
-    fmm.P2P!(7, 7, tree, masses, kernel)
+    fmm.P2P!(3, 3, tree, masses)
+    fmm.P2P!(3, 4, tree, masses)
+    fmm.P2P!(3, 5, tree, masses)
+    fmm.P2P!(4, 3, tree, masses)
+    fmm.P2P!(5, 3, tree, masses)
+    fmm.P2P!(4, 4, tree, masses)
+    fmm.P2P!(5, 4, tree, masses)
+    fmm.P2P!(6, 4, tree, masses)
+    fmm.P2P!(7, 4, tree, masses)
+    fmm.P2P!(4, 5, tree, masses)
+    fmm.P2P!(4, 6, tree, masses)
+    fmm.P2P!(4, 7, tree, masses)
+    fmm.P2P!(5, 5, tree, masses)
+    fmm.P2P!(6, 6, tree, masses)
+    fmm.P2P!(6, 7, tree, masses)
+    fmm.P2P!(7, 6, tree, masses)
+    fmm.P2P!(7, 7, tree, masses)
 
     # M2L
 
-    fmm.M2L!(3, 6, tree, masses, kernel)
+    fmm.M2L!(3, 6, tree, masses, derivatives)
 
     # checking branch 3's local expansion due to branch 7
     local_3_due2_7_check = [
@@ -887,7 +821,7 @@ end
         1.88863605091961
     ]
     local_3_before = deepcopy(tree.branches[3].local_expansion)
-    fmm.M2L!(3, 7, tree, masses, kernel)
+    fmm.M2L!(3, 7, tree, masses, derivatives)
     local_3_after = deepcopy(tree.branches[3].local_expansion)
     local_3_due2_7 = local_3_after - local_3_before
     for i in 1:length(local_3_due2_7)
@@ -895,12 +829,12 @@ end
     end
 
     # resume...
-    fmm.M2L!(6, 3, tree, masses, kernel)
-    fmm.M2L!(7, 3, tree, masses, kernel)
-    fmm.M2L!(5, 6, tree, masses, kernel)
-    fmm.M2L!(6, 5, tree, masses, kernel)
-    fmm.M2L!(5, 7, tree, masses, kernel)
-    fmm.M2L!(7, 5, tree, masses, kernel)
+    fmm.M2L!(6, 3, tree, masses, derivatives)
+    fmm.M2L!(7, 3, tree, masses, derivatives)
+    fmm.M2L!(5, 6, tree, masses, derivatives)
+    fmm.M2L!(6, 5, tree, masses, derivatives)
+    fmm.M2L!(5, 7, tree, masses, derivatives)
+    fmm.M2L!(7, 5, tree, masses, derivatives)
 
     masses_2 = Vector{Mass}(undef,length(ms))
     for i in 1:length(ms)
@@ -912,9 +846,10 @@ end
     end
 
     tree_2 = fmm.Tree(masses_2)
+    theta = 4
 
     fmm.upward_pass!(tree_2, masses_2)
-    fmm.horizontal_pass!(tree_2, masses_2, kernel)
+    fmm.horizontal_pass!(tree_2, masses_2, derivatives, theta)
 
     for i_branch in 1:length(tree.branches)
         for i_multipole in 1:length(tree.branches[1].multipole_expansion)
@@ -955,11 +890,11 @@ end
     end
 
     tree = fmm.Tree(masses; expansion_order=4)
-    # kernel = fmm.Gravitational()
 
 
+    theta = 4
     fmm.upward_pass!(tree, masses)
-    fmm.horizontal_pass!(tree, masses, kernel)
+    fmm.horizontal_pass!(tree, masses, derivatives, theta)
 
     fmm.L2P!(3, tree, masses)
     fmm.L2P!(5, tree, masses)
@@ -977,7 +912,7 @@ end
     tree_2 = fmm.Tree(masses_2; expansion_order=4)
 
     fmm.upward_pass!(tree_2, masses_2)
-    fmm.horizontal_pass!(tree_2, masses_2, kernel)
+    fmm.horizontal_pass!(tree_2, masses_2, derivatives, theta)
     fmm.downward_pass!(tree_2, masses_2)
 
     for i_branch in 1:length(tree.branches)
@@ -994,105 +929,17 @@ end
     for i_mass in 1:length(masses)
         @test isapprox(masses[i_mass].potential[1], masses_2[i_mass].potential[1]; atol=1e-8)
     end
-
-    # potential_fmm = [mass.potential[1] for mass in masses]
-    # potential_direct = fmm.direct(masses,kernel)
-    # @show potential_fmm potential_direct
 end
 
-# fmm
-#=
-n_bodies = 30
-xs = [
-    0.388392    0.106547   0.845142
-    0.240594    0.505334   0.983601
-    0.745662    0.0839445  0.922518
-    0.869459    0.98942    0.355172
-    0.116437    0.392353   0.411578
-    0.130627    0.89462    0.215045
-    0.726242    0.799088   0.451056
-    0.793813    0.488155   0.476661
-    0.550357    0.571989   0.847709
-    0.929304    0.322994   0.132763
-    0.958071    0.700619   0.684907
-    0.709772    0.749387   0.801939
-    0.77977     0.756256   0.902697
-    0.859913    0.111364   0.118537
-    0.497385    0.553377   0.691205
-    0.169268    0.498795   0.114511
-    0.812004    0.279347   0.25
-    0.274416    0.410975   0.0954442
-    0.227162    0.587327   0.93572
-    0.0935186   0.203038   0.161665
-    0.91486     0.590517   0.463325
-    0.0516916   0.18584    0.927009
-    0.767046    0.905011   0.776572
-    0.957557    0.989017   0.766284
-    0.81422     0.460356   0.0103359
-    0.0865304   0.970258   0.753353
-    0.524689    0.140235   0.266709
-    0.642358    0.453406   0.937758
-    0.00710105  0.587438   0.656069
-    0.858541    0.426729   0.0686081
-]
-ms = [
-    0.4220728227420478
-    0.0747553836759225
-    0.4918442683705029
-    0.2776964778405684
-    0.728065982900099
-    0.26036166706827624
-    0.40947592030106006
-    0.2561866650710254
-    0.06438382582261348
-    0.6679735476119923
-    0.04889662377468129
-    0.1550291511132713
-    0.16037100929047354
-    0.18190416799126385
-    0.9021939971600423
-    0.6684499952695557
-    0.7967050012287675
-    0.43663719038929916
-    0.06761496973869541
-    0.43105003179953894
-    0.4550424416035894
-    0.9582284464593078
-    0.39984740708504507
-    0.4488960100421002
-    0.6698005050460909
-    0.001771998875738312
-    0.6259215534257303
-    0.33877748744249203
-    0.6120473836581699
-    0.197476919815341
-]
-masses = Vector{Mass}(undef,length(ms))
-for i in 1:length(ms)
-    x = xs[i,:]
-    mass = [ms[i]]
-    potential = zeros(1)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
-end
 
-# kernel = fmm.Gravitational()
-derivatives = symbolic_derivative_kernel(10)
-kernel = fmm.Gravitational(1.0,derivatives,10)
-tree = fmm.fmm!(masses, kernel, 1, 1)
 
-potential_fmm = [mass.potential[1] for mass in masses]
-@show potential_fmm
-for i in 1:length(masses)
-    masses[i].potential .*= 0
-end
-potential_direct = fmm.direct(masses, kernel)
 
-err = potential_fmm - potential_direct
-@show err
-# rel_err = err ./ potential_direct
-=#
-
+# fig_time = plt.figure("time")
+# fig_time.clear()
+# ax = fig_time.add_subplot(111, xlabel=L"\theta", ylabel="time")
+# ax.plot(thetas, times_fmm, label="fmm")
+# ax.plot(thetas, times_direct, label="direct")
+# ax.legend()
 
 #=
 xs = [
@@ -1185,9 +1032,6 @@ true_potentials = fmm.direct(masses, kernel)
 =#
 
 @testset "derivatives" begin
-    # kernel = fmm.Gravitational(3) # 2-D
-
-
     # build symbolic kernel
     sym.@variables x y z
     phi = -1/sqrt(x^2 + y^2 + z^2)
@@ -1263,18 +1107,6 @@ true_potentials = fmm.direct(masses, kernel)
     symbolic_derivatives[1,2,4] = d4dydz3
     d4dz4 = sym.derivative(d3dz3, z)
     symbolic_derivatives[1,1,5] = d4dz4
-    # d5dx5 = sym.derivative(d4dx4, x)
-    # symbolic_derivatives[6,1,1] = d5dx5
-    # d5dx4dy = sym.derivative(d4dx4, y)
-    # symbolic_derivatives[5,2] = d5dx4dy
-    # d5dx3dy2 = sym.derivative(d4dx3dy, y)
-    # symbolic_derivatives[4,3] = d5dx3dy2
-    # d5dx2dy3 = sym.derivative(d4dx2dy2, y)
-    # symbolic_derivatives[3,4] = d5dx2dy3
-    # d5dxdy4 = sym.derivative(d4dxdy3, y)
-    # symbolic_derivatives[2,5] = d5dxdy4
-    # d5dy5 = sym.derivative(d4dy4, y)
-    # symbolic_derivatives[1,6] = d5dy5
 
     # compare
     xyz = (rand(3) .- 0.5) * 5
@@ -1286,7 +1118,7 @@ true_potentials = fmm.direct(masses, kernel)
             for k = 1:s
                 if i+j+k <= s+1
                     this_index = fmm.ijk_2_index(i-1,j-1,k-1)
-                    kernel_values[i,j,k] = kernel.potential_derivatives[this_index](xyz)
+                    kernel_values[i,j,k] = derivatives[this_index](xyz)
                     r = sym.substitute(symbolic_derivatives[i,j,k],Dict(x=>xyz[1],y=>xyz[2],z=>xyz[3])).val
                     symbolic_values[i,j,k] = r
                     # r2 = mykernel(xyz, i-1, j-1, k-1)
@@ -1300,113 +1132,5 @@ true_potentials = fmm.direct(masses, kernel)
 
 end
 
-# # explore error with expansion order
-# function test_accuracy(exp_order)
-#     xs = [
-#         1.2 1.1 0.8;
-#         0.8 0.9 0.2;
-#         0.1 0.2 0.9;
-#         0.1 0.3 0.2;
-#         0.2 0.25 0.4
-#     ]
-
-#     ms = [
-#         0.8,
-#         1.1,
-#         2.2,
-#         0.5,
-#         1.9
-#     ]
-
-#     masses = Vector{Mass}(undef,length(ms))
-#     for i in 1:length(ms)
-#         x = xs[i,:]
-#         mass = [ms[i]]
-#         potential = zeros(1)
-#         force = zeros(3)
-#         masses[i] = Mass(x,mass,potential,force)
-#     end
-#     tree = fmm.Tree(masses; expansion_order=exp_order)
-
-#     masses_2 = Vector{Mass}(undef,length(ms))
-#     for i in 1:length(ms)
-#         x = xs[i,:]
-#         mass = [ms[i]]
-#         potential = zeros(1)
-#         force = zeros(3)
-#         masses_2[i] = Mass(x,mass,potential,force)
-#     end
-
-#     potential_direct = fmm.direct(masses_2, kernel)
-
-#     fmm.fmm!(tree, masses, kernel; reset_tree=true, reset_elements=true)
-#     potential_fmm = [mass.potential[1] for mass in masses]
-
-#     return potential_direct, potential_fmm
-# end
-
-function test_err(exp_order)
-    potential_direct, potential_fmm = test_accuracy(exp_order)
-    err = abs.(potential_direct .- potential_fmm)
-    rel_err = err ./ abs.(potential_direct)
-    return err, rel_err
-end
-
-os = [1,2,3,4,5,6,7]
-errs = zeros(length(ms),length(os))
-rel_errs = zeros(length(ms),length(os))
-for (i,o) in enumerate(os)
-    global this_rel_err, this_err
-    this_rel_err, this_err = test_err(o)
-    errs[:,i] .= this_err
-    rel_errs[:,i] .= this_rel_err
-end
-
-conv_1 = plt.figure("convergence_1")
-conv_1.clear()
-conv_1.add_subplot(111,xlabel="order",ylabel="relative error")
-ax = conv_1.get_axes()[1]
-for i in 1:length(ms)
-    ax.plot(os, rel_errs[i,:], label="mass $i")
-end
-# ax.set_xscale("log")
-ax.set_yscale("log")
-ax.legend()
-conv_1.savefig("/Users/randerson/Downloads/expansion_convergence.png")
-
-
-#####
-##### Even Deeper Testing
-#####
-# xs = [
-#     1.2 1.1 0.8;
-#     0.8 0.9 0.2;
-#     0.1 0.2 0.9;
-#     0.1 0.3 0.2;
-#     0.2 0.25 0.4
-# ]
-
-# ms = [
-#     0.8,
-#     1.1,
-#     2.2,
-#     0.5,
-#     1.9
-# ]
-
-# masses = Vector{Mass}(undef,length(ms))
-# for i in 1:length(ms)
-#     x = xs[i,:]
-#     mass = [ms[i]]
-#     potential = zeros(1)
-#     force = zeros(3)
-#     masses[i] = Mass(x,mass,potential,force)
-# end
-
-# tree = fmm.Tree(masses; expansion_order=2)
-# # kernel = fmm.Gravitational()
-
-
-# fmm.upward_pass!(tree, masses)
-# fmm.horizontal_pass!(tree, masses, kernel)
-# fmm.downward_pass!(tree, masses)
+# with panels
+# import Panels as P
