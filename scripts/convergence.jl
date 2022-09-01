@@ -1,20 +1,23 @@
-# explore error with expansion order
-function test_accuracy(exp_order)
-    xs = [
-        1.2 1.1 0.8;
-        0.8 0.9 0.2;
-        0.1 0.2 0.9;
-        0.1 0.3 0.2;
-        0.2 0.25 0.4
-    ]
+scripts_dir = @__DIR__
+include(joinpath(scripts_dir,"..","test","gravitational.jl"))
 
-    ms = [
-        0.8,
-        1.1,
-        2.2,
-        0.5,
-        1.9
-    ]
+# explore error with expansion order
+xs = [
+    1.2 1.1 0.8;
+    0.8 0.9 0.2;
+    0.1 0.2 0.9;
+    0.1 0.3 0.2;
+    0.2 0.25 0.4
+]
+
+ms = [
+    0.8,
+    1.1,
+    2.2,
+    0.5,
+    1.9
+]
+function test_accuracy(exp_order)
 
     masses = Vector{Mass}(undef,length(ms))
     for i in 1:length(ms)
@@ -35,9 +38,11 @@ function test_accuracy(exp_order)
         masses_2[i] = Mass(x,mass,potential,force)
     end
 
-    potential_direct = fmm.direct(masses_2, kernel)
+    fmm.direct!(masses_2)
+    potential_direct = [mass.potential[1] for mass in masses_2]
 
-    fmm.fmm!(tree, masses, kernel; reset_tree=true, reset_elements=true)
+    theta = 4
+    fmm.fmm!(tree, masses, derivatives, theta; reset_tree=true)
     potential_fmm = [mass.potential[1] for mass in masses]
 
     return potential_direct, potential_fmm
@@ -50,7 +55,7 @@ function test_err(exp_order)
     return err, rel_err
 end
 
-os = [1,2,3,4,5,6,7]
+os = [1,2,3,4]#,5,6,7]
 errs = zeros(length(ms),length(os))
 rel_errs = zeros(length(ms),length(os))
 for (i,o) in enumerate(os)

@@ -1,4 +1,11 @@
-# fmm
+#####
+##### test sensitivity of the threshold parameter theta
+#####
+scripts_dir = @__DIR__
+include(joinpath(scripts_dir,"..","test","gravitational.jl"))
+
+import Statistics as S
+
 n_bodies = 30
 xs = rand(n_bodies,3)
 ms = rand(n_bodies)
@@ -12,16 +19,17 @@ for i in 1:length(ms)
 end
 
 function test_accuracy(theta, expansion_order, n_per_branch=1)
-    # kernel = fmm.Gravitational()
-    derivatives = symbolic_derivative_kernel(expansion_order)
-    kernel = fmm.Gravitational(1.0,derivatives,expansion_order)
-    time_fmm = @elapsed tree = fmm.fmm!(masses, kernel, expansion_order, n_per_branch, theta)
+    for i in 1:length(masses)
+        masses[i].potential .*= 0
+    end
+    time_fmm = @elapsed tree = fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta)
 
     potential_fmm = [mass.potential[1] for mass in masses]
     for i in 1:length(masses)
         masses[i].potential .*= 0
     end
-    time_direct = @elapsed potential_direct = fmm.direct(masses, kernel)
+    time_direct = @elapsed fmm.direct!(masses)
+    potential_direct = [mass.potential[1] for mass in masses]
 
     err = potential_fmm - potential_direct
     rel_err = err ./ potential_direct
@@ -57,7 +65,7 @@ function make_plots(expansion_order)
     fig_theta_2 = plt.figure("theta2")
     fig_theta_2.clear()
     ax = fig_theta_2.add_subplot(111, xlabel="theta", ylabel="RMS error")
-    rms_err = [sqrt(mean(rel_errs[i].^2)) for i in 1:n]
+    rms_err = [sqrt(S.mean(rel_errs[i].^2)) for i in 1:n]
     ax.plot(thetas, rms_err)
     ax.set_yscale("log")
 end
@@ -65,3 +73,4 @@ end
 # make_plots(1)
 # make_plots(2)
 # make_plots(3)
+make_plots(4)

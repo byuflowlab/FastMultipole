@@ -237,16 +237,14 @@ function downward_pass!(j_source, tree, elements)
     end
 end
 
-function fmm!(tree::Tree, elements, derivatives, theta; reset_tree=true, reset_elements=true)
-    if reset_elements; reset_elements!(elements); end
+function fmm!(tree::Tree, elements, derivatives, theta; reset_tree=true)
     if reset_tree; reset_expansions!(tree); end
     upward_pass!(tree, elements)
     horizontal_pass!(tree, elements, derivatives, theta)
     downward_pass!(tree, elements)
 end
 
-function fmm!(elements, derivatives, expansion_order, n_per_branch, theta=4; reset_elements=true)
-    if reset_elements; reset_elements!(elements); end
+function fmm!(elements, derivatives, expansion_order, n_per_branch, theta=4)
     tree = Tree(elements; expansion_order, n_per_branch)
     fmm!(tree, elements, derivatives, theta)
     return tree
