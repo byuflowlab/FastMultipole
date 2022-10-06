@@ -1051,6 +1051,7 @@ end
     end
 end
 
+#=
 @testset "solid harmonics" begin
 
 function Ylm(theta, phi, l, m)
@@ -1106,6 +1107,7 @@ for i in 1:length(ih_man)
     @test isapprox(ih_man[i], ih_fmm[i]; atol=1e-11)
 end
 end
+=#
 
 @testset "P2M" begin
 xs = [
@@ -1137,6 +1139,7 @@ basis = fmm.Spherical()
 expansion_order = 2
 tree = fmm.Tree(masses, basis; expansion_order)
 
+i_mass = 1
 i_branch = 5 # use the first mass
 fmm.P2M!(i_branch, tree, masses, fmm.Spherical())
 center = tree.branches[i_branch].center
@@ -1150,15 +1153,8 @@ u_fmm = target.potential[1]
 dx = x_target - xs[1,:]
 u_check = ms[1] / sqrt(dx' * dx)
 
-using LegendrePolynomials
-
 function Ylm(theta, phi, l, m)
-    ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(theta), l, abs(m)) * exp(im * abs(m) * phi)
-    if m >= 0
-        return ylm
-    else # Ylm^* = -Yl{-m}
-        return -conj(ylm)
-    end
+    ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(theta), l, abs(m)) * exp(im * m * phi)
 end
 
 function evaluate_biot_savart(x_source, x_target, q_source, P)
@@ -1180,157 +1176,154 @@ u_check_man = evaluate_biot_savart(x_source_sph, x_target_sph, ms[1], expansion_
 @test isapprox(u_check, u_fmm; atol=1e-6)
 end
 
+# # M2M
+# xs = [
+#     1.2 1.1 0.8;
+#     0.8 0.9 0.2;
+#     0.1 0.2 0.9;
+#     0.1 0.3 0.2;
+#     0.2 0.25 0.4
+# ]
 
-#=
-# M2M
-xs = [
-    1.2 1.1 0.8;
-    0.8 0.9 0.2;
-    0.1 0.2 0.9;
-    0.1 0.3 0.2;
-    0.2 0.25 0.4
-]
+# ms = [
+#     0.8,
+#     1.1,
+#     2.2,
+#     0.5,
+#     1.9
+# ]
 
-ms = [
-    0.8,
-    1.1,
-    2.2,
-    0.5,
-    1.9
-]
+# masses = Vector{Mass}(undef,length(ms))
+# for i in 1:length(ms)
+#     x = xs[i,:]
+#     mass = [ms[i]]
+#     potential = zeros(1)
+#     force = zeros(3)
+#     masses[i] = Mass(x,mass,potential,force)
+# end
 
-masses = Vector{Mass}(undef,length(ms))
-for i in 1:length(ms)
-    x = xs[i,:]
-    mass = [ms[i]]
-    potential = zeros(1)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
-end
+# basis = fmm.Spherical()
+# expansion_order = 3
+# tree = fmm.Tree(masses, basis; expansion_order)
 
-basis = fmm.Spherical()
-expansion_order = 3
-tree = fmm.Tree(masses, basis; expansion_order)
+# i_branch = 2 # contains 4th and 5th masses
+# i_branch_4 = 6 # use the fourth mass
+# # i_branch_5 = 7 # use the fifth mass
+# fmm.P2M!(i_branch_4, tree, masses, basis) # evaluate multipole coefficients
+# # fmm.P2M!(i_branch_5, tree, masses, basis) # evaluate multipole coefficients
+# fmm.M2M!(i_branch, tree, basis) # translate coefficients to the center of branch 2
 
-i_branch = 2 # contains 4th and 5th masses
-i_branch_4 = 6 # use the fourth mass
-# i_branch_5 = 7 # use the fifth mass
-fmm.P2M!(i_branch_4, tree, masses, basis) # evaluate multipole coefficients
-# fmm.P2M!(i_branch_5, tree, masses, basis) # evaluate multipole coefficients
-fmm.M2M!(i_branch, tree, basis) # translate coefficients to the center of branch 2
+# x_target = [8.3,1.4,-4.2]
+# target = Mass(x_target, [0.0], [0.0], zeros(3))
+# fmm.M2P!(target, i_branch, tree)
+# u_fmm = target.potential[1]
 
-x_target = [8.3,1.4,-4.2]
-target = Mass(x_target, [0.0], [0.0], zeros(3))
-fmm.M2P!(target, i_branch, tree)
-u_fmm = target.potential[1]
+# target.potential .*= 0
+# fmm.M2P!(target, i_branch_4, tree)
+# u_fmm_no_x = target.potential[1]
 
-target.potential .*= 0
-fmm.M2P!(target, i_branch_4, tree)
-u_fmm_no_x = target.potential[1]
-
-# @show u_fmm u_fmm_no_x
+# # @show u_fmm u_fmm_no_x
 
 
-u_check = 0.0
-dx = x_target - xs[4,:]
-du = ms[4] / sqrt(dx'*dx)
-u_check += du
+# u_check = 0.0
+# dx = x_target - xs[4,:]
+# du = ms[4] / sqrt(dx'*dx)
+# u_check += du
 
-# @show u_check
+# # @show u_check
 
-using LegendrePolynomials
+# using LegendrePolynomials
 
-function Ylm(theta, phi, l, m)
-    ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(theta), l, abs(m)) * exp(im * abs(m) * phi)
-    if m >= 0
-        return ylm
-    else # Ylm^* = -Yl{-m}
-        return -conj(ylm)
-    end
-end
+# function Ylm(theta, phi, l, m)
+#     ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(theta), l, abs(m)) * exp(im * abs(m) * phi)
+#     if m >= 0
+#         return ylm
+#     else # Ylm^* = -Yl{-m}
+#         return -conj(ylm)
+#     end
+# end
 
-function evaluate_biot_savart(x_source, x_target, q_source, P)
-    v = 0.0
-    i = 1
-    for l in 0:P
-        for m in -l:l
-            # if i == 7
-                # println("man: l=$l, m=$m:\n\t")
-                # println("\tM = $(q_source * x_source[1]^l * conj(Ylm(x_source[2], x_source[3], l, m)))")
-                # println("\tq_source = $q_source, x_source[1]^l = $(x_source[1]^l)\n\tconj(Ylm(x_source[2], x_source[3], l, m)) = $(conj(Ylm(x_source[2], x_source[3], l, m)))")
-            # end
-            v += q_source * x_source[1]^l / x_target[1]^(l+1) * real(Ylm(x_target[2], x_target[3], l, m) * conj(Ylm(x_source[2], x_source[3], l, m)))
-            i += 1
-        end
-    end
-    return v
-end
+# function evaluate_biot_savart(x_source, x_target, q_source, P)
+#     v = 0.0
+#     i = 1
+#     for l in 0:P
+#         for m in -l:l
+#             # if i == 7
+#                 # println("man: l=$l, m=$m:\n\t")
+#                 # println("\tM = $(q_source * x_source[1]^l * conj(Ylm(x_source[2], x_source[3], l, m)))")
+#                 # println("\tq_source = $q_source, x_source[1]^l = $(x_source[1]^l)\n\tconj(Ylm(x_source[2], x_source[3], l, m)) = $(conj(Ylm(x_source[2], x_source[3], l, m)))")
+#             # end
+#             v += q_source * x_source[1]^l / x_target[1]^(l+1) * real(Ylm(x_target[2], x_target[3], l, m) * conj(Ylm(x_source[2], x_source[3], l, m)))
+#             i += 1
+#         end
+#     end
+#     return v
+# end
 
-center = tree.branches[i_branch].center
-x_source_sph_4 = fmm.cartesian_2_spherical(xs[4,:] - center)
-# x_source_sph_5 = fmm.cartesian_2_spherical(xs[5,:] - center)
-x_target_sph = fmm.cartesian_2_spherical(x_target - center)
-u_check_man_4 = evaluate_biot_savart(x_source_sph_4, x_target_sph, ms[4], expansion_order);
-# u_check_man_5 = evaluate_biot_savart(x_source_sph_5, x_target_sph, ms[5], expansion_order);
-u_check_man = u_check_man_4# + u_check_man_5
+# center = tree.branches[i_branch].center
+# x_source_sph_4 = fmm.cartesian_2_spherical(xs[4,:] - center)
+# # x_source_sph_5 = fmm.cartesian_2_spherical(xs[5,:] - center)
+# x_target_sph = fmm.cartesian_2_spherical(x_target - center)
+# u_check_man_4 = evaluate_biot_savart(x_source_sph_4, x_target_sph, ms[4], expansion_order);
+# # u_check_man_5 = evaluate_biot_savart(x_source_sph_5, x_target_sph, ms[5], expansion_order);
+# u_check_man = u_check_man_4# + u_check_man_5
 
-# @show u_check u_fmm u_fmm_no_x u_check_man
+# # @show u_check u_fmm u_fmm_no_x u_check_man
 
-# naive translation
-function A(l,m)
-    (-1)^l / sqrt(factorial(l-m) * factorial(l+m))
-end
+# # naive translation
+# function A(l,m)
+#     (-1)^l / sqrt(factorial(l-m) * factorial(l+m))
+# end
 
-@inline function evaluate_im(power)
-    val = Complex{Float64}(0.0)
-    val += Bool(power & 1) ? im : 1.0
-    val *= (-1)^((power & 2) >> 1)
-    return val
-end
+# @inline function evaluate_im(power)
+#     val = Complex{Float64}(0.0)
+#     val += Bool(power & 1) ? im : 1.0
+#     val *= (-1)^((power & 2) >> 1)
+#     return val
+# end
 
-function m2m(expansion, center, new_center, expansion_order)
-    new_expansion = zeros(Complex{Float64},((expansion_order+1) * (expansion_order+2)) >> 1)
-    regular = zeros(Complex{Float64},(expansion_order+1)^2)
-    dx = new_center - center
-    fmm.cartesian_2_spherical!(dx)
-    fmm.regular_harmonic!(regular, dx[1], dx[2], dx[3], expansion_order)
-    # question- what is that relation again? -Ylm = Yl{-m}*, so -Ylm* = Yl{-m}
-    for j in 0:expansion_order
-        for k in 0:j
-            M = Complex{Float64}(0.0)
-            for l in 0:j
-                for m in max(k+l-j,-l):min(k+j-l,l)
-                    # i_regular = 1 + (l * (l + 1)) >> 1 - m
-                    i_regular = l^2 + l - m + 1
-                    i_expansion = 1 + ((j-l) * (j-l+1)) >> 1 + k - m
-                    # i_expansion = (j-l)^2 + (j-l) + (k-m) + 1
-                    M += regular[i_regular] * A(l,m) * A(j-l,k-m) * expansion[i_expansion] *
-                         evaluate_im(abs(k) - abs(m) - abs(k-m)) / A(j,k)
-                end
-            end
-            new_expansion[1 + (j * (j+1)) >> 1 + k] = M
-            # new_expansion[j^2 + j + k + 1] = M
-        end
-    end
-    return new_expansion
-end
+# function m2m(expansion, center, new_center, expansion_order)
+#     new_expansion = zeros(Complex{Float64},((expansion_order+1) * (expansion_order+2)) >> 1)
+#     regular = zeros(Complex{Float64},(expansion_order+1)^2)
+#     dx = new_center - center
+#     fmm.cartesian_2_spherical!(dx)
+#     fmm.regular_harmonic!(regular, dx[1], dx[2], dx[3], expansion_order)
+#     # question- what is that relation again? -Ylm = Yl{-m}*, so -Ylm* = Yl{-m}
+#     for j in 0:expansion_order
+#         for k in 0:j
+#             M = Complex{Float64}(0.0)
+#             for l in 0:j
+#                 for m in max(k+l-j,-l):min(k+j-l,l)
+#                     # i_regular = 1 + (l * (l + 1)) >> 1 - m
+#                     i_regular = l^2 + l - m + 1
+#                     i_expansion = 1 + ((j-l) * (j-l+1)) >> 1 + k - m
+#                     # i_expansion = (j-l)^2 + (j-l) + (k-m) + 1
+#                     M += regular[i_regular] * A(l,m) * A(j-l,k-m) * expansion[i_expansion] *
+#                          evaluate_im(abs(k) - abs(m) - abs(k-m)) / A(j,k)
+#                 end
+#             end
+#             new_expansion[1 + (j * (j+1)) >> 1 + k] = M
+#             # new_expansion[j^2 + j + k + 1] = M
+#         end
+#     end
+#     return new_expansion
+# end
 
-old_expansion_fmm = deepcopy(tree.branches[i_branch_4].multipole_expansion) # confident about this one
-new_expansion_fmm = deepcopy(tree.branches[i_branch].multipole_expansion)
-new_expansion_man = m2m(old_expansion_fmm, tree.branches[i_branch_4].center, tree.branches[i_branch].center, expansion_order);
+# old_expansion_fmm = deepcopy(tree.branches[i_branch_4].multipole_expansion) # confident about this one
+# new_expansion_fmm = deepcopy(tree.branches[i_branch].multipole_expansion)
+# new_expansion_man = m2m(old_expansion_fmm, tree.branches[i_branch_4].center, tree.branches[i_branch].center, expansion_order);
 
-solid_harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-tree.branches[i_branch].multipole_expansion .*= 0.0
-fmm.P2M!(tree, tree.branches[i_branch], masses[4], solid_harmonics, fmm.Spherical())
-expansion_no_x = deepcopy(tree.branches[i_branch].multipole_expansion)
+# solid_harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
+# tree.branches[i_branch].multipole_expansion .*= 0.0
+# fmm.P2M!(tree, tree.branches[i_branch], masses[4], solid_harmonics, fmm.Spherical())
+# expansion_no_x = deepcopy(tree.branches[i_branch].multipole_expansion)
 
-tree.branches[i_branch].multipole_expansion .= new_expansion_man
-target.potential .*= 0
-fmm.M2P!(target, i_branch, tree)
-u_fmm_man = target.potential[1]
+# tree.branches[i_branch].multipole_expansion .= new_expansion_man
+# target.potential .*= 0
+# fmm.M2P!(target, i_branch, tree)
+# u_fmm_man = target.potential[1]
 
-@show u_check u_fmm u_fmm_no_x u_check_man u_fmm_man
-=#
+# @show u_check u_fmm u_fmm_no_x u_check_man u_fmm_man
 
 # L2P, L2L, local expansion and translation; center at [0,0,0]
 function Ylm(theta, phi, l, m)
@@ -1423,6 +1416,8 @@ end
 #     end
 # end
 
+
+#=
 function m2m(old_expansion, old_center, new_center, P)
     new_expansion = similar(old_expansion) .* 0
     Ylm = zeros(Complex{Float64},(P+1)^2)
@@ -1472,7 +1467,7 @@ x_near = [-0.1, 0.7, 0.4]
 x_far = 10 * x_near
 dx = x_near - x_far
 one_over_r = 1/sqrt(dx' * dx)
-P = 4
+P = 3
 old_center = [0.3,1.0,-0.1] # old origin in the global frame
 
 v_old, near, far = evaluate_biot_savart(x_far-old_center, x_near-old_center, P)
@@ -1528,3 +1523,7 @@ v_new, near_new, far_new = evaluate_biot_savart(x_far-new_center, x_near-new_cen
 v_trans, ilm_trans = evaluate_multipole(new_expansion, new_center, x_far, P)
 
 @show one_over_r v_new v_trans
+=#
+
+
+# P2M

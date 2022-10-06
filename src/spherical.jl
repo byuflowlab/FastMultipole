@@ -16,147 +16,88 @@ end
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic!(harmonics, rho, theta, phi, p)
-    y, x = sincos(theta)
-    inv_y = y !== 0.0 ? 1/y : 0.0
-
-    p_m_m = 1.0 # start with l=m=0
-    p_m1_m = x
-
-    eim = 1 # e^{i m \phi}
+function regular_harmonic!(harmonics, harmonics_theta, rho, theta, phi, P)
+    y,x = sincos(theta)
+    invY = y == 0 ? 0 : 1 / y
+    fact = 1
+    pl = 1
+    rhom = 1
     ei = exp(im * phi)
-
-    mm! = 1 # sqrt((m-m)!/(m+m)!)
-    rhom = 1 # rho^l when l=m
-    m21 = 1 # 2m + 1
-
-    for m in 0:p
-        # l = m iteration
-        ip = m^2 + m + m + 1
-        im = m^2 + m - m + 1
-        harmonics[ip] = mm! * p_m_m * eim * rhom
-        harmonics[im] = conj(harmonics[ip])
-
-        # update values for l = m+1
-
-        p_m1_m = x * m21 * p_m_m
-        p_l_1_m = p_m_m
-        p_l_m = p_m1_m
-
-        # set up variables for inner loop
-        rhol = rhom
-        lm! = mm! # sqrt((l-m)!/(l+m)!)
-        for l in m+1:p
-            # update rho^l
-            rhol *= rho
-
-            # update sqrt((l-m)!/(l+m)!)
-            lm! *= sqrt((l-m)/(l+m))
-
-            ip = l^2 + l + m + 1
-            im = l^2 + l - m + 1
-            harmonics[ip] = lm! * p_l_m * eim * rhol
-            harmonics[im] = conj(harmonics[ip])
-
-            # update legendre polynomials
-            p_tmp = ((2*l+1) * x * p_l_m - (l+m) * p_l_1_m) / (l-m+1)
-            p_l_1_m = p_l_m
-            p_l_m = p_tmp
-        end
-
-        # increment legendre polynomials order
-        p_m_m *= -m21 * y
-
-        # update e^{i m \phi}
-        eim *= ei
-
-        # update rho^m
+    eim = 1.0
+    for m=0:P
+        p = pl
+        lpl = m * m + 2 * m + 1
+        lml = m * m + 1
+        harmonics[lpl] = rhom * p * eim
+        harmonics[lml] = conj(harmonics[lpl])
+        p1 = p
+        p = x * (2 * m + 1) * p1
+        harmonics_theta[lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
         rhom *= rho
-
-        # update sqrt((l-m)!/(l+m)!) for l=m
-        mm! /= sqrt((m21 + 1) * m21)
-
-        # update 2m + 1
-        m21 += 2
-    end
-end
-
-function irregular_harmonic!(harmonics, rho, theta, phi, p)
-    y, x = sincos(theta)
-    inv_y = y !== 0.0 ? 1/y : 0.0
-
-    p_m_m = 1.0 # start with l=m=0
-    p_m1_m = x
-
-    eim = 1 # e^{i m \phi}
-    ei = exp(im * phi)
-
-    mm! = 1 # sqrt((m-m)!/(m+m)!)
-    inv_rho = rho !== 0 ? 1/rho : 0.0 # 1/rho
-    rhom1 = inv_rho # rho^{-l-1} when l=m
-    m21 = 1 # 2m + 1
-
-    for m in 0:p
-        # l = m iteration
-        ip = m^2 + m + m + 1
-        im = m^2 + m - m + 1
-        harmonics[ip] = mm! * p_m_m * eim * rhom1
-        harmonics[im] = conj(harmonics[ip])
-
-        # update values for l = m+1
-        p_m1_m = x * m21 * p_m_m
-        p_l_1_m = p_m_m
-        p_l_m = p_m1_m
-
-        # set up variables for inner loop
-        rhol1 = rhom1
-        lm! = mm! # sqrt((l-m)!/(l+m)!)
-        for l in m+1:p
-            # update rho^{-l-1}
-            rhol1 *= inv_rho
-
-            # update sqrt((l-m)!/(l+m)!)
-            lm! *= sqrt((l-m)/(l+m))
-
-            ip = l^2 + l + m + 1
-            im = l^2 + l - m + 1
-            harmonics[ip] = lm! * p_l_m * eim * rhol1
-            harmonics[im] = conj(harmonics[ip])
-
-            # update legendre polynomials
-            p_tmp = ((2*l+1) * x * p_l_m - (l+m) * p_l_1_m) / (l-m+1)
-            p_l_1_m = p_l_m
-            p_l_m = p_tmp
+        rhol = rhom
+        for l=m+1:P
+            lpm = l * l + l + m + 1
+            lmm = l * l + l - m + 1
+            rhol /= -(l + m)
+            harmonics[lpm] = rhol * p * eim
+            harmonics[lmm] = conj(harmonics[lpm])
+            p2 = p1
+            p1 = p
+            p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
+            harmonics_theta[lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
+            rhol *= rho
         end
-
-        # increment legendre polynomials order
-        p_m_m *= -m21 * y
-
-        # update e^{i m \phi}
+        rhom /= -(2 * m + 2) * (2 * m + 1)
+        pl = -pl * fact * y
+        fact += 2
         eim *= ei
-
-        # update rho^m
-        rhom1 *= inv_rho
-
-        # update sqrt((l-m)!/(l+m)!) for l=m
-        mm! /= sqrt((m21 + 1) * m21)
-
-        # update 2m + 1
-        m21 += 2
     end
 end
 
-function P2M!(tree, branch, element, solid_harmonics, ::Spherical)
+function irregular_harmonic!(harmonics, rho, theta, phi, P)
+    y, x = sincos(theta)
+    fact = 1
+    pl = 1
+    invR = -1.0 / rho
+    rhom = -invR
+    ei = exp(im * phi)
+    eim = 1.0
+    for m=0:P
+        p = pl
+        npl = m * m + 2 * m + 1
+        nml = m * m + 1
+        harmonics[npl] = rhom * p * eim
+        harmonics[nml] = conj(harmonics[npl])
+        p1 = p
+        p = x * (2 * m + 1) * p1
+        rhom *= invR
+        rhon = rhom
+        for l=m+1:P
+            npm = l * l + l + m + 1
+            nmm = l * l + l - m + 1
+            harmonics[npm] = rhon * p * eim
+            harmonics[nmm] = conj(harmonics[npm])
+            p2 = p1
+            p1 = p
+            p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
+            rhon *= invR * (l - m + 1)
+        end
+        pl = -pl * fact * y
+        fact += 2
+        eim *= ei
+    end
+end
+
+function P2M!(tree, branch, element, harmonics, harmonics_theta, ::Spherical)
     dx = get_x(element) .- branch.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(solid_harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
-
+    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
     # update values
     for l in 0:tree.expansion_order[1]
         for m in 0:l
             i_solid_harmonic = l^2 + l + m + 1
             i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-            branch.multipole_expansion[i_compressed] += solid_harmonics[i_solid_harmonic] * get_q(element)
+            branch.multipole_expansion[i_compressed] += harmonics[i_solid_harmonic] * get_q(element)
         end
     end
 end
@@ -165,12 +106,13 @@ function P2M!(i_branch, tree, elements, coordinates::Spherical)
     branch = tree.branches[i_branch]
 
     #initialize memory TODO: do this beforehand?
-    solid_harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
+    harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
+    harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
 
     # iterate over elements
     for i_element in tree.indices[branch.first_element:branch.first_element + branch.n_elements-1]
         element = elements[i_element]
-        P2M!(tree, branch, element, solid_harmonics, coordinates)
+        P2M!(tree, branch, element, harmonics, harmonics_theta, coordinates)
     end
 end
 
@@ -179,7 +121,7 @@ function M2P!(target, i_branch, tree)
     irregular_harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
     dx = get_x(target) - branch.center
     cartesian_2_spherical!(dx)
-    irregular_harmonic!(irregular_harmonics, dx[1], dx[2], dx[3], tree.expansion_order[1])
+    irregular_harmonic!(irregular_harmonics, dx..., tree.expansion_order[1])
     for l in 0:tree.expansion_order[1]
         for m in 0:l
             ip = l^2 + l + m + 1
@@ -191,11 +133,11 @@ function M2P!(target, i_branch, tree)
     end
 end
 
-function M2M!(tree, branch, child, Ylm, ::Spherical)
+function M2M!(tree, branch, child, harmonics, harmonics_theta, ::Spherical)
     # get distance vector
     dx = branch.center - child.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(Ylm, dx[1], dx[2], dx[3], tree.expansion_order[1])
+    regular_harmonic!(harmonics, harmonics_theta, dx..., tree.expansion_order[1])
 
     for j in 0:tree.expansion_order[1] # iterate over new Multipole coefficients B_j^k
         for k in 0:j
@@ -205,12 +147,12 @@ function M2M!(tree, branch, child, Ylm, ::Spherical)
                 for m in max(-l,-j+k+l):min(k-1,l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) + k - m + 1
                     lm = l * l + l - m + 1
-                    M += child.multipole_expansion[jlkms] * Ylm[lm] * ipow2l(m) * odd_or_even(l)
+                    M += child.multipole_expansion[jlkms] * harmonics[lm] * ipow2l(m) * odd_or_even(l)
                 end
                 for m in k:min(l,j+k-l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) - k + m + 1
                     lm = l * l + l - m + 1
-                    M += conj(child.multipole_expansion[jlkms]) * Ylm[lm] * odd_or_even(k + l + m)
+                    M += conj(child.multipole_expansion[jlkms]) * harmonics[lm] * odd_or_even(k + l + m)
                 end
             end
             # if i_jk == 4; println("M2M: l = $j, m = $k\n\tM = $M"); end
@@ -224,36 +166,13 @@ function M2M!(i_branch, tree, coordinates::Spherical)
     branch = tree.branches[i_branch]
 
     #initialize memory TODO: do this beforehand?
-    Ylm = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    # YlmTheta = Vector{Complex{Float64}}(undef, tree.expansion_order[1]^2)
+    harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
+    harmonics_theta = Vector{Complex{Float64}}(undef, tree.expansion_order[1]^2)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
         child = tree.branches[i_child]
-        M2M!(tree, branch, child, Ylm, coordinates)
-    end
-end
-
-function M2M!(i_branch, tree, ::Spherical)
-    # expose objects
-    branch = tree.branches[i_branch]
-
-    #initialize memory TODO: do this beforehand?
-    Ylm = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    # YlmTheta = Vector{Complex{Float64}}(undef, tree.expansion_order[1]^2)
-
-    # iterate over children
-    for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
-        child = tree.branches[i_child]
-
-        # get distance vector
-        dx = branch.center - child.center
-        cartesian_2_spherical!(dx)
-        regular_harmonic!(Ylm, dx[1], dx[2], dx[3], tree.expansion_order[1])
-
-        for j in 0:tree.expansion_order[1]
-            pass
-        end
+        M2M!(tree, branch, child, harmonics, harmonics_theta, coordinates)
     end
 end
 
