@@ -167,7 +167,7 @@ function M2M!(i_branch, tree, coordinates::Spherical)
 
     #initialize memory TODO: do this beforehand?
     harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    harmonics_theta = Vector{Complex{Float64}}(undef, tree.expansion_order[1]^2)
+    harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
