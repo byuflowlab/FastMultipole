@@ -1109,7 +1109,7 @@ end
 end
 =#
 
-@testset "P2M" begin
+@testset "spherical P2M" begin
 xs = [
     1.2 1.1 0.8;
     0.8 0.9 0.2;
@@ -1176,7 +1176,7 @@ u_check_man = evaluate_biot_savart(x_source_sph, x_target_sph, ms[1], expansion_
 @test isapprox(u_check, u_fmm; atol=1e-6)
 end
 
-@testset "m2m" begin
+@testset "spherical M2M" begin
 xs = [
     1.2 1.1 0.8;
     0.8 0.9 0.2;
@@ -1229,3 +1229,185 @@ u_check = ms[4] / sqrt(dx'*dx)
 @test isapprox(u_fmm, u_check; atol=1e-5)
 
 end
+
+@testset "spherical L2P" begin
+xs = [
+    1.2 1.1 0.8;
+    0.8 0.9 0.2;
+    0.1 0.2 0.9;
+    0.1 0.3 0.2;
+    0.2 0.25 0.4
+]
+
+ms = [
+    0.8,
+    1.1,
+    2.2,
+    0.5,
+    1.9
+]
+
+masses = Vector{Mass}(undef,length(ms))
+for i in 1:length(ms)
+    x = xs[i,:]
+    mass = [ms[i]]
+    potential = zeros(1)
+    force = zeros(3)
+    masses[i] = Mass(x,mass,potential,force)
+end
+
+basis = fmm.Spherical()
+expansion_order = 20
+tree = fmm.Tree(masses, basis; expansion_order)
+
+branch_i = 2 # contains two masses; 4 and 5
+target_i = 4
+source_i = 1 # just needs to be farther away than the target to ensure convergence
+
+dx_source = fmm.cartesian_2_spherical(fmm.get_x(masses[source_i]) - tree.branches[branch_i].center)
+dx_target = fmm.cartesian_2_spherical(fmm.get_x(masses[target_i]) - tree.branches[branch_i].center)
+
+local_coefficients_theta = zeros(Complex{Float64}, ((expansion_order+1)*(expansion_order+2))>>1)
+local_coefficients_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
+local_coefficients_expanded_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+fmm.irregular_harmonic!(local_coefficients_expanded, dx_source..., expansion_order)
+local_coefficients_expanded .*= ms[source_i]
+regular_harmonics_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
+regular_harmonics_theta_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
+fmm.regular_harmonic!(regular_harmonics_expanded, regular_harmonics_theta_expanded, dx_target..., expansion_order)
+
+fmm.P2L!(tree, branch_i, masses[source_i])
+
+harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
+harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
+fmm.L2P!(masses[target_i], tree, tree.branches[branch_i], harmonics, harmonics_theta, fmm.Spherical())
+
+u_fmm = masses[target_i].potential[1]
+
+dx_direct = xs[target_i,:] - xs[source_i,:]
+u_check = 1 / sqrt(dx_direct' * dx_direct)
+u_check *= ms[source_i]
+
+u_man = real(sum(regular_harmonics_expanded' * local_coefficients_expanded)) # appears to work
+
+@test isapprox(u_check, u_fmm; atol=1e-12)
+@test isapprox(u_check, u_man; atol=1e-12)
+
+end
+
+@testset "spherical L2L" begin
+xs = [
+    1.2 1.1 0.8;
+    0.8 0.9 0.2;
+    0.1 0.2 0.9;
+    0.1 0.3 0.2;
+    0.2 0.25 0.4
+]
+
+ms = [
+    0.8,
+    1.1,
+    2.2,
+    0.5,
+    1.9
+]
+
+masses = Vector{Mass}(undef,length(ms))
+for i in 1:length(ms)
+    x = xs[i,:]
+    mass = [ms[i]]
+    potential = zeros(1)
+    force = zeros(3)
+    masses[i] = Mass(x,mass,potential,force)
+end
+
+basis = fmm.Spherical()
+expansion_order = 20
+tree = fmm.Tree(masses, basis; expansion_order)
+
+# local coefficient at branch 2 due to mass 1
+fmm.P2L!(tree, 2, masses[1])
+local_2 = deepcopy(tree.branches[2].local_expansion)
+
+# check L2P now:
+harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
+harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
+fmm.L2P!(masses[5], tree, tree.branches[2], harmonics, harmonics_theta, fmm.Spherical())
+u_fmm_no_x = masses[5].potential[1]
+masses[5].potential[1] *= 0
+
+# translate local expansion to branch 7 (mass 5)
+fmm.L2L!(tree, tree.branches[2], tree.branches[7], harmonics, harmonics_theta, fmm.Spherical())
+
+local_coefficients_check = zeros(Complex{Float64}, (expansion_order+1)^2)
+dx_check = fmm.cartesian_2_spherical(masses[1].x - tree.branches[7].center)
+fmm.irregular_harmonic!(local_coefficients_check, dx_check..., expansion_order)
+local_coefficients_check .*= ms[1]
+
+# evaluate local expansion at mass 5
+fmm.L2P!(7, tree, masses, fmm.Spherical())
+u_fmm = masses[5].potential[1]
+
+dx_direct = masses[5].x - masses[1].x
+u_check = ms[1] / sqrt(dx_direct' * dx_direct)
+
+regular_harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
+regular_harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+dx_target = fmm.cartesian_2_spherical(masses[5].x - tree.branches[7].center)
+fmm.regular_harmonic!(regular_harmonics, regular_harmonics_theta, dx_target..., expansion_order)
+u_man = real(sum(regular_harmonics' * local_coefficients_check))
+
+@test isapprox(u_check, u_fmm; atol=1e-12)
+@test isapprox(u_check, u_fmm_no_x; atol=1e-12)
+@test isapprox(u_check, u_man; atol=1e-12)
+
+end
+
+# M2L
+xs = [
+    1.2 1.1 0.8;
+    0.8 0.9 0.2;
+    0.1 0.2 0.9;
+    0.1 0.3 0.2;
+    0.2 0.25 0.4
+]
+
+ms = [
+    0.8,
+    1.1,
+    2.2,
+    0.5,
+    1.9
+]
+
+masses = Vector{Mass}(undef,length(ms))
+for i in 1:length(ms)
+    x = xs[i,:]
+    mass = [ms[i]]
+    potential = zeros(1)
+    force = zeros(3)
+    masses[i] = Mass(x,mass,potential,force)
+end
+
+basis = fmm.Spherical()
+expansion_order = 1
+tree = fmm.Tree(masses, basis; expansion_order)
+
+i_branch_multipole = 7 # mass 5
+i_branch_local = 5 # mass 1
+coordinates = fmm.Spherical()
+harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+
+fmm.P2M!(tree, tree.branches[i_branch_multipole], masses[5], harmonics, harmonics_theta, coordinates)
+@show tree.branches[i_branch_multipole].multipole_expansion
+fmm.M2L!(tree, i_branch_local, i_branch_multipole, masses, coordinates)
+@show tree.branches[i_branch_local].local_expansion
+fmm.L2P!(masses[1], tree, tree.branches[i_branch_local], harmonics, harmonics_theta, coordinates)
+
+u_fmm = masses[1].potential[1]
+
+dx_direct = masses[1].x - masses[5].x
+u_direct = masses[5].mass[1] / sqrt(dx_direct' * dx_direct)
+
+@show u_fmm u_direct
