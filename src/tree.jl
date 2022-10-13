@@ -16,7 +16,7 @@ struct Tree
     n_per_branch    # max number of elements in a leaf
 end
 
-function Tree(elements; expansion_order=2, n_per_branch=1)
+function Tree(elements, basis::Basis; expansion_order=2, n_per_branch=1)
     # initialize objects
     n_elements = length(elements)
     indices = collect(1:n_elements)
@@ -29,7 +29,7 @@ function Tree(elements; expansion_order=2, n_per_branch=1)
     i_branch = 1
     center, radius = center_radius(elements; scale_radius = 1.00001)
     level = 0
-    branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+    branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, basis)
 
     # assemble tree
     tree = Tree(indices, branches, [expansion_order], n_per_branch)
@@ -37,11 +37,11 @@ function Tree(elements; expansion_order=2, n_per_branch=1)
     return tree
 end
 
-function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, basis)
     n_branches = 0
     n_elements = i_end - i_start + 1
-    multipole_expansion = initialize_expansion(expansion_order)
-    local_expansion = initialize_expansion(expansion_order)
+    multipole_expansion = initialize_expansion(expansion_order, basis)
+    local_expansion = initialize_expansion(expansion_order, basis)
     if n_elements <= n_per_branch # branch is a leaf; no new branches needed
         i_child = -1
         branch = Branch(n_branches, n_elements, i_child, i_start, center, radius, multipole_expansion, local_expansion)
@@ -103,7 +103,7 @@ function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, 
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, indices, buffer, elements, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
+                branch!(branches, indices, buffer, elements, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch, basis)
                 i_tape += 1
             end
         end
@@ -142,10 +142,14 @@ function n_terms(expansion_order, dimensions)
     return n
 end
 
-function initialize_expansion(expansion_order)
+function initialize_expansion(expansion_order, ::Cartesian)
     k = 3 # dimensions
     n = n_terms(expansion_order, k)
     return zeros(n)
+end
+
+function initialize_expansion(expansion_order, ::Spherical)
+    return zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function change_expansion_order!(tree::Tree, new_order)
