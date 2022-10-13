@@ -75,6 +75,7 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
         for l=m+1:P
             npm = l * l + l + m + 1
             nmm = l * l + l - m + 1
+            # npm_max = P^2 + P + P + 1 = (P+1)^2
             harmonics[npm] = rhon * p * eim
             harmonics[nmm] = conj(harmonics[npm])
             p2 = p1
@@ -89,7 +90,7 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
 end
 
 function P2M!(tree, branch, element, harmonics, harmonics_theta, ::Spherical)
-    dx = get_x(element) .- branch.center
+    dx = get_x(element) - branch.center
     cartesian_2_spherical!(dx)
     regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
     # update values
@@ -102,7 +103,7 @@ function P2M!(tree, branch, element, harmonics, harmonics_theta, ::Spherical)
     end
 end
 
-function P2M!(i_branch, tree, elements, coordinates::Spherical)
+function P2M!(tree, elements, i_branch, basis::Spherical)
     branch = tree.branches[i_branch]
 
     #initialize memory TODO: do this beforehand?
@@ -112,7 +113,7 @@ function P2M!(i_branch, tree, elements, coordinates::Spherical)
     # iterate over elements
     for i_element in tree.indices[branch.first_element:branch.first_element + branch.n_elements-1]
         element = elements[i_element]
-        P2M!(tree, branch, element, harmonics, harmonics_theta, coordinates)
+        P2M!(tree, branch, element, harmonics, harmonics_theta, basis)
     end
 end
 
@@ -155,13 +156,12 @@ function M2M!(tree, branch, child, harmonics, harmonics_theta, ::Spherical)
                     M += conj(child.multipole_expansion[jlkms]) * harmonics[lm] * odd_or_even(k + l + m)
                 end
             end
-            # if i_jk == 4; println("M2M: l = $j, m = $k\n\tM = $M"); end
             branch.multipole_expansion[i_jk] += M
         end
     end
 end
 
-function M2M!(i_branch, tree, coordinates::Spherical)
+function M2M!(tree, i_branch, basis::Spherical)
     # expose objects
     branch = tree.branches[i_branch]
 
@@ -172,21 +172,21 @@ function M2M!(i_branch, tree, coordinates::Spherical)
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
         child = tree.branches[i_child]
-        M2M!(tree, branch, child, harmonics, harmonics_theta, coordinates)
+        M2M!(tree, branch, child, harmonics, harmonics_theta, basis)
     end
 end
 
-function M2L!(tree, i_local, j_multipole, elements, ::Spherical)
+function M2L!(tree, elements, i_local, j_multipole, ::Spherical)
     local_branch = tree.branches[i_local]
     multipole_branch = tree.branches[j_multipole]
 
     # preallocate
-    harmonics = Vector{Complex{Float64}}(undef, (2 * tree.expansion_order[1] + 2)^2)
+    harmonics = Vector{Complex{Float64}}(undef, (2*tree.expansion_order[1] + 1)^2)
 
     # get separation vector
     dx = local_branch.center - multipole_branch.center
     cartesian_2_spherical!(dx)
-    irregular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1])
+    irregular_harmonic!(harmonics, dx[1], dx[2], dx[3], 2*tree.expansion_order[1])
     for j in 0:tree.expansion_order[1]
         Cnm = odd_or_even(j)
         for k in 0:j
@@ -196,11 +196,13 @@ function M2L!(tree, i_local, j_multipole, elements, ::Spherical)
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1
                     jnkm = (j + n)^2 + j + n + m - k + 1
+                    # jnkm_max = (P + P)^2 + P + P + -1 - 0 + 1 = (2P)^2 + 2P = 2P(2P+1)
                     L += conj(multipole_branch.multipole_expansion[nms]) * Cnm * harmonics[jnkm]
                 end
                 for m in 0:n
                     nms = (n * (n+1)) >> 1 + m + 1
                     jnkm = (j + n) * (j + n) + j + n + m - k + 1
+                    # jnkm_max = 2P * 2P + 2P + P + P - 0 + 1 = (2P)^2 + 2P + 2P + 1 = 4P^2 + 4P + 1 = (2P + 1)^2
                     Cnm2 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m)
                     L += multipole_branch.multipole_expansion[nms] * Cnm2 * harmonics[jnkm]
                 end
@@ -214,7 +216,7 @@ function P2L!(tree, i_branch, source)
     branch = tree.branches[i_branch]
     irregular_harmonics = zeros(Complex{Float64},(tree.expansion_order[1]+1)^2)
     dx = cartesian_2_spherical(get_x(source) - branch.center)
-    irregular_harmonic!(irregular_harmonics, dx..., tree.expansion_order[1])
+    irregular_harmonic!(irregular_harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1])
     irregular_harmonics .*= get_q(source)
     for l in 0:tree.expansion_order[1]
         for m in 0:l
@@ -228,7 +230,7 @@ end
 function L2L!(tree, branch, child, harmonics, harmonics_theta, ::Spherical)
     dx = child.center - branch.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], -dx[3], tree.expansion_order[1])
+    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], dx[3], tree.expansion_order[1])
     for j in 0:tree.expansion_order[1]
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
@@ -252,7 +254,7 @@ function L2L!(tree, branch, child, harmonics, harmonics_theta, ::Spherical)
     end
 end
 
-function L2L!(j_source, tree, coordinates::Spherical)
+function L2L!(tree, j_source, basis::Spherical)
     # expose branch
     branch = tree.branches[j_source]
 
@@ -263,14 +265,14 @@ function L2L!(j_source, tree, coordinates::Spherical)
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
         child = tree.branches[i_child]
-        L2L!(tree, branch, child, harmonics, harmonics_theta, coordinates)
+        L2L!(tree, branch, child, harmonics, harmonics_theta, basis)
     end
 end
 
 function L2P!(element, tree, branch, harmonics, harmonics_theta, ::Spherical)
     dx = get_x(element) - branch.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # use the conjugate
+    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], dx[3], tree.expansion_order[1]) # use the conjugate
     for n in 0:tree.expansion_order[1]
         nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
@@ -284,12 +286,12 @@ function L2P!(element, tree, branch, harmonics, harmonics_theta, ::Spherical)
 end
 
 "Calculates the potential at all child elements of a branch."
-function L2P!(i_branch, tree, elements, coordinates::Spherical)
+function L2P!(tree, elements, i_branch, basis::Spherical)
     branch = tree.branches[i_branch]
     harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
     harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
     for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
         element = elements[tree.indices[i_element]]
-        L2P!(element, tree, branch, harmonics, harmonics_theta, coordinates) # fix calling syntaxs
+        L2P!(element, tree, branch, harmonics, harmonics_theta, basis) # fix calling syntaxs
     end
 end

@@ -26,7 +26,7 @@ function fmm.kernel!(target::Mass, source::Mass)
     dx = fmm.get_x(target) - fmm.get_x(source)
     r = sqrt(dx' * dx)
     if r > 0
-        dV = -source.mass[1] / r
+        dV = source.mass[1] / r
         target.potential[1] += dV
     end
 end
@@ -288,3 +288,5 @@ derivatives[34] = gravitational_dydz3
 # derivatives[1,2,4] = gravitational_dydz3
 derivatives[35] = gravitational_dz4
 # derivatives[1,1,5] = gravitational_dz4
+
+fmm.derivatives(index, dx) = derivatives[index](dx)

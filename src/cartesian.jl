@@ -1,5 +1,5 @@
 
-function P2M!(i_branch, tree, elements, ::Cartesian)
+function P2M!(tree, elements, i_branch, ::Cartesian)
     branch = tree.branches[i_branch]
 
     # iterate over coefficients
@@ -11,7 +11,7 @@ function P2M!(i_branch, tree, elements, ::Cartesian)
                 # iterate over elements
                 for i_element in tree.indices[branch.first_element:branch.first_element + branch.n_elements-1]
                     element = elements[i_element]
-                    dx = branch.center .- get_x(element)
+                    dx = branch.center - get_x(element)
                     branch.multipole_expansion[i_coeff] += ^(dx,i,j,k) * get_q(element)
                 end
                 branch.multipole_expansion[i_coeff] /= factorial(i) * factorial(j) * factorial(k)
@@ -21,7 +21,7 @@ function P2M!(i_branch, tree, elements, ::Cartesian)
     end
 end
 
-function M2M!(i_branch, tree, ::Cartesian)
+function M2M!(tree, i_branch, ::Cartesian)
     # expose objects
     branch = tree.branches[i_branch]
 
@@ -57,7 +57,7 @@ function M2M!(i_branch, tree, ::Cartesian)
     end
 end
 
-function M2L!(i_local, j_multipole, tree, elements, derivatives, ::Cartesian)
+function M2L!(tree, elements, i_local, j_multipole, ::Cartesian)
     local_branch = tree.branches[i_local]
     multipole_branch = tree.branches[j_multipole]
     dx = local_branch.center - multipole_branch.center
@@ -71,9 +71,8 @@ function M2L!(i_local, j_multipole, tree, elements, derivatives, ::Cartesian)
                     for i_multipole in order_multipole:-1:0
                         for j_multipole in order_multipole-i_multipole:-1:0
                             k_multipole = order_multipole - i_multipole - j_multipole
-                            # gradient = kernel.potential_derivatives[i_multipole+i_local+1, j_multipole+j_local+1, k_multipole+k_local+1](dx,1,1)
                             gradient_index = ijk_2_index(i_multipole+i_local, j_multipole+j_local, k_multipole+k_local)
-                            gradient = derivatives[gradient_index](dx)
+                            gradient = derivatives(gradient_index,dx)
                             local_branch.local_expansion[local_coeff] += gradient * multipole_branch.multipole_expansion[multipole_coeff]
                             multipole_coeff += 1
                         end
@@ -85,7 +84,7 @@ function M2L!(i_local, j_multipole, tree, elements, derivatives, ::Cartesian)
     end
 end
 
-function L2L!(j_source, tree, ::Cartesian)
+function L2L!(tree, j_source, ::Cartesian)
     # expose branch
     branch = tree.branches[j_source]
 
@@ -128,7 +127,7 @@ function L2L!(j_source, tree, ::Cartesian)
 end
 
 "Calculates the potential at all child elements of a branch."
-function L2P!(i_branch, tree, elements, ::Cartesian)
+function L2P!(tree, elements, i_branch, ::Cartesian)
     branch = tree.branches[i_branch]
     for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
         element = elements[tree.indices[i_element]]

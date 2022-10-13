@@ -1051,7 +1051,6 @@ end
     end
 end
 
-#=
 @testset "solid harmonics" begin
 
 function Ylm(theta, phi, l, m)
@@ -1107,7 +1106,6 @@ for i in 1:length(ih_man)
     @test isapprox(ih_man[i], ih_fmm[i]; atol=1e-11)
 end
 end
-=#
 
 @testset "spherical P2M" begin
 xs = [
@@ -1141,7 +1139,7 @@ tree = fmm.Tree(masses, basis; expansion_order)
 
 i_mass = 1
 i_branch = 5 # use the first mass
-fmm.P2M!(i_branch, tree, masses, fmm.Spherical())
+fmm.P2M!(tree, masses, i_branch, fmm.Spherical())
 center = tree.branches[i_branch].center
 
 x_target = [10.1,-7.3,8.6]
@@ -1209,9 +1207,9 @@ tree = fmm.Tree(masses, basis; expansion_order)
 i_branch = 2 # contains 4th and 5th masses
 i_branch_4 = 6 # use the fourth mass
 # i_branch_5 = 7 # use the fifth mass
-fmm.P2M!(i_branch_4, tree, masses, basis) # evaluate multipole coefficients
+fmm.P2M!(tree, masses, i_branch_4, basis) # evaluate multipole coefficients
 # fmm.P2M!(i_branch_5, tree, masses, basis) # evaluate multipole coefficients
-fmm.M2M!(i_branch, tree, basis) # translate coefficients to the center of branch 2
+fmm.M2M!(tree, i_branch, basis) # translate coefficients to the center of branch 2
 
 x_target = [8.3,1.4,-4.2]
 target = Mass(x_target, [0.0], [0.0], zeros(3))
@@ -1345,7 +1343,7 @@ fmm.irregular_harmonic!(local_coefficients_check, dx_check..., expansion_order)
 local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
-fmm.L2P!(7, tree, masses, fmm.Spherical())
+fmm.L2P!(tree, masses, 7, fmm.Spherical())
 u_fmm = masses[5].potential[1]
 
 dx_direct = masses[5].x - masses[1].x
@@ -1363,7 +1361,7 @@ u_man = real(sum(regular_harmonics' * local_coefficients_check))
 
 end
 
-# M2L
+@testset "spherical: M2L" begin
 xs = [
     1.2 1.1 0.8;
     0.8 0.9 0.2;
@@ -1390,7 +1388,7 @@ for i in 1:length(ms)
 end
 
 basis = fmm.Spherical()
-expansion_order = 1
+expansion_order = 30
 tree = fmm.Tree(masses, basis; expansion_order)
 
 i_branch_multipole = 7 # mass 5
@@ -1400,9 +1398,7 @@ harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
 
 fmm.P2M!(tree, tree.branches[i_branch_multipole], masses[5], harmonics, harmonics_theta, coordinates)
-@show tree.branches[i_branch_multipole].multipole_expansion
-fmm.M2L!(tree, i_branch_local, i_branch_multipole, masses, coordinates)
-@show tree.branches[i_branch_local].local_expansion
+fmm.M2L!(tree, masses, i_branch_local, i_branch_multipole, coordinates)
 fmm.L2P!(masses[1], tree, tree.branches[i_branch_local], harmonics, harmonics_theta, coordinates)
 
 u_fmm = masses[1].potential[1]
@@ -1410,4 +1406,122 @@ u_fmm = masses[1].potential[1]
 dx_direct = masses[1].x - masses[5].x
 u_direct = masses[5].mass[1] / sqrt(dx_direct' * dx_direct)
 
-@show u_fmm u_direct
+@test isapprox(u_fmm, u_direct; atol=1e-12)
+
+# now check coefficients
+# tree_2 = fmm.Tree(masses, basis; expansion_order)
+# fmm.P2L!(tree_2, i_branch_local, masses[5])
+# tree_2.branches[i_branch_local].local_expansion tree.branches[i_branch_local].local_expansion
+
+end
+
+@testset "fmm" begin
+xs = [
+    1.2 1.1 0.8;
+    0.8 0.9 0.2;
+    0.1 0.2 0.9;
+    0.1 0.3 0.2;
+    0.2 0.25 0.4
+]
+
+ms = [
+    0.8,
+    1.1,
+    2.2,
+    0.5,
+    1.9
+]
+
+masses = Vector{Mass}(undef,length(ms))
+for i in 1:length(ms)
+    x = xs[i,:]
+    mass = [ms[i]]
+    potential = zeros(1)
+    force = zeros(3)
+    masses[i] = Mass(x,mass,potential,force)
+end
+
+basis = fmm.Spherical()
+expansion_order = 24
+theta = 4
+tree = fmm.Tree(masses, basis; expansion_order)
+
+# perform upward pass
+fmm.upward_pass!(tree, masses, basis)
+
+m6 = tree.branches[6].multipole_expansion
+target = [4.1,2.2,3.4]
+dx_direct_6 = target - masses[4].x
+u_direct_6 = ms[4] / sqrt(dx_direct_6' * dx_direct_6)
+
+mass_target = Mass(target, [0.0], [0.0], [0.0])
+
+fmm.M2P!(mass_target, 6, tree)
+u_fmm_6 = mass_target.potential[1]
+
+# add branches 6 and 7
+dx_direct_7 = target - masses[5].x
+u_direct_67 = u_direct_6 + ms[5] / sqrt(dx_direct_7' * dx_direct_7)
+
+# reset target potential
+mass_target.potential[1] *= 0
+
+# use summed multipole expansion from branches 6 and 7 (summed at 2)
+fmm.M2P!(mass_target, 2, tree)
+u_fmm_67 = mass_target.potential[1]
+
+# perform horizontal pass
+fmm.horizontal_pass!(tree, masses, theta, basis)
+
+# consider the effect on branch 3 (mass 2)
+masses[2].potential .*= 0 # reset potential at mass 2
+# P2P is performed from branches 3 (mass 2), 4 (mass 3), and 5 (mass 1) to branch 3
+fmm.P2P!(tree, masses, 3, 3)
+fmm.P2P!(tree, masses, 3, 4)
+fmm.P2P!(tree, masses, 3, 5)
+u_fmm_123 = masses[2].potential[1]
+
+dx_12 = masses[2].x - masses[1].x
+u_direct_12 = masses[1].mass[1] / sqrt(dx_12' * dx_12)
+u_direct_22 = 0.0
+dx_32 = masses[2].x - masses[3].x
+u_direct_32 = masses[3].mass[1] / sqrt(dx_32' * dx_32)
+
+u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
+
+# M2L is performed from branches 6, 7 to branch 3 (containing mass 2)
+# fmm.L2P!(element, tree, branch, harmonics, harmonics_theta, basis)
+fmm.L2P!(tree, masses, 3, basis)
+u_fmm_12345 = masses[2].potential[1]
+
+dx_42 = masses[4].x - masses[2].x
+u_direct_42 = masses[4].mass[1] / sqrt(dx_42' * dx_42)
+dx_52 = masses[5].x - masses[2].x
+u_direct_52 = masses[5].mass[1] / sqrt(dx_52' * dx_52)
+
+u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
+
+@test isapprox(u_direct_123, u_fmm_123; atol=1e-12)
+@test isapprox(u_direct_12345, u_fmm_12345; atol=1e-12)
+
+# reset potentials
+for i in 1:length(masses)
+    masses[i].potential .*= 0
+end
+
+# run fmm (reset potentials with reset_tree flag)
+fmm.fmm!(tree, masses, theta, basis; reset_tree=true)
+u_fmm = [mass.potential[1] for mass in masses]
+
+for mass in masses
+    mass.potential .*= 0
+end
+
+fmm.direct!(masses)
+
+u_direct = [mass.potential[1] for mass in masses]
+
+for i in 1:length(masses)
+    @test isapprox(u_fmm[i], u_direct[i]; atol=1e-12)
+end
+end
