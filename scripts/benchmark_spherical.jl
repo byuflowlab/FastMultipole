@@ -211,8 +211,6 @@ function plot_files(direct_files, cartesian_files, spherical_files, save_name, f
     ns_direct, times_direct, ns_cartesian, times_cartesian, ns_spherical,
         times_spherical, mean_errs_cartesian, mean_errs_spherical = load_jlds(direct_files, cartesian_files, spherical_files)
 
-    @show ns_direct ns_cartesian ns_spherical
-
     fig = plt.figure("benchmark_fmm")
     fig.clear()
     fig.add_subplot(111,xlabel="elements",ylabel="time, seconds")

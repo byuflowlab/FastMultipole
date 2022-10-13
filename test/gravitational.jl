@@ -34,180 +34,180 @@ end
 function gravitational_potential_3D(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
     rho = sqrt(rho_sq)
-    return -m_source / rho
+    return m_source / rho
 end
 
 function gravitational_dx(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dVdx = m_source * Rho[1] / rho_sq^1.5
+    dVdx = -m_source * Rho[1] / rho_sq^1.5
 end
 
 function gravitational_dy(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dVdx = m_source * Rho[2] / rho_sq^1.5
+    dVdx = -m_source * Rho[2] / rho_sq^1.5
 end
 
 function gravitational_dz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dVdx = m_source * Rho[3] / rho_sq^1.5
+    dVdx = -m_source * Rho[3] / rho_sq^1.5
 end
 
 function gravitational_dx2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d2Vdx2 = m_source * (-2 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^2.5
+    d2Vdx2 = -m_source * (-2 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^2.5
 end
 
 function gravitational_dy2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d2Vdy2 = m_source * (Rho[1]^2 - 2*Rho[2]^2 + Rho[3]^2) / rho_sq^2.5
+    d2Vdy2 = -m_source * (Rho[1]^2 - 2*Rho[2]^2 + Rho[3]^2) / rho_sq^2.5
 end
 
 function gravitational_dz2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d2Vdz2 = m_source * (Rho[1]^2 + Rho[2]^2 - 2*Rho[3]^2) / rho_sq^2.5
+    d2Vdz2 = -m_source * (Rho[1]^2 + Rho[2]^2 - 2*Rho[3]^2) / rho_sq^2.5
 end
 
 function gravitational_dxdy(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d2Vdxdy = -3 * m_source * Rho[1] * Rho[2] / rho_sq^2.5
+    d2Vdxdy = 3 * m_source * Rho[1] * Rho[2] / rho_sq^2.5
 end
 
 function gravitational_dydz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d2Vdydz = -3 * m_source * Rho[2] * Rho[3] / rho_sq^2.5
+    d2Vdydz = 3 * m_source * Rho[2] * Rho[3] / rho_sq^2.5
 end
 
 function gravitational_dxdz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d2Vdxdz = -3 * m_source * Rho[3] * Rho[1] / rho_sq^2.5
+    d2Vdxdz = 3 * m_source * Rho[3] * Rho[1] / rho_sq^2.5
 end
 
 function gravitational_dx3(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdx3 = 3 * m_source * Rho[1] * (2 * Rho[1]^2 - 3 * (Rho[2]^2 + Rho[3]^2)) / rho_sq^3.5
+    d3Vdx3 = -3 * m_source * Rho[1] * (2 * Rho[1]^2 - 3 * (Rho[2]^2 + Rho[3]^2)) / rho_sq^3.5
 end
 
 function gravitational_dy3(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdy3 = 3 * m_source * Rho[2] * (2 * Rho[2]^2 - 3 * (Rho[3]^2 + Rho[1]^2)) / rho_sq^3.5
+    d3Vdy3 = -3 * m_source * Rho[2] * (2 * Rho[2]^2 - 3 * (Rho[3]^2 + Rho[1]^2)) / rho_sq^3.5
 end
 
 function gravitational_dz3(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdz3 = 3 * m_source * Rho[3] * (2 * Rho[3]^2 - 3 * (Rho[1]^2 + Rho[2]^2)) / rho_sq^3.5
+    d3Vdz3 = -3 * m_source * Rho[3] * (2 * Rho[3]^2 - 3 * (Rho[1]^2 + Rho[2]^2)) / rho_sq^3.5
 end
 
 function gravitational_dx2dy(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdx2dy = -3 * m_source * Rho[2] * (-4 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^3.5
+    d3Vdx2dy = 3 * m_source * Rho[2] * (-4 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^3.5
 end
 
 function gravitational_dx2dz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdx2dy = -3 * m_source * Rho[3] * (-4 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^3.5
+    d3Vdx2dy = 3 * m_source * Rho[3] * (-4 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^3.5
 end
 
 function gravitational_dy2dz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdy2dz = -3 * m_source * Rho[3] * (-4 * Rho[2]^2 + Rho[3]^2 + Rho[1]^2) / rho_sq^3.5
+    d3Vdy2dz = 3 * m_source * Rho[3] * (-4 * Rho[2]^2 + Rho[3]^2 + Rho[1]^2) / rho_sq^3.5
 end
 
 function gravitational_dxdy2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdy2dz = -3 * m_source * Rho[1] * (-4 * Rho[2]^2 + Rho[3]^2 + Rho[1]^2) / rho_sq^3.5
+    d3Vdy2dz = 3 * m_source * Rho[1] * (-4 * Rho[2]^2 + Rho[3]^2 + Rho[1]^2) / rho_sq^3.5
 end
 
 function gravitational_dxdz2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdz2dx = -3 * m_source * Rho[1] * (-4 * Rho[3]^2 + Rho[1]^2 + Rho[2]^2) / rho_sq^3.5
+    d3Vdz2dx = 3 * m_source * Rho[1] * (-4 * Rho[3]^2 + Rho[1]^2 + Rho[2]^2) / rho_sq^3.5
 end
 
 function gravitational_dydz2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdz2dx = -3 * m_source * Rho[2] * (-4 * Rho[3]^2 + Rho[1]^2 + Rho[2]^2) / rho_sq^3.5
+    d3Vdz2dx = 3 * m_source * Rho[2] * (-4 * Rho[3]^2 + Rho[1]^2 + Rho[2]^2) / rho_sq^3.5
 end
 
 function gravitational_dxdydz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    d3Vdxdydz = 15 * m_source * Rho[1] * Rho[2] * Rho[3] / rho_sq^3.5
+    d3Vdxdydz = -15 * m_source * Rho[1] * Rho[2] * Rho[3] / rho_sq^3.5
 end
 
 function gravitational_dx4(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dx4 = -3 * m_source * (8 * Rho[1]^4 - 24 * Rho[1]^2 * (Rho[2]^2 + Rho[3]^2) + 3 * (Rho[2]^2 + Rho[3]^2)^2) / rho_sq^4.5
+    dx4 = 3 * m_source * (8 * Rho[1]^4 - 24 * Rho[1]^2 * (Rho[2]^2 + Rho[3]^2) + 3 * (Rho[2]^2 + Rho[3]^2)^2) / rho_sq^4.5
 end
 
 function gravitational_dy4(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dy4 = -3 * m_source * (8 * Rho[2]^4 - 24 * Rho[2]^2 * (Rho[3]^2 + Rho[1]^2) + 3 * (Rho[3]^2 + Rho[1]^2)^2) / rho_sq^4.5
+    dy4 = 3 * m_source * (8 * Rho[2]^4 - 24 * Rho[2]^2 * (Rho[3]^2 + Rho[1]^2) + 3 * (Rho[3]^2 + Rho[1]^2)^2) / rho_sq^4.5
 end
 
 function gravitational_dz4(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dz4 = -3 * m_source * (8 * Rho[3]^4 - 24 * Rho[3]^2 * (Rho[1]^2 + Rho[2]^2) + 3 * (Rho[1]^2 + Rho[2]^2)^2) / rho_sq^4.5
+    dz4 = 3 * m_source * (8 * Rho[3]^4 - 24 * Rho[3]^2 * (Rho[1]^2 + Rho[2]^2) + 3 * (Rho[1]^2 + Rho[2]^2)^2) / rho_sq^4.5
 end
 
 function gravitational_dx3dy(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dx3dy = 15 * m_source * Rho[2] * (3 * Rho[1] * (Rho[2]^2 + Rho[3]^2) - 4 * Rho[1]^3) / rho_sq^4.5
+    dx3dy = -15 * m_source * Rho[2] * (3 * Rho[1] * (Rho[2]^2 + Rho[3]^2) - 4 * Rho[1]^3) / rho_sq^4.5
 end
 
 function gravitational_dx3dz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dx3dz = 15 * m_source * Rho[3] * (3 * Rho[1] * (Rho[3]^2 + Rho[2]^2) - 4 * Rho[1]^3) / rho_sq^4.5
+    dx3dz = -15 * m_source * Rho[3] * (3 * Rho[1] * (Rho[3]^2 + Rho[2]^2) - 4 * Rho[1]^3) / rho_sq^4.5
 end
 
 function gravitational_dy3dz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dy3dz = 15 * m_source * Rho[3] * (3 * Rho[2] * (Rho[3]^2 + Rho[1]^2) - 4 * Rho[2]^3) / rho_sq^4.5
+    dy3dz = -15 * m_source * Rho[3] * (3 * Rho[2] * (Rho[3]^2 + Rho[1]^2) - 4 * Rho[2]^3) / rho_sq^4.5
 end
 
 function gravitational_dxdy3(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dxdy3 = 15 * m_source * Rho[1] * (3 * Rho[2] * (Rho[1]^2 + Rho[3]^2) - 4 * Rho[2]^3) / rho_sq^4.5
+    dxdy3 = -15 * m_source * Rho[1] * (3 * Rho[2] * (Rho[1]^2 + Rho[3]^2) - 4 * Rho[2]^3) / rho_sq^4.5
 end
 
 function gravitational_dxdz3(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dxdz3 = 15 * m_source * Rho[1] * (3 * Rho[3] * (Rho[1]^2 + Rho[2]^2) - 4 * Rho[3]^3) / rho_sq^4.5
+    dxdz3 = -15 * m_source * Rho[1] * (3 * Rho[3] * (Rho[1]^2 + Rho[2]^2) - 4 * Rho[3]^3) / rho_sq^4.5
 end
 
 function gravitational_dydz3(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dydz3 = 15 * m_source * Rho[2] * (3 * Rho[3] * (Rho[2]^2 + Rho[1]^2) - 4 * Rho[3]^3) / rho_sq^4.5
+    dydz3 = -15 * m_source * Rho[2] * (3 * Rho[3] * (Rho[2]^2 + Rho[1]^2) - 4 * Rho[3]^3) / rho_sq^4.5
 end
 
 function gravitational_dx2dy2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dx2dy2 = 3 * m_source * (4 * Rho[1]^4 + 3 * Rho[1]^2 * (Rho[3]^2 - 9 * Rho[2]^2) +
+    dx2dy2 = -3 * m_source * (4 * Rho[1]^4 + 3 * Rho[1]^2 * (Rho[3]^2 - 9 * Rho[2]^2) +
              4 * Rho[2]^4 + 3 * Rho[2]^2 * Rho[3]^2 - Rho[3]^4) / rho_sq^4.5
 end
 
 function gravitational_dy2dz2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dy2dz2 = 3 * m_source * (4 * Rho[3]^4 + 3 * Rho[3]^2 * (Rho[1]^2 - 9 * Rho[2]^2) +
+    dy2dz2 = -3 * m_source * (4 * Rho[3]^4 + 3 * Rho[3]^2 * (Rho[1]^2 - 9 * Rho[2]^2) +
             4 * Rho[2]^4 + 3 * Rho[2]^2 * Rho[1]^2 - Rho[1]^4) / rho_sq^4.5
 end
 
 function gravitational_dx2dz2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dx2dz2 = 3 * m_source * (4 * Rho[1]^4 + 3 * Rho[1]^2 * (Rho[2]^2 - 9 * Rho[3]^2) +
+    dx2dz2 = -3 * m_source * (4 * Rho[1]^4 + 3 * Rho[1]^2 * (Rho[2]^2 - 9 * Rho[3]^2) +
             4 * Rho[3]^4 + 3 * Rho[3]^2 * Rho[2]^2 - Rho[2]^4) / rho_sq^4.5
 end
 
 function gravitational_dx2dydz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dx2dydz = 15 * m_source * Rho[2] * Rho[3] * (-6 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^4.5
+    dx2dydz = -15 * m_source * Rho[2] * Rho[3] * (-6 * Rho[1]^2 + Rho[2]^2 + Rho[3]^2) / rho_sq^4.5
 end
 
 function gravitational_dxdy2dz(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dxdy2dz = 15 * m_source * Rho[1] * Rho[3] * (-6 * Rho[2]^2 + Rho[1]^2 + Rho[3]^2) / rho_sq^4.5
+    dxdy2dz = -15 * m_source * Rho[1] * Rho[3] * (-6 * Rho[2]^2 + Rho[1]^2 + Rho[3]^2) / rho_sq^4.5
 end
 
 function gravitational_dxdydz2(Rho, m_source=1.0)
     rho_sq = Rho' * Rho
-    dxdydz2 = 15 * m_source * Rho[2] * Rho[1] * (-6 * Rho[3]^2 + Rho[2]^2 + Rho[1]^2) / rho_sq^4.5
+    dxdydz2 = -15 * m_source * Rho[2] * Rho[1] * (-6 * Rho[3]^2 + Rho[2]^2 + Rho[1]^2) / rho_sq^4.5
 end
 
 order = 4

@@ -475,16 +475,16 @@ end
     fmm.M2L!(tree, masses, i_local, j_multipole, basis)
 
     local_coeff_check = [
-        -25.2752529
-        -24.0857454
-        -26.1525931539
-        -11.2952850056
-        -12.71154145
-        -42.901452396
-        -14.30048412
-        -12.71154144
-        -14.30048412
-         25.4230829
+        25.2752529
+        24.0857454
+        26.1525931539
+        11.2952850056
+        12.71154145
+        42.901452396
+        14.30048412
+        12.71154144
+        14.30048412
+        -25.4230829
     ]
 
     for i in 1:length(local_coeff_check)
@@ -538,15 +538,15 @@ end
     ]
 
     local_2 = [
-        -29.33342945576157
-        -27.321185704286492
-        -31.439002480724298
-        -44.53273447771192
+        29.33342945576157
+        27.321185704286492
+        31.439002480724298
+        44.53273447771192
         0.0
-        -60.1478854985297
-        -60.1478854985297
+        60.1478854985297
+        60.1478854985297
         0.0
-        -60.1478854985297
+        60.1478854985297
         0.0
     ]
 
@@ -556,15 +556,15 @@ end
     end
 
     check_local_7_addition = [
-        -26.2399413
-        -27.3211857
-        -31.43900248
-        -27.991900852
+        26.2399413
+        27.3211857
+        31.43900248
+        27.991900852
         0.0
-        -60.14788549
-        -60.14788549
+        60.14788549
+        60.14788549
         0.0
-        -60.14788549
+        60.14788549
         0.0
     ]
 
@@ -612,27 +612,27 @@ end
     fmm.L2P!(tree, masses, 7, basis)
 
     Phi_d = masses[tree.indices[tree.branches[7].first_element]].potential[1]
-    check_Phi_d = -25.24935390275
+    check_Phi_d = 25.24935390275
 
     @test isapprox(Phi_d, check_Phi_d; atol=1e-6)
 
     # also test using test case branch 7 on branch 3
     tree.branches[3].local_expansion .= [
-        -1.90290525167
-        1.388471647877
-        1.288137857762
-        -0.2375652268339
-        -0.94431802545980
-        -2.9509938277734
-        0.590198761262374
-        -0.9443180254598
-        0.59019876126237
-        1.88863605091961
+        1.90290525167
+        -1.388471647877
+        -1.288137857762
+        0.2375652268339
+        0.94431802545980
+        2.9509938277734
+        -0.590198761262374
+        0.9443180254598
+        -0.59019876126237
+        -1.88863605091961
     ] # local expansion due to 7 centered about 3
     masses[2].potential .*= 0
     fmm.L2P!(tree, masses, 3, basis)
     phi_b_due2_e = masses[2].potential[1]
-    phi_b_due2_e_check = -2.09580318715645
+    phi_b_due2_e_check = 2.09580318715645
 
     @test isapprox(phi_b_due2_e, phi_b_due2_e_check; atol=1e-8)
 end
@@ -808,16 +808,16 @@ end
 
     # checking branch 3's local expansion due to branch 7
     local_3_due2_7_check = [
-        -1.90290525167
-        1.388471647877
-        1.288137857762
-        -0.2375652268339
-        -0.94431802545980
-        -2.9509938277734
-        0.590198761262374
-        -0.9443180254598
-        0.59019876126237
-        1.88863605091961
+        1.90290525167
+        -1.388471647877
+        -1.288137857762
+        0.2375652268339
+        0.94431802545980
+        2.9509938277734
+        -0.590198761262374
+        0.9443180254598
+        -0.59019876126237
+        -1.88863605091961
     ]
     local_3_before = deepcopy(tree.branches[3].local_expansion)
     fmm.M2L!(tree, masses, 3, 7, basis)
@@ -930,10 +930,53 @@ end
     end
 end
 
+@testset "convergence" begin
+    xs = [
+        1.2 1.1 0.8;
+        0.8 0.9 0.2;
+        0.1 0.2 0.9;
+        0.1 0.3 0.2;
+        0.2 0.25 0.4
+    ]
+
+    ms = [
+        0.8,
+        1.1,
+        2.2,
+        0.5,
+        1.9
+    ]
+
+    masses = Vector{Mass}(undef,length(ms))
+    for i in 1:length(ms)
+        x = xs[i,:]
+        mass = [ms[i]]
+        potential = zeros(1)
+        force = zeros(3)
+        masses[i] = Mass(x,mass,potential,force)
+    end
+
+    basis = fmm.Cartesian()
+    theta = 4
+    n_per_branch = 1
+    expansion_order = 4
+
+    fmm.fmm!(masses, expansion_order, n_per_branch, theta, basis)
+    potential_fmm = [m.potential[1] for m in masses]
+
+    for m in masses; m.potential .*= 0; end
+    fmm.direct!(masses)
+    potential_direct = [m.potential[1] for m in masses]
+
+    for i in 1:length(potential_direct)
+        @test isapprox(potential_direct[i], potential_fmm[i]; atol=1e-2)
+    end
+end
+
 @testset "derivatives" begin
     # build symbolic kernel
     sym.@variables x y z
-    phi = -1/sqrt(x^2 + y^2 + z^2)
+    phi = 1/sqrt(x^2 + y^2 + z^2)
 
     # get derivatives
     symbolic_derivatives = Array{typeof(phi),3}(undef,5,5,5)
