@@ -151,34 +151,56 @@ function load_jlds(files)
     thetas = Vector{Float64}(undef,length(files))
     mean_errs = Vector{Float64}(undef,length(files))
     for (i,file) in enumerate(files)
-        data = JLD.load(file)
-        ns[i] = data["n"]
-        base_names[i] = data["base_name"]
-        potentials_list[i] = data["potentials"]
-        times[i] = data["time"]
-        times_tree[i] = haskey(data, "time_tree") ? data["time_tree"] : NaN
-        expansion_orders[i] = haskey(data,"expansion_order") ? data["expansion_order"] : -1
-        ns_per_branch[i] = haskey(data, "n_per_branch") ? data["n_per_branch"] : -1
-        thetas[i] = haskey(data, "theta") ? data["theta"] : NaN
-        mean_errs[i] = haskey(data, "mean_err") ? data["mean_err"] : NaN
+        data = JLD.jldopen(file, "r")
+        # data = JLD.load(file)
+        ns[i] = JLD.read(data,"n")
+        base_names[i] = JLD.read(data, "base_name")
+        # potentials_list[i] = JLD.read(data, "potentials")
+        times[i] = JLD.read(data, "time")
+        try
+            times_tree[i] = JLD.read(data, "time_tree")
+        catch
+            times_tree[i] = NaN
+        end
+        try
+            expansion_orders[i] = JLD.read(data,"expansion_order")
+        catch
+            expansion_orders[i] = -1
+        end
+        try
+            ns_per_branch[i] = JLD.read(data, "n_per_branch")
+        catch
+            ns_per_branch[i] = -1
+        end
+        try
+            thetas[i] = JLD.read(data, "theta")
+        catch
+            thetas[i] = NaN
+        end
+        try
+            mean_errs[i] = JLD.read(data, "mean_err")
+        catch
+            mean_errs[i] = NaN
+        end
+        JLD.close(data)
     end
-    return ns, base_names, potentials_list, times, times_tree, expansion_orders, ns_per_branch, thetas, mean_errs
+    return ns, base_names, times, times_tree, expansion_orders, ns_per_branch, thetas, mean_errs
 end
 
 function load_jlds(direct_files, cartesian_files, spherical_files)
     # direct files
-    ns_direct, base_names_direct, _, times_direct, _,
+    ns_direct, base_names_direct, times_direct, _,
         _, _, _, _ = load_jlds(direct_files)
 
     # cartesian files
-    ns_cartesian, base_names_cartesian, _, times_cartesian, times_tree_cartesian,
+    ns_cartesian, base_names_cartesian, times_cartesian, times_tree_cartesian,
         expansion_orders_cartesian, ns_per_branch_cartesian, thetas_cartesian, mean_errs_cartesian = load_jlds(cartesian_files)
 
     # spherical files
-    ns_spherical, base_names_spherical, _, times_spherical, times_tree_spherical,
+    ns_spherical, base_names_spherical, times_spherical, times_tree_spherical,
         expansion_orders_spherical, ns_per_branch_spherical, thetas_spherical, mean_errs_spherical = load_jlds(spherical_files)
 
-    return ns_direct, times_direct, ns_cartesian, times_cartesian, ns_spherical, times_spherical, mean_errs_cartesian, mean_errs_spherical
+    return ns_direct, times_direct, ns_cartesian, times_cartesian, times_tree_cartesian, ns_spherical, times_spherical, times_tree_spherical, mean_errs_cartesian, mean_errs_spherical
 end
 
 function load_jld(file)
@@ -208,8 +230,8 @@ function loglog_slope(xs, ys)
 end
 
 function plot_files(direct_files, cartesian_files, spherical_files, save_name, fig_title)
-    ns_direct, times_direct, ns_cartesian, times_cartesian, ns_spherical,
-        times_spherical, mean_errs_cartesian, mean_errs_spherical = load_jlds(direct_files, cartesian_files, spherical_files)
+    ns_direct, times_direct, ns_cartesian, times_cartesian, times_tree_cartesian, ns_spherical,
+        times_spherical, times_tree_spherical, mean_errs_cartesian, mean_errs_spherical = load_jlds(direct_files, cartesian_files, spherical_files)
 
     fig = plt.figure("benchmark_fmm")
     fig.clear()
@@ -247,13 +269,36 @@ function benchmark_n(ns, is_direct, expansion_order, n_per_branch, theta, base_n
     plot_files(direct_files, cartesian_files, spherical_files, save_name, fig_title)
 end
 
+function assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
+    # sweep_n(ns, is_direct, expansion_order, n_per_branch, theta, base_name=version)
+    data = zeros(7, length(ns), length(thetas), length(ns_per_branch), length(expansion_orders))
+    for (i_theta, theta) in enumerate(thetas)
+        for (i_n_per_branch, n_per_branch) in enumerate(ns_per_branch)
+            for (i_expansion_order, expansion_order) in enumerate(expansion_orders)
+                files = sweep_n(ns, is_direct, expansion_order, n_per_branch, theta, version)
+                ns_direct, times_direct, ns_cartesian, times_cartesian, times_tree_cartesian,
+                    ns_spherical, times_spherical, times_tree_spherical, mean_errs_cartesian,
+                    mean_errs_spherical = load_jlds(files...)
+                data[1, :, i_theta, i_n_per_branch, i_expansion_order] .= times_direct
+                data[2, :, i_theta, i_n_per_branch, i_expansion_order] .= times_tree_cartesian
+                data[3, :, i_theta, i_n_per_branch, i_expansion_order] .= times_cartesian
+                data[4, :, i_theta, i_n_per_branch, i_expansion_order] .= mean_errs_cartesian
+                data[5, :, i_theta, i_n_per_branch, i_expansion_order] .= times_tree_spherical
+                data[6, :, i_theta, i_n_per_branch, i_expansion_order] .= times_spherical
+                data[7, :, i_theta, i_n_per_branch, i_expansion_order] .= mean_errs_spherical
+            end
+        end
+    end
+    return data
+end
+
 #####
 ##### run new
 #####
 # set up
-ns = [10, 100, 1000, 10000]#, 100000, 1000000]# , 5000000]
-is_direct = 1:4
-theta = 4
-n_per_branch = 50
-expansion_order = 2
-benchmark_n(ns, is_direct, expansion_order, n_per_branch, theta)
+ns = [10, 100, 1000, 10000, 100000]#, 1000000]# , 5000000]
+is_direct = 1:length(ns)
+thetas = [2,4,8]
+n_per_branch = [25,50,100]
+expansion_order = [1,2,3,4]
+data = assemble_files(ns, is_direct, expansion_order, n_per_branch, theta)
