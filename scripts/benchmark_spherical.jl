@@ -60,6 +60,9 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
     xs = rand(n,3)
     masses = [Mass(xs[i,:],[ms[i]],zeros(1),zeros(3)) for i in 1:length(ms)]
     basis = fmm.Cartesian()
+    expansion_order = 1
+    n_per_branch = 1
+    theta = 4
     @elapsed fmm.fmm!(masses, expansion_order, n_per_branch, theta, basis)
 
     println("\nBegin FMM Test:")
