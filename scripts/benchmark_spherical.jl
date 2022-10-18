@@ -299,6 +299,6 @@ end
 ns = [10, 100, 1000, 10000, 100000]#, 1000000]# , 5000000]
 is_direct = 1:length(ns)
 thetas = [2,4,8]
-n_per_branch = [25,50,100]
-expansion_order = [1,2,3,4]
-data = assemble_files(ns, is_direct, expansion_order, n_per_branch, theta)
+ns_per_branch = [25,50,100]
+expansion_orders = [1,2,3,4]
+data = assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
