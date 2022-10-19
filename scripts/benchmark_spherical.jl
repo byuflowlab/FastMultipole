@@ -295,6 +295,54 @@ function assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
     return data
 end
 
+function plot_assembled_files(i_expansion_order, data, ns, thetas, ns_per_branch, expansion_orders)
+    fig_theta = plt.figure("benchmark_fmm_theta")
+    fig_theta.clear()
+    fig_theta.add_subplot(111, xlabel=L"\theta", ylabel=L"N_{max}", zlabel="mean rel. error", projection="3d")
+    ax_theta = fig_theta.get_axes()[1]
+    theta_plot = [theta for n_per_branch in ns_per_branch, theta in thetas]
+    n_per_branch_plot = [n_per_branch for n_per_branch in ns_per_branch, theta in thetas]
+    errs_cartesian = [S.mean(data[4,:,i_theta,i_n_per_branch,i_expansion_order]) for i_n_per_branch in 1:length(ns_per_branch), i_theta in 1:length(thetas)]
+    errs_spherical = [S.mean(data[7,:,i_theta,i_n_per_branch,i_expansion_order]) for i_n_per_branch in 1:length(ns_per_branch), i_theta in 1:length(thetas)]
+    ax_theta.set_zscale("log")
+    ax_theta.plot_surface(theta_plot, n_per_branch_plot, errs_cartesian, label="Cartesian", rstride=1,cstride=1)#,alpha=0.95)
+    ax_theta.plot_surface(theta_plot, n_per_branch_plot, errs_spherical, label="Spherical", rstride=1,cstride=1)#,alpha=0.95)
+    ax_theta.set_title(L"P = "*"$(expansion_orders[i_expansion_order])")
+    fig_theta.savefig("compare_assembled_theta_nmax_p$(expansion_orders[i_expansion_order]).png")
+    ax_theta.legend()
+    fig_theta.savefig("compare_assembled_theta_nmax_p$(expansion_orders[i_expansion_order]).png")
+end
+
+function plot_assembled_files(data, ns, thetas, ns_per_branch, expansion_orders)
+    for i_expansion_order in 1:length(expansion_orders)
+        plot_assembled_files(i_expansion_order, data, ns, thetas, ns_per_branch, expansion_orders)
+    end
+end
+
+function plot_assembled_files_p(i_n_per_branch, data, ns, thetas, ns_per_branch, expansion_orders)
+    fig_theta = plt.figure("benchmark_fmm_theta_p")
+    fig_theta.clear()
+    fig_theta.add_subplot(111, xlabel=L"\theta", ylabel=L"P", zlabel="mean rel. error", projection="3d")
+    ax_theta = fig_theta.get_axes()[1]
+    theta_plot = [theta for expansion_order in expansion_orders, theta in thetas]
+    expansion_order_plot = [expansion_order for expansion_order in expansion_orders, theta in thetas]
+    errs_cartesian = [S.mean(data[4,:,i_theta,i_n_per_branch,i_expansion_order]) for i_expansion_order in 1:length(expansion_orders), i_theta in 1:length(thetas)]
+    errs_spherical = [S.mean(data[7,:,i_theta,i_n_per_branch,i_expansion_order]) for i_expansion_order in 1:length(expansion_orders), i_theta in 1:length(thetas)]
+    ax_theta.set_zscale("log")
+    ax_theta.plot_surface(theta_plot, expansion_order_plot, errs_cartesian, label="Cartesian", rstride=1,cstride=1)#,alpha=0.95)
+    ax_theta.plot_surface(theta_plot, expansion_order_plot, errs_spherical, label="Spherical", rstride=1,cstride=1)#,alpha=0.95)
+    ax_theta.set_title(L"N_{max} = "*"$(ns_per_branch[i_n_per_branch])")
+    fig_theta.savefig("compare_assembled_theta_p_nmax$(ns_per_branch[i_n_per_branch]).png")
+    ax_theta.legend()
+    fig_theta.savefig("compare_assembled_theta_p_nmax$(ns_per_branch[i_n_per_branch]).png")
+end
+
+function plot_assembled_files_p(data, ns, thetas, ns_per_branch, expansion_orders)
+    for i_n_per_branch in 1:length(ns_per_branch)
+        plot_assembled_files_p(i_n_per_branch, data, ns, thetas, ns_per_branch, expansion_orders)
+    end
+end
+
 #####
 ##### run new
 #####
@@ -304,4 +352,9 @@ is_direct = 1:length(ns)
 thetas = [2,4,8]
 ns_per_branch = [25,50,100]
 expansion_orders = [1,2,3,4]
-data = assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
+# data = assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
+file = JLD.jldopen("data.jld", "r")
+data = JLD.read(file, "data")
+JLD.close(file)
+plot_assembled_files(data, ns, thetas, ns_per_branch, expansion_orders)
+plot_assembled_files_p(data, ns, thetas, ns_per_branch, expansion_orders)
