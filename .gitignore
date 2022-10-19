@@ -32,3 +32,4 @@ Manifest.toml
 
 # data
 *.jld
+*.zip
