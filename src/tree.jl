@@ -145,27 +145,31 @@ end
 function initialize_expansion(expansion_order, ::Cartesian)
     k = 3 # dimensions
     n = n_terms(expansion_order, k)
-    return zeros(n)
+    return [zeros(n) for _ in 1:4]
 end
 
 function initialize_expansion(expansion_order, ::Spherical)
-    return zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    return [zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4]
 end
 
 function change_expansion_order!(tree::Tree, new_order)
-    old_n = length(tree.branches[1].multipole_expansion)
+    old_n = length(tree.branches[1].multipole_expansion[1])
     new_n = n_terms(new_order, 3)
     old_order = tree.expansion_order[1]
     for branch in tree.branches
         if  old_order < new_order
             for i in 1:new_n - old_n
-                push!(branch.multipole_expansion,0.0)
-                push!(branch.local_expansion,0.0)
+                for dim in 1:4
+                    push!(branch.multipole_expansion[dim],0.0)
+                    push!(branch.local_expansion[dim],0.0)
+                end
             end
         elseif old_order > new_order
             for i in 1:new_n - old_n
-                pop!(branch.multipole_expansion)
-                pop!(branch.local_expansion)
+                for dim in 1:4
+                    pop!(branch.multipole_expansion[dim])
+                    pop!(branch.local_expansion[dim])
+                end
             end
         end
     end

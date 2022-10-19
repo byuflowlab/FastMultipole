@@ -284,7 +284,7 @@ end
     ]
 
     for i in 1:length(check_multipole)
-        @test isapprox(check_multipole[i], tree.branches[1].multipole_expansion[i]; atol=1e-6)
+        @test isapprox(check_multipole[i], tree.branches[1].multipole_expansion[1][i]; atol=1e-6)
     end
 
     xs = [
@@ -382,7 +382,7 @@ end
     # test leaf coefficients
     for (i,i_branch) in enumerate(3:7)
         for i_coeff in 1:10
-            @test isapprox(leaf_coefficients[i][i_coeff], tree.branches[i_branch].multipole_expansion[i_coeff])
+            @test isapprox(leaf_coefficients[i][i_coeff], tree.branches[i_branch].multipole_expansion[1][i_coeff])
         end
     end
 end
@@ -435,7 +435,7 @@ end
     ]
 
     for i in 1:length(coefficients_2_check)
-        @test isapprox(coefficients_2_check[i], tree.branches[2].multipole_expansion[i]; atol=1e-6)
+        @test isapprox(coefficients_2_check[i], tree.branches[2].multipole_expansion[1][i]; atol=1e-6)
     end
 end
 
@@ -488,7 +488,7 @@ end
     ]
 
     for i in 1:length(local_coeff_check)
-        @test isapprox(local_coeff_check[i], tree.branches[7].local_expansion[i]; atol=1e-6)
+        @test isapprox(local_coeff_check[i], tree.branches[7].local_expansion[1][i]; atol=1e-6)
     end
 end
 
@@ -551,8 +551,8 @@ end
     ]
 
     for i in 1:length(local_2)
-        @test isapprox(multipole_1[i], tree.branches[1].multipole_expansion[i]; atol=1e-5)
-        @test isapprox(local_2[i], tree.branches[2].local_expansion[i]; atol=1e-5)
+        @test isapprox(multipole_1[i], tree.branches[1].multipole_expansion[1][i]; atol=1e-5)
+        @test isapprox(local_2[i], tree.branches[2].local_expansion[1][i]; atol=1e-5)
     end
 
     check_local_7_addition = [
@@ -570,7 +570,7 @@ end
 
     local_7_before = deepcopy(tree.branches[7].local_expansion)
     fmm.L2L!(tree, 2, basis)
-    local_7_addition = tree.branches[7].local_expansion - local_7_before
+    local_7_addition = tree.branches[7].local_expansion[1] - local_7_before[1]
 
     for i in 1:length(local_2)
         @test isapprox(local_7_addition[i], check_local_7_addition[i]; atol=1e-5)
@@ -617,7 +617,7 @@ end
     @test isapprox(Phi_d, check_Phi_d; atol=1e-6)
 
     # also test using test case branch 7 on branch 3
-    tree.branches[3].local_expansion .= [
+    tree.branches[3].local_expansion[1] .= [
         1.90290525167
         -1.388471647877
         -1.288137857762
@@ -727,8 +727,8 @@ end
     fmm.upward_pass!(tree_2, masses_2, basis)
 
     for i_branch in 1:length(tree.branches)
-        for i_coeff in 1:length(tree.branches[1].multipole_expansion)
-            @test isapprox(tree.branches[i_branch].multipole_expansion[i_coeff], tree_2.branches[i_branch].multipole_expansion[i_coeff]; atol=1e-8)
+        for i_coeff in 1:length(tree.branches[1].multipole_expansion[1])
+            @test isapprox(tree.branches[i_branch].multipole_expansion[1][i_coeff], tree_2.branches[i_branch].multipole_expansion[1][i_coeff]; atol=1e-8)
         end
     end
 end
@@ -764,7 +764,7 @@ end
 
 
     fmm.upward_pass!(tree, masses, basis)
-    multipole_7 = deepcopy(tree.branches[7].multipole_expansion)
+    multipole_7 = deepcopy(tree.branches[7].multipole_expansion[1])
 
     multipole_7_check = [
         1.9
@@ -822,7 +822,7 @@ end
     local_3_before = deepcopy(tree.branches[3].local_expansion)
     fmm.M2L!(tree, masses, 3, 7, basis)
     local_3_after = deepcopy(tree.branches[3].local_expansion)
-    local_3_due2_7 = local_3_after - local_3_before
+    local_3_due2_7 = local_3_after[1] - local_3_before[1]
     for i in 1:length(local_3_due2_7)
         @test isapprox(local_3_due2_7[i], local_3_due2_7_check[i]; atol=1e-8)
     end
@@ -851,13 +851,13 @@ end
     fmm.horizontal_pass!(tree_2, masses_2, theta, basis)
 
     for i_branch in 1:length(tree.branches)
-        for i_multipole in 1:length(tree.branches[1].multipole_expansion)
-            @test isapprox(tree.branches[i_branch].multipole_expansion[i_multipole],
-                tree_2.branches[i_branch].multipole_expansion[i_multipole]; atol=1e-8)
+        for i_multipole in 1:length(tree.branches[1].multipole_expansion[1])
+            @test isapprox(tree.branches[i_branch].multipole_expansion[1][i_multipole],
+                tree_2.branches[i_branch].multipole_expansion[1][i_multipole]; atol=1e-8)
         end
-        for i_local in 1:length(tree.branches[1].local_expansion)
-            @test isapprox(tree.branches[i_branch].local_expansion[i_local],
-                tree_2.branches[i_branch].local_expansion[i_local]; atol=1e-8)
+        for i_local in 1:length(tree.branches[1].local_expansion[1])
+            @test isapprox(tree.branches[i_branch].local_expansion[1][i_local],
+                tree_2.branches[i_branch].local_expansion[1][i_local]; atol=1e-8)
         end
     end
 end
@@ -915,13 +915,13 @@ end
     fmm.downward_pass!(tree_2, masses_2, basis)
 
     for i_branch in 1:length(tree.branches)
-        for i_local in 1:length(tree.branches[1].local_expansion)
-            @test isapprox(tree.branches[i_branch].local_expansion[i_local],
-                tree_2.branches[i_branch].local_expansion[i_local]; atol=1e-8)
+        for i_local in 1:length(tree.branches[1].local_expansion[1])
+            @test isapprox(tree.branches[i_branch].local_expansion[1][i_local],
+                tree_2.branches[i_branch].local_expansion[1][i_local]; atol=1e-8)
         end
-        for i_multipole in 1:length(tree.branches[1].local_expansion)
-            @test isapprox(tree.branches[i_branch].multipole_expansion[i_multipole],
-                tree_2.branches[i_branch].multipole_expansion[i_multipole]; atol=1e-8)
+        for i_multipole in 1:length(tree.branches[1].local_expansion[1])
+            @test isapprox(tree.branches[i_branch].multipole_expansion[1][i_multipole],
+                tree_2.branches[i_branch].multipole_expansion[1][i_multipole]; atol=1e-8)
         end
     end
 
@@ -1372,7 +1372,7 @@ tree = fmm.Tree(masses, basis; expansion_order)
 
 # local coefficient at branch 2 due to mass 1
 fmm.P2L!(tree, 2, masses[1])
-local_2 = deepcopy(tree.branches[2].local_expansion)
+# local_2 = deepcopy(tree.branches[2].local_expansion)
 
 # check L2P now:
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
@@ -1444,7 +1444,7 @@ coordinates = fmm.Spherical()
 harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
 
-fmm.P2M!(tree, tree.branches[i_branch_multipole], masses[5], harmonics, harmonics_theta, coordinates)
+fmm.P2M!(tree, tree.branches[i_branch_multipole], masses[5], harmonics, coordinates)
 fmm.M2L!(tree, masses, i_branch_local, i_branch_multipole, coordinates)
 fmm.L2P!(masses[1], tree, tree.branches[i_branch_local], harmonics, harmonics_theta, coordinates)
 
@@ -1496,7 +1496,7 @@ tree = fmm.Tree(masses, basis; expansion_order)
 # perform upward pass
 fmm.upward_pass!(tree, masses, basis)
 
-m6 = tree.branches[6].multipole_expansion
+# m6 = tree.branches[6].multipole_expansion
 target = [4.1,2.2,3.4]
 dx_direct_6 = target - masses[4].x
 u_direct_6 = ms[4] / sqrt(dx_direct_6' * dx_direct_6)

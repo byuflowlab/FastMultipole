@@ -54,6 +54,42 @@ function regular_harmonic!(harmonics, harmonics_theta, rho, theta, phi, P)
     end
 end
 
+function regular_harmonic!(harmonics, rho, theta, phi, P)
+    y,x = sincos(theta)
+    invY = y == 0 ? 0 : 1 / y
+    fact = 1
+    pl = 1
+    rhom = 1
+    ei = exp(im * phi)
+    eim = 1.0
+    for m=0:P
+        p = pl
+        lpl = m * m + 2 * m + 1
+        lml = m * m + 1
+        harmonics[lpl] = rhom * p * eim
+        harmonics[lml] = conj(harmonics[lpl])
+        p1 = p
+        p = x * (2 * m + 1) * p1
+        rhom *= rho
+        rhol = rhom
+        for l=m+1:P
+            lpm = l * l + l + m + 1
+            lmm = l * l + l - m + 1
+            rhol /= -(l + m)
+            harmonics[lpm] = rhol * p * eim
+            harmonics[lmm] = conj(harmonics[lpm])
+            p2 = p1
+            p1 = p
+            p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
+            rhol *= rho
+        end
+        rhom /= -(2 * m + 2) * (2 * m + 1)
+        pl = -pl * fact * y
+        fact += 2
+        eim *= ei
+    end
+end
+
 function irregular_harmonic!(harmonics, rho, theta, phi, P)
     y, x = sincos(theta)
     fact = 1
@@ -89,16 +125,19 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
     end
 end
 
-function P2M!(tree, branch, element, harmonics, harmonics_theta, ::Spherical)
+function P2M!(tree, branch, element, harmonics, ::Spherical)
     dx = get_x(element) - branch.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
+    regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
     # update values
     for l in 0:tree.expansion_order[1]
         for m in 0:l
             i_solid_harmonic = l^2 + l + m + 1
             i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-            branch.multipole_expansion[i_compressed] += harmonics[i_solid_harmonic] * get_q(element)
+            q = get_q(element)
+            for dim in 1:4
+                branch.multipole_expansion[dim][i_compressed] += harmonics[i_solid_harmonic] * q[dim]
+            end
         end
     end
 end
@@ -108,12 +147,11 @@ function P2M!(tree, elements, i_branch, basis::Spherical)
 
     #initialize memory TODO: do this beforehand?
     harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
 
     # iterate over elements
     for i_element in tree.indices[branch.first_element:branch.first_element + branch.n_elements-1]
         element = elements[i_element]
-        P2M!(tree, branch, element, harmonics, harmonics_theta, basis)
+        P2M!(tree, branch, element, harmonics, basis)
     end
 end
 
@@ -123,13 +161,16 @@ function M2P!(target, i_branch, tree)
     dx = get_x(target) - branch.center
     cartesian_2_spherical!(dx)
     irregular_harmonic!(irregular_harmonics, dx..., tree.expansion_order[1])
+    d_potential = zeros(4)
     for l in 0:tree.expansion_order[1]
         for m in 0:l
             ip = l^2 + l + m + 1
             i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-            d_potential = real(branch.multipole_expansion[i_compressed] * irregular_harmonics[ip])
-            m > 0 && (d_potential *= 2)
-            target.potential[1] += d_potential
+            for dim in 1:4
+                d_potential[dim] = real(branch.multipole_expansion[dim][i_compressed] * irregular_harmonics[ip])
+            end
+            m > 0 && (d_potential .*= 2)
+            add_potential!(target, d_potential)
         end
     end
 end
@@ -143,20 +184,29 @@ function M2M!(tree, branch, child, harmonics, harmonics_theta, ::Spherical)
     for j in 0:tree.expansion_order[1] # iterate over new Multipole coefficients B_j^k
         for k in 0:j
             i_jk = ((j * (j+1)) >> 1) + k + 1 # current index
-            M = 0.0 # vectorize later
+            M = zeros(Complex{Float64}, 4) # vectorize later
             for l in 0:j
                 for m in max(-l,-j+k+l):min(k-1,l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) + k - m + 1
                     lm = l * l + l - m + 1
-                    M += child.multipole_expansion[jlkms] * harmonics[lm] * ipow2l(m) * odd_or_even(l)
+                    ipow = ipow2l(m)
+                    oddeven = odd_or_even(l)
+                    for dim in 1:4
+                        M[dim] += child.multipole_expansion[dim][jlkms] * harmonics[lm] * ipow * oddeven
+                    end
                 end
                 for m in k:min(l,j+k-l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) - k + m + 1
                     lm = l * l + l - m + 1
-                    M += conj(child.multipole_expansion[jlkms]) * harmonics[lm] * odd_or_even(k + l + m)
+                    oddeven = odd_or_even(k + l + m)
+                    for dim in 1:4
+                        M[dim] += conj(child.multipole_expansion[dim][jlkms]) * harmonics[lm] * oddeven
+                    end
                 end
             end
-            branch.multipole_expansion[i_jk] += M
+            for dim in 1:4
+                branch.multipole_expansion[dim][i_jk] += M[dim]
+            end
         end
     end
 end
@@ -191,23 +241,29 @@ function M2L!(tree, elements, i_local, j_multipole, ::Spherical)
         Cnm = odd_or_even(j)
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
-            L = 0.0
+            L = zeros(Complex{Float64}, 4)
             for n in 0:tree.expansion_order[1]
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1
                     jnkm = (j + n)^2 + j + n + m - k + 1
                     # jnkm_max = (P + P)^2 + P + P + -1 - 0 + 1 = (2P)^2 + 2P = 2P(2P+1)
-                    L += conj(multipole_branch.multipole_expansion[nms]) * Cnm * harmonics[jnkm]
+                    for dim in 1:4
+                        L[dim] += conj(multipole_branch.multipole_expansion[dim][nms]) * Cnm * harmonics[jnkm]
+                    end
                 end
                 for m in 0:n
                     nms = (n * (n+1)) >> 1 + m + 1
                     jnkm = (j + n) * (j + n) + j + n + m - k + 1
                     # jnkm_max = 2P * 2P + 2P + P + P - 0 + 1 = (2P)^2 + 2P + 2P + 1 = 4P^2 + 4P + 1 = (2P + 1)^2
                     Cnm2 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m)
-                    L += multipole_branch.multipole_expansion[nms] * Cnm2 * harmonics[jnkm]
+                    for dim in 1:4
+                        L[dim] += multipole_branch.multipole_expansion[dim][nms] * Cnm2 * harmonics[jnkm]
+                    end
                 end
             end
-            local_branch.local_expansion[jks] += L
+            for dim in 1:4
+                local_branch.local_expansion[dim][jks] += L[dim]
+            end
         end
     end
 end
@@ -217,12 +273,14 @@ function P2L!(tree, i_branch, source)
     irregular_harmonics = zeros(Complex{Float64},(tree.expansion_order[1]+1)^2)
     dx = cartesian_2_spherical(get_x(source) - branch.center)
     irregular_harmonic!(irregular_harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1])
-    irregular_harmonics .*= get_q(source)
+    q = get_q(source)
     for l in 0:tree.expansion_order[1]
         for m in 0:l
             i_abb = (l * (l+1)) >> 1 + m + 1
             i_exp = l^2 + l + m + 1
-            branch.local_expansion[i_abb] = irregular_harmonics[i_exp]
+            for dim in 1:4
+                branch.local_expansion[dim][i_abb] = irregular_harmonics[i_exp] * q[dim]
+            end
         end
     end
 end
@@ -234,22 +292,30 @@ function L2L!(tree, branch, child, harmonics, harmonics_theta, ::Spherical)
     for j in 0:tree.expansion_order[1]
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
-            L = 0.0
+            L = zeros(Complex{Float64}, 4)
             for n in j:tree.expansion_order[1]
                 for m in j+k-n:-1
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
                     nms = (n * (n + 1)) >> 1 - m + 1
-                    L += conj(branch.local_expansion[nms]) * harmonics[jnkm] * odd_or_even(k)
+                    oddeven = odd_or_even(k)
+                    for dim in 1:4
+                        L[dim] += conj(branch.local_expansion[dim][nms]) * harmonics[jnkm] * oddeven
+                    end
                 end
                 for m in 0:n
                     if n-j >= abs(m-k)
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
-                        L += branch.local_expansion[nms] * harmonics[jnkm] * odd_or_even((m-k) * (1 >> (m >= k)))
+                        oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
+                        for dim in 1:4
+                            L[dim] += branch.local_expansion[dim][nms] * harmonics[jnkm] * oddeven
+                        end
                     end
                 end
             end
-            child.local_expansion[jks] += L
+            for dim in 1:4
+                child.local_expansion[dim][jks] += L[dim]
+            end
         end
     end
 end
@@ -266,22 +332,6 @@ function L2L!(tree, j_source, basis::Spherical)
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
         child = tree.branches[i_child]
         L2L!(tree, branch, child, harmonics, harmonics_theta, basis)
-    end
-end
-
-function L2P!(element, tree, branch, harmonics, harmonics_theta, ::Spherical)
-    dx = get_x(element) - branch.center
-    cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], dx[3], tree.expansion_order[1]) # use the conjugate
-    for n in 0:tree.expansion_order[1]
-        nm = n * n + n + 1 # m = 0
-        nms = (n * (n+1)) >> 1 + 1 # m = 0
-        element.potential .+= real(branch.local_expansion[nms] * harmonics[nm])
-        for m in 1:n
-            nm = n * n + n + m + 1
-            nms = (n * (n + 1)) >> 1 + m + 1
-            element.potential .+= 2 * real(branch.local_expansion[nms] * harmonics[nm])
-        end
     end
 end
 

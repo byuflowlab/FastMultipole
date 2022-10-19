@@ -19,7 +19,11 @@ function fmm.get_x(mass::Mass)
 end
 
 function fmm.get_q(mass::Mass)
-    return mass.mass[1]
+    return mass.mass[1], 0.0, 0.0, 0.0
+end
+
+function fmm.add_potential!(mass::Mass, d_potential)
+    mass.potential .+= d_potential[1] # scalar potential only
 end
 
 function fmm.kernel!(target::Mass, source::Mass)

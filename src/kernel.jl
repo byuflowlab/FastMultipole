@@ -45,4 +45,8 @@ Outputs:
 """
 function get_q end
 
+function add_potential! end
+
 function derivatives end
+
+function L2P! end

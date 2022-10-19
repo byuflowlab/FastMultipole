@@ -12,9 +12,15 @@ function P2M!(tree, elements, i_branch, ::Cartesian)
                 for i_element in tree.indices[branch.first_element:branch.first_element + branch.n_elements-1]
                     element = elements[i_element]
                     dx = branch.center - get_x(element)
-                    branch.multipole_expansion[i_coeff] += ^(dx,i,j,k) * get_q(element)
+                    vectorial = ^(dx,i,j,k)
+                    q = get_q(element)
+                    for dim in 1:4
+                        branch.multipole_expansion[dim][i_coeff] += vectorial * q[dim]
+                    end
                 end
-                branch.multipole_expansion[i_coeff] /= factorial(i) * factorial(j) * factorial(k)
+                for dim in 1:4
+                    branch.multipole_expansion[dim][i_coeff] /= factorial(i) * factorial(j) * factorial(k)
+                end
                 i_coeff += 1
             end
         end
@@ -44,8 +50,10 @@ function M2M!(tree, i_branch, ::Cartesian)
                                 k_c = order_c - i_c - j_c
                                 if i_c > i || j_c > j || k_c > k; i_coeff_c += 1; continue; end
                                 # perform translation of this coefficient
-                                branch.multipole_expansion[i_coeff] += ^(dx, i-i_c, j-j_c, k-k_c) * child.multipole_expansion[i_coeff_c] /
-                                    factorial(i-i_c) / factorial(j-j_c) / factorial(k-k_c)
+                                for dim in 1:4
+                                    branch.multipole_expansion[dim][i_coeff] += ^(dx, i-i_c, j-j_c, k-k_c) * child.multipole_expansion[dim][i_coeff_c] /
+                                        factorial(i-i_c) / factorial(j-j_c) / factorial(k-k_c)
+                                end
                                 i_coeff_c += 1
                             end
                         end
@@ -73,7 +81,9 @@ function M2L!(tree, elements, i_local, j_multipole, ::Cartesian)
                             k_multipole = order_multipole - i_multipole - j_multipole
                             gradient_index = ijk_2_index(i_multipole+i_local, j_multipole+j_local, k_multipole+k_local)
                             gradient = derivatives(gradient_index,dx)
-                            local_branch.local_expansion[local_coeff] += gradient * multipole_branch.multipole_expansion[multipole_coeff]
+                            for dim in 1:4
+                                local_branch.local_expansion[dim][local_coeff] += gradient * multipole_branch.multipole_expansion[dim][multipole_coeff]
+                            end
                             multipole_coeff += 1
                         end
                     end
@@ -111,9 +121,11 @@ function L2L!(tree, j_source, ::Cartesian)
                                 if i_sum < i || j_sum < j || k_sum < k; i_coeff_sum += 1; continue; end
 
                                 # translate local expansion from source to child
-                                child.local_expansion[i_coeff_child] += ^(dx, i_sum-i, j_sum-j, k_sum-k) * branch.local_expansion[i_coeff_sum] /
+                                factor = ^(dx, i_sum-i, j_sum-j, k_sum-k) /
                                     (factorial(i_sum - i) * factorial(j_sum - j) * factorial(k_sum - k))
-
+                                for dim in 1:4
+                                    child.local_expansion[dim][i_coeff_child] += factor * branch.local_expansion[dim][i_coeff_sum]
+                                end
                                 i_coeff_sum += 1
                             end
                         end
@@ -129,6 +141,7 @@ end
 "Calculates the potential at all child elements of a branch."
 function L2P!(tree, elements, i_branch, ::Cartesian)
     branch = tree.branches[i_branch]
+    d_potential = zeros(4)
     for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
         element = elements[tree.indices[i_element]]
         dx = get_x(element) - branch.center
@@ -137,8 +150,11 @@ function L2P!(tree, elements, i_branch, ::Cartesian)
             for i in order:-1:0
                 for j in order-i:-1:0
                     k = order - i - j
-                    element.potential .+= ^(dx, i, j, k) * branch.local_expansion[i_coeff] /
-                        (factorial(i) * factorial(j) * factorial(k))
+                    factor = ^(dx, i, j, k) / (factorial(i) * factorial(j) * factorial(k))
+                    for dim in 1:4
+                        d_potential[dim] = factor * branch.local_expansion[dim][i_coeff]
+                    end
+                    add_potential!(element, d_potential)
                     i_coeff += 1
                 end
             end
