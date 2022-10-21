@@ -45,7 +45,7 @@ function benchmark_direct(ns, is_direct, base_name = version)
 end
 
 "Loads mass list and direct potential from jld file, builds trees, and computes errors. Saves to new JLD files and returns file names."
-function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas, bases, base_name=version)
+function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas, base_name=version)
     # initialize file names
     files = String[]
 
@@ -59,11 +59,10 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
     ms = rand(n)
     xs = rand(n,3)
     masses = [Mass(xs[i,:],[ms[i]],zeros(1),zeros(3)) for i in 1:length(ms)]
-    basis = fmm.Cartesian()
     expansion_order = 1
     n_per_branch = 1
     theta = 4
-    @elapsed fmm.fmm!(masses, expansion_order, n_per_branch, theta, basis)
+    @elapsed fmm.fmm!(masses, expansion_order, n_per_branch, theta)
 
     println("\nBegin FMM Test:")
     for (i,direct_file) in enumerate(direct_files)
@@ -71,19 +70,8 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
         expansion_order = expansion_orders[i] # these are floats somehow
         n_per_branch = ns_per_branch[i] # these are floats somehow
         theta = thetas[i]
-        basis = bases[i]
-
         n = ns[i]
-
-        # form names
-        if basis == fmm.Cartesian()
-            basis_tag = "cartesian"
-        elseif basis == fmm.Spherical()
-            basis_tag = "spherical"
-        else
-            @error "basis $basis not supported"
-        end
-        jld_name = base_name*"_"*basis_tag*"_t$(theta)_nmax$(n_per_branch)_p$(expansion_order)_n$n.jld"
+        jld_name = base_name*"_t$(theta)_nmax$(n_per_branch)_p$(expansion_order)_n$n.jld"
 
         if !isfile(jld_name)
             # extract jld info
@@ -97,13 +85,13 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
             potentials_fmm = similar(potentials_direct)
 
             println("n = $n elements...")
-            println("\tBuilding $basis_tag Tree...")
-            time_tree = @elapsed tree = fmm.Tree(masses, basis; expansion_order, n_per_branch)
+            println("\tBuilding Tree...")
+            time_tree = @elapsed tree = fmm.Tree(masses; expansion_order, n_per_branch)
             println("\t\tcartesian tree time: $(time_tree) seconds")
 
-            println("\tComputing $basis_tag FMM...")
-            time_fmm = @elapsed fmm.fmm!(tree, masses, theta, basis)
-            println("\t\t$basis_tag FMM time: $(time_fmm) seconds")
+            println("\tComputing FMM...")
+            time_fmm = @elapsed fmm.fmm!(tree, masses, theta)
+            println("\t\tFMM time: $(time_fmm) seconds")
             for ii in 1:n
                 potentials_fmm[ii] = masses[ii].potential[1]
             end
@@ -113,7 +101,7 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
 
             println("\tSaving JLD as "*jld_name*"...")
             time_jld = @elapsed JLD.save(jld_name, "n", n, "base_name", base_name, "expansion_order", expansion_order,
-                "n_per_branch", n_per_branch, "theta", theta, "basis", basis, "potentials", potentials_fmm,
+                "n_per_branch", n_per_branch, "theta", theta, "potentials", potentials_fmm,
                 "time_tree", time_tree, "time", time_fmm, "mean_err", mean_err)
             println("\t\tJLD save time: $time_jld seconds")
         else
@@ -132,13 +120,11 @@ function sweep_n(ns, is_direct, expansion_order, n_per_branch, theta, base_name=
     expansion_orders = ones(Int64,length(ns)) .* expansion_order
     ns_per_branch = ones(Int64,length(ns)) .* n_per_branch
     thetas = ones(length(ns)) .* theta
-    cartesian_bases = [fmm.Cartesian() for _ in 1:length(ns)]
-    spherical_bases = [fmm.Spherical() for _ in 1:length(ns)]
 
     # compute cartesian
-    cartesian_files = benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas, cartesian_bases, base_name)
+    cartesian_files = benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas, base_name)
     # compute spherical
-    spherical_files = benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas, spherical_bases, base_name)
+    spherical_files = benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas, base_name)
 
     return direct_files, cartesian_files, spherical_files
 end
@@ -347,14 +333,14 @@ end
 ##### run new
 #####
 # set up
-ns = [10, 100, 1000, 10000, 100000]#, 1000000]# , 5000000]
-is_direct = 1:length(ns)
-thetas = [2,4,8]
-ns_per_branch = [25,50,100]
-expansion_orders = [1,2,3,4]
-# data = assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
-file = JLD.jldopen("data.jld", "r")
-data = JLD.read(file, "data")
-JLD.close(file)
-plot_assembled_files(data, ns, thetas, ns_per_branch, expansion_orders)
-plot_assembled_files_p(data, ns, thetas, ns_per_branch, expansion_orders)
+ns = [10, 100, 1000, 10000]#, 100000]#, 1000000]# , 5000000]
+is_direct = 1:length(ns)-1
+thetas = [4]
+ns_per_branch = [50]
+expansion_orders = [4]
+data = assemble_files(ns, is_direct, thetas, ns_per_branch, expansion_orders)
+# file = JLD.jldopen("data.jld", "r")
+# data = JLD.read(file, "data")
+# JLD.close(file)
+# plot_assembled_files(data, ns, thetas, ns_per_branch, expansion_orders)
+# plot_assembled_files_p(data, ns, thetas, ns_per_branch, expansion_orders)

@@ -4,33 +4,38 @@ import FLOWFMM as fmm
 ##### gravitational kernel and mass elements
 #####
 struct Mass{TF}
-    x::Array{TF,1}
-    mass::Array{TF,1}
+    position::Array{TF,1}
+    strength::Array{TF,1}
     potential::Array{TF,1}
     force::Array{TF,1}
 end
 
 function Mass{TF}(dims) where TF
-    Mass(zeros(dims), zeros(1), zeros(1), zeros(dims))
+    Mass(zeros(dims), zeros(4), zeros(4), zeros(dims))
 end
 
-function fmm.get_x(mass::Mass)
-    return mass.x
-end
-
-function fmm.get_q(mass::Mass)
-    return mass.mass[1], 0.0, 0.0, 0.0
-end
-
-function fmm.add_potential!(mass::Mass, d_potential)
-    mass.potential .+= d_potential[1] # scalar potential only
+function P2M!(tree, branch, element::Mass, harmonics)
+    dx = element.position - branch.center
+    fmm.cartesian_2_spherical!(dx)
+    fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
+    # update values
+    for l in 0:tree.expansion_order[1]
+        for m in 0:l
+            i_solid_harmonic = l^2 + l + m + 1
+            i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
+            q = element.strength
+            for dim in 1:4
+                branch.multipole_expansion[dim][i_compressed] += harmonics[i_solid_harmonic] * q[dim]
+            end
+        end
+    end
 end
 
 function fmm.kernel!(target::Mass, source::Mass)
-    dx = fmm.get_x(target) - fmm.get_x(source)
+    dx = target.position - source.position
     r = sqrt(dx' * dx)
     if r > 0
-        dV = source.mass[1] / r
+        dV = source.strength[1] / r
         target.potential[1] += dV
     end
 end
@@ -292,5 +297,3 @@ derivatives[34] = gravitational_dydz3
 # derivatives[1,2,4] = gravitational_dydz3
 derivatives[35] = gravitational_dz4
 # derivatives[1,1,5] = gravitational_dz4
-
-fmm.derivatives(index, dx) = derivatives[index](dx)

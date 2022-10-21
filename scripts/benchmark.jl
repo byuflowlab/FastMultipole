@@ -6,7 +6,7 @@ import PyPlot as plt
 scripts_dir = @__DIR__
 include(joinpath(scripts_dir, "..", "test", "gravitational.jl"))
 
-function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, theta=4, basis = fmm.Cartesian())
+function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, theta=4)
     times_fmm = zeros(length(ns_fmm))
     times_direct = zeros(length(ns_fmm)) .* NaN
     # max_errs = zeros(length(orders))
@@ -18,7 +18,7 @@ function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, 
     ms = rand(n)
     xs = rand(n,3)
     masses = [Mass(xs[i,:],[ms[i]],zeros(1),zeros(3)) for i in 1:length(ms)]
-    @elapsed fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta, basis)
+    @elapsed fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta)
     @elapsed fmm.direct!(masses; reflex=false)
 
     println("\nBegin Benchmark Test:")
@@ -33,7 +33,7 @@ function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, 
         # fmm
         # println("\t\tBuilding Tree...")
         println("\t\tComputing FMM...")
-        times_fmm[i] = @elapsed tree = fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta, basis)
+        times_fmm[i] = @elapsed tree = fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta)
         println("\t\tFMM time: $(times_fmm[i]) seconds")
         for ii in 1:n
             potentials_fmm[ii] = masses[ii].potential[1]
@@ -63,7 +63,7 @@ end
 # ns = [10^i for i in 1:6]
 ns = [10, 100, 1000]#, 10000, 50000, 100000, 1000000, 5000000]
 is_direct = 1:5
-times_fmm, times_direct, mean_errs = benchmark_fmm(ns, is_direct; basis=fmm.Spherical())
+times_fmm, times_direct, mean_errs = benchmark_fmm(ns, is_direct)
 
 fig = plt.figure("benchmark_fmm")
 fig.clear()
@@ -80,16 +80,3 @@ fig.clear()
 fig.add_subplot(111,xlabel="elements", ylabel="mean error")
 ax = fig.get_axes()[1]
 ax.plot(ns, mean_errs)
-
-
-#####
-##### debugging
-# #####
-# n = 30
-# ms = rand(n)
-# xs = rand(n,3)
-# masses = [Mass(xs[i,:],[ms[i]],zeros(1),zeros(3)) for i in 1:length(ms)]
-# basis = fmm.Spherical()
-# expansion_order = 4
-# n_per_branch = 3
-# tree = fmm.Tree(masses, basis; expansion_order, n_per_branch)

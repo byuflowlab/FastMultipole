@@ -14,22 +14,6 @@ Describes the interaction of a source element on a target element.
 function kernel! end
 
 """
-    get_x(element)
-
-Returns the location of an element.
-
-# Inputs
-
-- `element`- a user-defined object for which the functions `FLOWFMM.kernel!` and `FLOWFMM.get_q` have been defined.
-
-Outputs:
-
-- `x::Vector{Float64}`- a vector of length 3 containing the Cartesian coordinates of the element's location
-
-"""
-function get_x end
-
-"""
 get_q(element)
 
 Returns the strength of an element.
@@ -45,7 +29,7 @@ Outputs:
 """
 function get_q end
 
-function add_potential! end
+function update! end
 
 function derivatives end
 

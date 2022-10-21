@@ -14,9 +14,10 @@ struct Tree
     branches        # a vector of `Branch` objects composing the tree
     expansion_order
     n_per_branch    # max number of elements in a leaf
+    P2M!
 end
 
-function Tree(elements, basis::Basis; expansion_order=2, n_per_branch=1)
+function Tree(elements, P2M!; expansion_order=2, n_per_branch=1)
     # initialize objects
     n_elements = length(elements)
     indices = collect(1:n_elements)
@@ -29,19 +30,19 @@ function Tree(elements, basis::Basis; expansion_order=2, n_per_branch=1)
     i_branch = 1
     center, radius = center_radius(elements; scale_radius = 1.00001)
     level = 0
-    branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, basis)
+    branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # assemble tree
-    tree = Tree(indices, branches, [expansion_order], n_per_branch)
+    tree = Tree(indices, branches, [expansion_order], n_per_branch, P2M!)
 
     return tree
 end
 
-function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, basis)
+function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = 0
     n_elements = i_end - i_start + 1
-    multipole_expansion = initialize_expansion(expansion_order, basis)
-    local_expansion = initialize_expansion(expansion_order, basis)
+    multipole_expansion = initialize_expansion(expansion_order)
+    local_expansion = initialize_expansion(expansion_order)
     if n_elements <= n_per_branch # branch is a leaf; no new branches needed
         i_child = -1
         branch = Branch(n_branches, n_elements, i_child, i_start, center, radius, multipole_expansion, local_expansion)
@@ -51,7 +52,7 @@ function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, 
         # count elements in each octant
         octant_attendance = zeros(Int64,8)
         for i_element in indices[i_start:i_end]
-            x = get_x(elements[i_element])
+            x = elements[i_element].position
             i_octant = get_octant(x, center)
             # @show x center (i_octant-0b1) indices
             octant_attendance[i_octant] += 1
@@ -80,13 +81,12 @@ function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, 
 
         ## sort element indices into the buffer
         for i_element in indices[i_start:i_end]
-            x = get_x(elements[i_element])
+            x = elements[i_element].position
             i_octant = get_octant(x, center)
             buffer[counter[i_octant]] = i_element
             counter[i_octant] += 1
         end
-        # println("Sherlock!")
-        # @show indices
+
         indices[i_start:i_end] .= buffer[i_start:i_end]
 
         # recursively build new branches
@@ -103,7 +103,7 @@ function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, 
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, indices, buffer, elements, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch, basis)
+                branch!(branches, indices, buffer, elements, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
                 i_tape += 1
             end
         end
@@ -111,10 +111,10 @@ function branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, 
 end
 
 function center_radius(elements; scale_radius = 1.00001)
-    x_min = deepcopy(get_x(elements[1]))
-    x_max = deepcopy(get_x(elements[1]))
+    x_min = deepcopy(elements[1].position)
+    x_max = deepcopy(elements[1].position)
     for element in elements
-        x = get_x(element)
+        x = element.position
         for dim in 1:3
             if x[dim] < x_min[dim]
                 x_min[dim] = x[dim]
@@ -142,13 +142,7 @@ function n_terms(expansion_order, dimensions)
     return n
 end
 
-function initialize_expansion(expansion_order, ::Cartesian)
-    k = 3 # dimensions
-    n = n_terms(expansion_order, k)
-    return [zeros(n) for _ in 1:4]
-end
-
-function initialize_expansion(expansion_order, ::Spherical)
+function initialize_expansion(expansion_order)
     return [zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4]
 end
 
