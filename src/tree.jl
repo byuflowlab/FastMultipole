@@ -15,9 +15,10 @@ struct Tree
     expansion_order
     n_per_branch    # max number of elements in a leaf
     P2M!
+    P2P!
 end
 
-function Tree(elements, P2M!; expansion_order=2, n_per_branch=1)
+function Tree(elements, P2M!, P2P!; expansion_order=2, n_per_branch=1)
     # initialize objects
     n_elements = length(elements)
     indices = collect(1:n_elements)
@@ -33,7 +34,7 @@ function Tree(elements, P2M!; expansion_order=2, n_per_branch=1)
     branch!(branches, indices, buffer, elements, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # assemble tree
-    tree = Tree(indices, branches, [expansion_order], n_per_branch, P2M!)
+    tree = Tree(indices, branches, [expansion_order], n_per_branch, P2M!, P2P!)
 
     return tree
 end

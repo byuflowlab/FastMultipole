@@ -3,15 +3,17 @@ import FLOWFMM as fmm
 #####
 ##### gravitational kernel and mass elements
 #####
-struct Mass{TF}
-    position::Array{TF,1}
-    strength::Array{TF,1}
-    potential::Array{TF,1}
-    force::Array{TF,1}
+struct Mass
+    position
+    strength
+    velocity
+    potential
+    J_potential # jacobian of the vector potential
+    H_potential
 end
 
-function Mass{TF}(dims) where TF
-    Mass(zeros(dims), zeros(4), zeros(4), zeros(dims))
+function Mass(dims)
+    Mass(zeros(dims), zeros(4), zeros(dims), zeros(4), zeros(3,4), zeros(3,4,3))
 end
 
 function P2M!(tree, branch, element::Mass, harmonics)
@@ -31,7 +33,7 @@ function P2M!(tree, branch, element::Mass, harmonics)
     end
 end
 
-function fmm.kernel!(target::Mass, source::Mass)
+function P2P!(target::Mass, source::Mass)
     dx = target.position - source.position
     r = sqrt(dx' * dx)
     if r > 0

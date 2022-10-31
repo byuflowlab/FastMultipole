@@ -25,7 +25,7 @@ function benchmark_direct(ns, is_direct, base_name = version)
 
             if i in is_direct
                 println("\tComputing direct...")
-                time_direct = @elapsed fmm.direct!(masses; reflex=false)
+                time_direct = @elapsed fmm.direct!(masses, P2P!; reflex=false)
                 for ii in 1:n
                     potentials_direct[ii] = masses[ii].potential[1]
                 end
@@ -86,7 +86,7 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
 
             println("n = $n elements...")
             println("\tBuilding Tree...")
-            time_tree = @elapsed tree = fmm.Tree(masses; expansion_order, n_per_branch)
+            time_tree = @elapsed tree = fmm.Tree(masses, P2M!, P2P!; expansion_order, n_per_branch)
             println("\t\tcartesian tree time: $(time_tree) seconds")
 
             println("\tComputing FMM...")

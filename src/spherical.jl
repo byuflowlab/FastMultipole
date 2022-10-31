@@ -12,42 +12,68 @@ function cartesian_2_spherical(dx; EPSILON=1e-10)
     return [r, theta, phi]
 end
 
-function spherical_2_cartesian!(dx_cartesian, dx_spherical, aux_spherical)
-    s_theta, c_theta = sincos(dx_spherical[2])
-    s_phi, c_phi = sincos(dx_spherical[3])
-    r, theta, phi = dx_spherical
-    dx_cartesian[1] = s_theta * c_phi * aux_spherical[1]
-        + c_theta * c_phi / dx_spherical[1] * aux_spherical[1]
-        - s_phi / r / s_theta * aux_spherical[3]
-    dx_cartesian[2] = s_theta * s_phi * aux_spherical[1]
-        + c_theta * s_phi / r * aux_spherical[2]
-        + c_phi / r / s_theta * aux_spherical[3]
-    dx_cartesian[3] = c_theta * aux_spherical[1]
-        - s_theta / r * aux_spherical[2]
+# function spherical_2_cartesian!(dx_cartesian, dx_spherical, aux_spherical)
+#     s_theta, c_theta = sincos(dx_spherical[2])
+#     s_phi, c_phi = sincos(dx_spherical[3])
+#     r, theta, phi = dx_spherical
+#     dx_cartesian[1] = s_theta * c_phi * aux_spherical[1]
+#         + c_theta * c_phi / dx_spherical[1] * aux_spherical[2]
+#         - s_phi / r / s_theta * aux_spherical[3]
+#     dx_cartesian[2] = s_theta * s_phi * aux_spherical[1]
+#         + c_theta * s_phi / r * aux_spherical[2]
+#         + c_phi / r / s_theta * aux_spherical[3]
+#     dx_cartesian[3] = c_theta * aux_spherical[1]
+#         - s_theta / r * aux_spherical[2]
 
-    return nothing
+#     return nothing
+# end
+
+function spherical_2_cartesian!(dJ_cartesian, dJ_spherical, rho, theta, phi)
+    # get partial derivatives of the coordinates
+    s_theta, c_theta = sincos(theta)
+    s_phi, c_phi = sincos(phi)
+    drdx = s_theta * c_phi
+    drdy = s_theta * s_phi
+    drdz = c_theta
+    dthetadx = c_theta * c_phi / rho
+    dthetady = c_theta * s_phi / rho
+    dthetadz = -s_theta / rho
+    dphidx = -s_phi / rho / s_theta
+    dphidy = c_phi / rho / s_theta
+    dphidz = 0.0
+
+    for ind in 1:4
+        dJ_cartesian[1,ind] += dJ_spherical[1,ind] * drdx +
+                                dJ_spherical[2,ind] * dthetadx +
+                                dJ_spherical[3,ind] * dphidx
+        dJ_cartesian[2,ind] += dJ_spherical[1,ind] * drdy +
+                                dJ_spherical[2,ind] * dthetady +
+                                dJ_spherical[3,ind] * dphidy
+        dJ_cartesian[3,ind] += dJ_spherical[1,ind] * drdz +
+                                dJ_spherical[2,ind] * dthetadz
+    end
 end
 
-function spherical_2_cartesian(dx_spherical, o_spherical)
-    s_theta, c_theta = sincos(dx_spherical[2])
-    s_phi, c_phi = sincos(dx_spherical[3])
-    dx_cartesian_1 = s_theta * c_phi * o_spherical[1]
-        + c_theta * c_phi / dx_spherical[1] * o_spherical[1]
-        - s_phi / r / s_theta * o_spherical[3]
-    dx_cartesian_2 = s_theta * s_phi * o_spherical[1]
-        + c_theta * s_phi / r * o_spherical[2]
-        + c_phi / r / s_theta * o_spherical[3]
-    dx_cartesian_3 = c_theta * o_spherical[1]
-        - s_theta / r * o_spherical[2]
+# function spherical_2_cartesian(dx_spherical, o_spherical)
+#     s_theta, c_theta = sincos(dx_spherical[2])
+#     s_phi, c_phi = sincos(dx_spherical[3])
+#     dx_cartesian_1 = s_theta * c_phi * o_spherical[1]
+#         + c_theta * c_phi / dx_spherical[1] * o_spherical[1]
+#         - s_phi / r / s_theta * o_spherical[3]
+#     dx_cartesian_2 = s_theta * s_phi * o_spherical[1]
+#         + c_theta * s_phi / r * o_spherical[2]
+#         + c_phi / r / s_theta * o_spherical[3]
+#     dx_cartesian_3 = c_theta * o_spherical[1]
+#         - s_theta / r * o_spherical[2]
 
-    return [dx_cartesian_1, dx_cartesian_2, dx_cartesian_3]
-end
+#     return [dx_cartesian_1, dx_cartesian_2, dx_cartesian_3]
+# end
 
 @inline odd_or_even(n::Int) = (n & 1) == 1 ? -1 : 1
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic!(harmonics, harmonics_theta, rho, theta, phi, P)
+function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi, P)
     y,x = sincos(theta)
     invY = y == 0 ? 0 : 1 / y
     fact = 1
@@ -57,25 +83,29 @@ function regular_harmonic!(harmonics, harmonics_theta, rho, theta, phi, P)
     eim = 1.0
     for m=0:P
         p = pl
-        lpl = m * m + 2 * m + 1
-        lml = m * m + 1
+        lpl = (m * (m + 1)) >> 1 + m + 1
+        # lpl = m * m + 2 * m + 1
+        # lml = m * m + 1
         harmonics[lpl] = rhom * p * eim
-        harmonics[lml] = conj(harmonics[lpl])
+        # harmonics[lml] = conj(harmonics[lpl])
         p1 = p
         p = x * (2 * m + 1) * p1
         harmonics_theta[lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
+        harmonics_theta_2[lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim
         rhom *= rho
         rhol = rhom
         for l=m+1:P
-            lpm = l * l + l + m + 1
-            lmm = l * l + l - m + 1
+            lpm = (l * (l + 1)) >> 1 + m + 1
+            # lpm = l * l + l + m + 1
+            # lmm = l * l + l - m + 1
             rhol /= -(l + m)
             harmonics[lpm] = rhol * p * eim
-            harmonics[lmm] = conj(harmonics[lpm])
+            # harmonics[lmm] = conj(harmonics[lpm])
             p2 = p1
             p1 = p
             p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
             harmonics_theta[lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
+            harmonics_theta_2[lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
             rhol *= rho
         end
         rhom /= -(2 * m + 2) * (2 * m + 1)
@@ -87,7 +117,6 @@ end
 
 function regular_harmonic!(harmonics, rho, theta, phi, P)
     y,x = sincos(theta)
-    invY = y == 0 ? 0 : 1 / y
     fact = 1
     pl = 1
     rhom = 1
@@ -189,11 +218,11 @@ function M2P!(target, i_branch, tree)
     end
 end
 
-function M2M!(tree, branch, child, harmonics, harmonics_theta)
+function M2M!(tree, branch, child, harmonics)
     # get distance vector
     dx = branch.center - child.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx..., tree.expansion_order[1])
+    regular_harmonic!(harmonics, dx..., tree.expansion_order[1])
 
     for j in 0:tree.expansion_order[1] # iterate over new Multipole coefficients B_j^k
         for k in 0:j
@@ -231,16 +260,15 @@ function M2M!(tree, i_branch)
 
     #initialize memory TODO: do this beforehand?
     harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
         child = tree.branches[i_child]
-        M2M!(tree, branch, child, harmonics, harmonics_theta)
+        M2M!(tree, branch, child, harmonics)
     end
 end
 
-function M2L!(tree, elements, i_local, j_multipole)
+function M2L!(tree, i_local, j_multipole)
     local_branch = tree.branches[i_local]
     multipole_branch = tree.branches[j_multipole]
 
@@ -299,10 +327,10 @@ function P2L!(tree, i_branch, source)
     end
 end
 
-function L2L!(tree, branch, child, harmonics, harmonics_theta)
+function L2L!(tree, branch, child, harmonics)
     dx = child.center - branch.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], dx[3], tree.expansion_order[1])
+    regular_harmonic!(harmonics, dx[1], dx[2], dx[3], tree.expansion_order[1])
     for j in 0:tree.expansion_order[1]
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
@@ -340,47 +368,79 @@ function L2L!(tree, j_source)
 
     #initialize memory TODO: do this beforehand?
     harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
         child = tree.branches[i_child]
-        L2L!(tree, branch, child, harmonics, harmonics_theta)
+        L2L!(tree, branch, child, harmonics)
     end
 end
 
 "Calculates the potential at all child elements of a branch."
 function L2P!(tree, elements, i_branch)
     branch = tree.branches[i_branch]
-    harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    harmonics_theta = Vector{Complex{Float64}}(undef, (tree.expansion_order[1]+1)^2)
-    d_potential = zeros(4)
+    harmonics = Vector{Complex{Float64}}(undef, ((tree.expansion_order[1]+1) * (tree.expansion_order[1]+2)) >> 1)
+    harmonics_theta = Vector{Complex{Float64}}(undef, ((tree.expansion_order[1]+1) * (tree.expansion_order[1]+2)) >> 1)
+    harmonics_theta_2 = Vector{Complex{Float64}}(undef, ((tree.expansion_order[1]+1) * (tree.expansion_order[1]+2)) >> 1)
+    dJ_potential_cartesian = zeros(3,4)
+    dJ_potential = zeros(3,4)
+    dH_potential = zeros(3,3,4)
     for i_element in branch.first_element:branch.first_element + branch.n_elements - 1
         element = elements[tree.indices[i_element]]
-        L2P!(element, tree, branch, harmonics, harmonics_theta, d_potential) # fix calling syntaxs
+        L2P!(element, tree, branch, harmonics, harmonics_theta, harmonics_theta_2, dJ_potential_cartesian, dJ_potential, dH_potential) # fix calling syntaxs
     end
 end
 
-function L2P!(element, tree, branch, harmonics, harmonics_theta, d_potential)
+function L2P!(element, tree, branch, harmonics, harmonics_theta, harmonics_theta_2, dJ_potential_cartesian, dJ_potential, dH_potential)
     dx = element.position - branch.center
     cartesian_2_spherical!(dx)
-    regular_harmonic!(harmonics, harmonics_theta, dx[1], dx[2], dx[3], tree.expansion_order[1])
+    r, theta, phi = dx
+    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, dx..., tree.expansion_order[1])
     for n in 0:tree.expansion_order[1]
-        nm = n * n + n + 1 # m = 0
+        # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
-        for dim in 1:4
-            d_potential[dim] = real(branch.local_expansion[dim][nms] * harmonics[nm])
+        for ind in 1:4
+            element.potential[ind] += real(branch.local_expansion[ind][nms] * harmonics[nms])
+            # store derivatives of the potential in spherical harmonics here
+            dJ_potential[1,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics[nms]) # dPsi/dr
+            dJ_potential[2,ind] += real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # dPsi/dtheta
+            # dJ_potential[3,ind] += 0 # dPsi/dphi
+            dH_potential[1,1,ind] += n * (n-1) / r^2 * real(branch.local_expansion[ind][nms] * harmonics[nms]) # d2Psi/dr2
+            dH_potential[2,1,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dtheta dr
+            # dH_potential[3,1,ind] += # d2Psi/dphi dr
+            dH_potential[1,2,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dr dtheta
+            dH_potential[2,2,ind] += real(branch.local_expansion[ind][nms] * harmonics_theta_2[nms]) # d2Psi/dtheta2
+            # dH_potential[3,2,ind] += # d2Psi/dphi dtheta
+            # dH_potential[1,3,ind] += # d2Psi/dr dphi
+            # dH_potential[2,3,ind] += # d2Psi/dtheta dphi
+            # dH_potential[3,3,ind] += # d2Psi/dphi2
         end
-        element.potential .+= d_potential
-        for m in 1:n
-            nm = n * n + n + m + 1
+        for m in 1:n # m > 0
+            # nm = n * n + n + m + 1
             nms = (n * (n + 1)) >> 1 + m + 1
-            for dim in 1:4
-                d_potential[dim] = 2 * real(branch.local_expansion[dim][nms] * harmonics[nm])
+            for ind in 1:4
+                element.potential[ind] += 2 * real(branch.local_expansion[ind][nms] * harmonics[nms])
+                # store derivatives of the potential in spherical harmonics here
+                dJ_potential[1,ind] += 2 * n/r * real(branch.local_expansion[ind][nms] * harmonics[nms]) # dPsi/dr
+                dJ_potential[2,ind] += 2 * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # dPsi/dtheta
+                dJ_potential[3,ind] += 2 * m * real(im * branch.local_expansion[ind][nms] * harmonics[nms]) # dPsi/dphi
+                dH_potential[1,1,ind] += n * (n-1) / r^2 * real(branch.local_expansion[ind][nms] * harmonics[nms]) # d2Psi/dr2
+                dH_potential[2,1,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dtheta dr
+                dH_potential[3,1,ind] += n * m / r * real(im * branch.local_expansion[ind][nms] * harmonics[nms]) # d2Psi/dphi dr
+                dH_potential[1,2,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dr dtheta
+                dH_potential[2,2,ind] += real(branch.local_expansion[ind][nms] * harmonics_theta_2[nms]) # d2Psi/dtheta2
+                dH_potential[3,2,ind] += m * real(im * branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dphi dtheta
+                dH_potential[1,3,ind] += n * m / r * real(im * branch.local_expansion[ind][nms] * harmonics[nms]) # d2Psi/dr dphi
+                dH_potential[2,3,ind] += m * real(im * branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dtheta dphi
+                dH_potential[3,3,ind] += -m^2 * real(branch.local_expansion[ind][nms] * harmonics[nms]) # d2Psi/dphi2
             end
-            element.potential .+= d_potential
         end
     end
+    spherical_2_cartesian!(dJ_potential_cartesian, dJ_potential, dx...)
+    element.J_potential .+= dJ_potential_cartesian # NOTE: I don't actually need all of these
+    dJ_potential_cartesian .*= 0
+    dJ_potential .*= 0
+    dH_potential .*= 0
 end
 
 # function L2P!(element::VectorSource, tree, branch, harmonics, harmonics_theta)
@@ -392,7 +452,7 @@ end
 #     cartesian_2_spherical!(dx)
 #     regular_harmonic!(harmonics, harmonics_theta, dx..., tree.expansion_order[1]) # use the conjugate
 #     d_potential = zeros(4)
-#     for n in 0:tree.expansion_order[1]
+#     for n in 0:tree.expansion_order[1]yy
 #         nm = n * n + n + 1 # m = 0
 #         nms = (n * (n+1)) >> 1 + 1 # m = 0
 #         for dim in 1:4

@@ -63,9 +63,9 @@ include(joinpath(test_dir, "gravitational.jl"))
         V_tots[i] = sum(V_ijs[i,:])
     end
 
-    mass = [Mass(x[:,i], [m[i],0,0,0], zeros(4), zeros(3)) for i in 1:length(m)]
+    mass = [Mass(x[:,i], [m[i],0,0,0], zeros(3), zeros(4), zeros(3,4), zeros(3,4)) for i in 1:length(m)]
 
-    fmm.direct!(mass)
+    fmm.direct!(mass, P2P!)
     V_tots_direct = [m.potential[1] for m in mass]
 
     for i in 1:length(V_tots)
@@ -196,10 +196,12 @@ end
     masses = Vector{Mass}(undef,length(ms))
     for i in 1:length(ms)
         x = xs[i,:]
-        mass = rand(1)
-        potential = zeros(1)
-        force = zeros(3)
-        masses[i] = Mass(x,mass,potential,force)
+        mass = vcat(rand(1),zeros(3))
+        velocity = zeros(3)
+        potential = zeros(4)
+        J_potential = zeros(3,4)
+        H_potential = zeros(3,4,3)
+        masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
     end
 
     # test center_radius function
@@ -213,7 +215,7 @@ end
     @test isapprox(radius, test_radius; atol=1e-4)
 
     # test branch! function
-    tree = fmm.Tree(masses, derivatives)
+    tree = fmm.Tree(masses, P2M!, P2P!)
 
     test_branches = [
         5 0.65 0.65 0.55 0.5500055;
@@ -334,13 +336,15 @@ masses = Vector{Mass}(undef,length(ms))
 for i in 1:length(ms)
     x = xs[i,:]
     mass = [ms[i], 0, 0, 0]
+    velocity = zeros(3)
     potential = zeros(4)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
+    J_potential = zeros(3,4)
+    H_potential = zeros(3,4,3)
+    masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
 end
 
 expansion_order = 2
-tree = fmm.Tree(masses, P2M!; expansion_order)
+tree = fmm.Tree(masses, P2M!, P2P!; expansion_order)
 
 i_mass = 1
 i_branch = 5 # use the first mass
@@ -348,7 +352,7 @@ fmm.P2M!(tree, masses, i_branch)
 center = tree.branches[i_branch].center
 
 x_target = [10.1,-7.3,8.6]
-target = Mass(x_target, [1.0, 0,0,0], [0.0, 0,0,0], zeros(3))
+target = Mass(x_target, [1.0, 0,0,0], zeros(3), [0.0, 0,0,0], zeros(3,4), zeros(3,4))
 fmm.M2P!(target, i_branch, tree)
 
 u_fmm = target.potential[1]
@@ -400,13 +404,15 @@ masses = Vector{Mass}(undef,length(ms))
 for i in 1:length(ms)
     x = xs[i,:]
     mass = [ms[i], 0, 0, 0]
+    velocity = zeros(3)
     potential = zeros(4)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
+    J_potential = zeros(3,4)
+    H_potential = zeros(3,4,3)
+    masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
 end
 
 expansion_order = 3
-tree = fmm.Tree(masses, P2M!; expansion_order)
+tree = fmm.Tree(masses, P2M!, P2P!; expansion_order)
 
 i_branch = 2 # contains 4th and 5th masses
 i_branch_4 = 6 # use the fourth mass
@@ -416,7 +422,7 @@ fmm.P2M!(tree, masses, i_branch_4) # evaluate multipole coefficients
 fmm.M2M!(tree, i_branch) # translate coefficients to the center of branch 2
 
 x_target = [8.3,1.4,-4.2]
-target = Mass(x_target, [0.0,0,0,0], [0.0,0,0,0], zeros(3))
+target = Mass(x_target, [0.0,0,0,0], zeros(3), [0.0,0,0,0], zeros(3,4), zeros(3,4))
 fmm.M2P!(target, i_branch, tree)
 u_fmm = target.potential[1]
 
@@ -453,13 +459,15 @@ masses = Vector{Mass}(undef,length(ms))
 for i in 1:length(ms)
     x = xs[i,:]
     mass = [ms[i], 0, 0, 0]
+    velocity = zeros(3)
     potential = zeros(4)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
+    J_potential = zeros(3,4)
+    H_potential = zeros(3,4,3)
+    masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
 end
 
 expansion_order = 20
-tree = fmm.Tree(masses, P2M!; expansion_order)
+tree = fmm.Tree(masses, P2M!, P2P!; expansion_order)
 
 branch_i = 2 # contains two masses; 4 and 5
 target_i = 4
@@ -474,15 +482,17 @@ local_coefficients_expanded_theta = zeros(Complex{Float64}, (expansion_order+1)^
 fmm.irregular_harmonic!(local_coefficients_expanded, dx_source..., expansion_order)
 local_coefficients_expanded .*= ms[source_i]
 regular_harmonics_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
-regular_harmonics_theta_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
-fmm.regular_harmonic!(regular_harmonics_expanded, regular_harmonics_theta_expanded, dx_target..., expansion_order)
+fmm.regular_harmonic!(regular_harmonics_expanded, dx_target..., expansion_order)
 
 fmm.P2L!(tree, branch_i, masses[source_i])
 
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
-d_potential = zeros(4)
-fmm.L2P!(masses[target_i], tree, tree.branches[branch_i], harmonics, harmonics_theta, d_potential)
+harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
+d_potential_cartesian = zeros(3,4)
+d_potential = zeros(3,4)
+dH_potential = zeros(3,3,4)
+fmm.L2P!(masses[target_i], tree, tree.branches[branch_i], harmonics, harmonics_theta, harmonics_theta_2, d_potential_cartesian, d_potential, dH_potential)
 
 u_fmm = masses[target_i].potential[1]
 
@@ -518,13 +528,15 @@ masses = Vector{Mass}(undef,length(ms))
 for i in 1:length(ms)
     x = xs[i,:]
     mass = [ms[i], 0, 0, 0]
+    velocity = zeros(3)
     potential = zeros(4)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
+    J_potential = zeros(3,4)
+    H_potential = zeros(3,4,3)
+    masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
 end
 
 expansion_order = 20
-tree = fmm.Tree(masses, P2M!; expansion_order)
+tree = fmm.Tree(masses, P2M!, P2P!; expansion_order)
 
 # local coefficient at branch 2 due to mass 1
 fmm.P2L!(tree, 2, masses[1])
@@ -533,13 +545,16 @@ fmm.P2L!(tree, 2, masses[1])
 # check L2P now:
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
-d_potential = zeros(4)
-fmm.L2P!(masses[5], tree, tree.branches[2], harmonics, harmonics_theta, d_potential)
+harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
+d_potential_cartesian = zeros(3,4)
+d_potential = zeros(3,4)
+dH_potential = zeros(3,3,4)
+fmm.L2P!(masses[5], tree, tree.branches[2], harmonics, harmonics_theta, harmonics_theta_2, d_potential_cartesian, d_potential, dH_potential)
 u_fmm_no_x = masses[5].potential[1]
 masses[5].potential[1] *= 0
 
 # translate local expansion to branch 7 (mass 5)
-fmm.L2L!(tree, tree.branches[2], tree.branches[7], harmonics, harmonics_theta)
+fmm.L2L!(tree, tree.branches[2], tree.branches[7], harmonics)
 
 local_coefficients_check = zeros(Complex{Float64}, (expansion_order+1)^2)
 dx_check = fmm.cartesian_2_spherical(masses[1].position - tree.branches[7].center)
@@ -554,9 +569,8 @@ dx_direct = masses[5].position - masses[1].position
 u_check = ms[1] / sqrt(dx_direct' * dx_direct)
 
 regular_harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
-regular_harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
 dx_target = fmm.cartesian_2_spherical(masses[5].position - tree.branches[7].center)
-fmm.regular_harmonic!(regular_harmonics, regular_harmonics_theta, dx_target..., expansion_order)
+fmm.regular_harmonic!(regular_harmonics, dx_target..., expansion_order)
 u_man = real(sum(regular_harmonics' * local_coefficients_check))
 
 @test isapprox(u_check, u_fmm; atol=1e-12)
@@ -586,35 +600,34 @@ masses = Vector{Mass}(undef,length(ms))
 for i in 1:length(ms)
     x = xs[i,:]
     mass = [ms[i], 0, 0, 0]
+    velocity = zeros(3)
     potential = zeros(4)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
+    J_potential = zeros(3,4)
+    H_potential = zeros(3,4,3)
+    masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
 end
 
 expansion_order = 30
-tree = fmm.Tree(masses, P2M!; expansion_order)
+tree = fmm.Tree(masses, P2M!, P2P!; expansion_order)
 
 i_branch_multipole = 7 # mass 5
 i_branch_local = 5 # mass 1
 harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
 
 tree.P2M!(tree, tree.branches[i_branch_multipole], masses[5], harmonics)
-fmm.M2L!(tree, masses, i_branch_local, i_branch_multipole)
-d_potential = zeros(4)
-fmm.L2P!(masses[1], tree, tree.branches[i_branch_local], harmonics, harmonics_theta, d_potential)
-
+fmm.M2L!(tree, i_branch_local, i_branch_multipole)
+d_potential_cartesian = zeros(3,4)
+d_potential = zeros(3,4)
+dH_potential = zeros(3,3,4)
+fmm.L2P!(masses[1], tree, tree.branches[i_branch_local], harmonics, harmonics_theta, harmonics_theta_2, d_potential_cartesian, d_potential, dH_potential)
 u_fmm = masses[1].potential[1]
 
 dx_direct = masses[1].position - masses[5].position
 u_direct = masses[5].strength[1] / sqrt(dx_direct' * dx_direct)
 
 @test isapprox(u_fmm, u_direct; atol=1e-12)
-
-# now check coefficients
-# tree_2 = fmm.Tree(masses, P2M!; expansion_order)
-# fmm.P2L!(tree_2, i_branch_local, masses[5])
-# tree_2.branches[i_branch_local].local_expansion tree.branches[i_branch_local].local_expansion
 
 end
 
@@ -639,14 +652,16 @@ masses = Vector{Mass}(undef,length(ms))
 for i in 1:length(ms)
     x = xs[i,:]
     mass = [ms[i], 0, 0, 0]
+    velocity = zeros(3)
     potential = zeros(4)
-    force = zeros(3)
-    masses[i] = Mass(x,mass,potential,force)
+    J_potential = zeros(3,4)
+    H_potential = zeros(3,4,3)
+    masses[i] = Mass(x,mass,velocity,potential,J_potential,H_potential)
 end
 
 expansion_order = 24
 theta = 4
-tree = fmm.Tree(masses, P2M!; expansion_order)
+tree = fmm.Tree(masses, P2M!, P2P!; expansion_order)
 
 # perform upward pass
 fmm.upward_pass!(tree, masses)
@@ -656,7 +671,7 @@ target = [4.1,2.2,3.4]
 dx_direct_6 = target - masses[4].position
 u_direct_6 = ms[4] / sqrt(dx_direct_6' * dx_direct_6)
 
-mass_target = Mass(target, [0.0,0,0,0], [0.0,0,0,0], [0.0])
+mass_target = Mass(target, [0.0,0,0,0], zeros(3), [0.0,0,0,0], zeros(3,4), zeros(3,4))
 
 fmm.M2P!(mass_target, 6, tree)
 u_fmm_6 = mass_target.potential[1]
@@ -719,7 +734,7 @@ for mass in masses
     mass.potential .*= 0
 end
 
-fmm.direct!(masses)
+fmm.direct!(masses, P2P!)
 
 u_direct = [mass.potential[1] for mass in masses]
 
@@ -731,3 +746,84 @@ end
 #####
 ##### vector potential
 #####
+include("vortex.jl")
+
+@testset "vortons" begin
+
+# 2-D vortex ring
+xs = [
+    0 0
+    0.5 -0.5
+    0 0
+]
+
+Gammas = [
+    0 0;
+    0 0;
+    0 0;
+    1 -1.0
+]
+
+vortons = Vector{Vorton}(undef,size(xs)[2])
+for i in 1:size(xs)[2]
+    vortons[i] = Vorton(xs[:,i], Gammas[:,i])
+end
+
+# using direct method
+fmm.direct!(vortons, P2P!)
+fmm.update_velocity!(vortons)
+
+@test isapprox(vortons[1].velocity[1], 1/4/pi; atol=1e-10)
+@test isapprox(vortons[2].velocity[1], 1/4/pi; atol=1e-10)
+@test isapprox(vortons[1].velocity[2], 0; atol=1e-10)
+@test isapprox(vortons[2].velocity[2], 0; atol=1e-10)
+@test isapprox(vortons[1].velocity[3], 0; atol=1e-10)
+@test isapprox(vortons[2].velocity[3], 0; atol=1e-10)
+
+vorton_potential_check = zeros(4,2)
+vorton_potential_check[:,1] = deepcopy(vortons[1].potential)
+vorton_potential_check[:,2] = deepcopy(vortons[2].potential)
+
+vorton_velocity_check = zeros(3,2)
+vorton_velocity_check[:,1] = deepcopy(vortons[1].velocity)
+vorton_velocity_check[:,2] = deepcopy(vortons[2].velocity)
+
+# reset vortons
+for vorton in vortons
+    vorton.velocity .*= 0
+    vorton.potential .*= 0
+    vorton.J_potential .*= 0
+end
+
+# manually build tree for testing
+# Branch(n_branches, n_elements, i_child, i_start, center, radius, multipole_expansion, local_expansion)
+expansion_order = 9
+x_branch_1 = [0.0,0,0]
+branch_1 = fmm.Branch(2, 2, 2, 1, x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+x_branch_2 = xs[:,1] .+ [0.01, 0.02, -0.03]
+branch_2 = fmm.Branch(-1, 1, -1, 1, x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+x_branch_3 = xs[:,2] .+ [0.02, -0.04, 0.01]
+branch_3 = fmm.Branch(-1, 1, -1, 2, x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+
+# using FMM
+# tree = fmm.Tree(indices, branches, [expansion_order], n_per_branch, P2M!, P2P!)
+tree = fmm.Tree([1,2], [branch_1, branch_2, branch_3], [expansion_order], 1, P2M!, P2P!)
+fmm.P2M!(tree, vortons, 2)
+fmm.P2M!(tree, vortons, 3)
+
+fmm.M2L!(tree, 2, 3)
+fmm.M2L!(tree, 3, 2)
+fmm.L2P!(tree, vortons, 2)
+fmm.L2P!(tree, vortons, 3)
+fmm.update_velocity!(vortons)
+
+for i in 1:2
+    for ind in 1:4
+        @test isapprox(vortons[i].potential[ind], vorton_potential_check[ind,i]; atol=1e-12)
+    end
+    for dim in 1:3
+        @test isapprox(vortons[i].velocity[dim], vorton_velocity_check[dim,i]; atol=1e-12)
+    end
+end
+
+end

@@ -9,10 +9,10 @@ Uses a naive direct algorithm to evaluate the influence of all sources on all ta
 - `sources::Vector{element}`- a vector of source elements
 
 """
-function direct!(targets::Vector, sources::Vector)
-    for (i,target) in enumerate(targets)
-        for (j,source) in enumerate(sources)
-            kernel!(target, source)
+function direct!(targets::Vector, sources::Vector, P2P!::Function)
+    for target in targets
+        for source in sources
+            P2P!(target, source)
         end
     end
 end
@@ -27,10 +27,10 @@ Assumes sources and targets are identical sets.
 - `reflex`- if `true`, includes interactions of each element on itself
 
 """
-function direct!(elements::Vector; reflex=false)
+function direct!(elements::Vector, P2P!::Function; reflex=false)
     for (i,target) in enumerate(elements)
         for (j,source) in enumerate(elements)
-            if i!=j || reflex; kernel!(target, source); end
+            if i!=j || reflex; P2P!(target, source); end
         end
     end
 end

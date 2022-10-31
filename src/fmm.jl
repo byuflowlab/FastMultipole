@@ -4,7 +4,7 @@ function P2P!(tree, elements, i_target, j_source)
     for source_element in elements[tree.indices[source_branch.first_element:source_branch.first_element+source_branch.n_elements-1]]
         for target_element in elements[tree.indices[target_branch.first_element:target_branch.first_element+target_branch.n_elements-1]]
             dx = target_element.position - source_element.position
-            kernel!(target_element, source_element)
+            tree.P2P!(target_element, source_element)
         end
     end
 end
@@ -40,7 +40,7 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta)
     spacing_squared = spacing' * spacing
     threshold_squared = (target_branch.radius + source_branch.radius) * (target_branch.radius + source_branch.radius) * theta # theta is the number of radii squared
     if spacing_squared >= threshold_squared # meet separation criteria
-        M2L!(tree, elements, i_target, j_source)
+        M2L!(tree, i_target, j_source)
     elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
         P2P!(tree, elements, i_target, j_source)
     elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
@@ -80,8 +80,8 @@ function fmm!(tree::Tree, elements, theta; reset_tree=true)
     downward_pass!(tree, elements)
 end
 
-function fmm!(elements, expansion_order, n_per_branch, theta)
-    tree = Tree(elements; expansion_order, n_per_branch)
+function fmm!(elements, expansion_order, n_per_branch, theta, P2M!, P2P!)
+    tree = Tree(elements, P2M!, P2P!; expansion_order, n_per_branch)
     fmm!(tree, elements, theta)
     return tree
 end

@@ -33,7 +33,7 @@ function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, 
         # fmm
         # println("\t\tBuilding Tree...")
         println("\t\tComputing FMM...")
-        times_fmm[i] = @elapsed tree = fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta)
+        times_fmm[i] = @elapsed tree = fmm.fmm!(masses, expansion_order, n_per_branch, theta, P2M!, P2P!)
         println("\t\tFMM time: $(times_fmm[i]) seconds")
         for ii in 1:n
             potentials_fmm[ii] = masses[ii].potential[1]

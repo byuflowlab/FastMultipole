@@ -27,7 +27,7 @@ function test_accuracy(exp_order)
         force = zeros(3)
         masses[i] = Mass(x,mass,potential,force)
     end
-    tree = fmm.Tree(masses; expansion_order=exp_order)
+    tree = fmm.Tree(masses, P2M!, P2P!; expansion_order=exp_order)
 
     masses_2 = Vector{Mass}(undef,length(ms))
     for i in 1:length(ms)
@@ -42,7 +42,7 @@ function test_accuracy(exp_order)
     potential_direct = [mass.potential[1] for mass in masses_2]
 
     theta = 4
-    fmm.fmm!(tree, masses, derivatives, theta; reset_tree=true)
+    fmm.fmm!(tree, masses, theta; reset_tree=true)
     potential_fmm = [mass.potential[1] for mass in masses]
 
     return potential_direct, potential_fmm
@@ -75,4 +75,4 @@ end
 # ax.set_xscale("log")
 ax.set_yscale("log")
 ax.legend()
-conv_1.savefig("/Users/randerson/Downloads/expansion_convergence.png")
+conv_1.savefig("expansion_convergence.png")
