@@ -32,13 +32,6 @@ function cartesian_2_spherical(x,y,z; vec=false)
     return r, theta, phi
 end
 
-# function spherical_2_cartesian(r,theta,phi)
-#     x = r*sin(theta)*cos(phi)
-#     y = r*sin(theta)*sin(phi)
-#     z = r*cos(theta)
-#     return x,y,z
-# end
-
 function d2rdx2_cart(x,y,z)
     r, theta, phi = cartesian_2_spherical(x,y,z)
     return d2rdx2(r,theta,phi)
@@ -99,7 +92,8 @@ for i in 1:length(fd)
 end
 end
 
-# chain rule
+@testset "chain rule" begin
+
 """
 dr_k/dx_idx_j
 """
@@ -122,6 +116,7 @@ function d2rdx2(r, theta, phi)
     ]
     return derivatives
 end
+
 """
 dr_j/dx_i
 """
@@ -168,32 +163,100 @@ function derivatives_2_cartesian(first_derivatives, second_derivatives, r, theta
     return cartesian_derivatives
 end
 
-scalar_func(r,theta,phi) = 1/r*sin(theta)*cos(theta) + sin(phi)^2
-
-function fd_derivative(func, r, theta, phi, i; step=1e-8)
-    mask = zeros(3)
-    mask[i] = step
-    return (func.([r,theta,phi] + mask...) - func.(r,theta,phi))/step
+function cs_derivative(func, i, args; step=1e-25)
+    args[i] += step*im
+    return imag(func(args))/step
 end
 
-simple(r,theta,phi) = 3*r
-
-vec_func(r,theta,phi) = [3*r, 4*theta, 5*phi]
-
-fd_derivative(simple, 1.0,1.0,1.0,1)
-fd_derivative(vec_func, 1.0,1.0,1.0,2)
-
-function first_derivatives(scalar_func, r, theta, phi)
-    first_derivatives = [
-        fd_derivative(scalar_func, r, theta, phi, i) for i in 1:3
-    ]
-    return first_derivatives
+function simple(X) 
+    r = X[1]
+    theta = X[2]
+    phi = X[3]
+    return 3*r^4*cos(theta) + 2*theta - sin(phi)
 end
 
+function cartesian_2_spherical(x,y,z; vec=false)
+    r = sqrt(x^2+y^2+z^2)
+    theta = acos(z/r)
+    phi = atan(y/x)
+    vec && return [r,theta,phi]
+    return r, theta, phi
+end
 
-function second_derivatives(scalar_func, r, theta, phi)
-    second_derivatives = zeros(3,3)
-    for i in 1:3
-        second_derivatives
+function spherical_2_cartesian(r,theta,phi; vec=false)
+    x = r*sin(theta)*cos(phi)
+    y = r*sin(theta)*sin(phi)
+    z = r*cos(theta)
+    vec && return [x,y,z]
+    return x,y,z
+end
+
+function simple_cart(X)
+    args = cartesian_2_spherical(X...; vec=true)
+    return simple(args)
+end
+
+r0, theta0, phi0 = rand(3)
+
+dsdr(r,theta,phi) = 12 * r^3 * cos(theta)
+dsdt(r,theta,phi) = 3*r^4*-sin(theta) + 2
+dsdp(r,theta,phi) = -cos(phi)
+d2sdr2(r,theta,phi) = 36 * r^2 * cos(theta)
+d2sdrdt(r,theta,phi) = -12*r^3*sin(theta)
+d2sdrdp(r,theta,phi) = 0.0
+d2sdt2(r,theta,phi) = -3*r^4*cos(theta)
+d2sdtdp(r,theta,phi) = 0.0
+d2sdp2(r,theta,phi) = sin(phi)
+
+testd = cs_derivative(simple,1,Complex{Float64}[r0,theta0,phi0])
+@show testd - dsdr(r0,theta0,phi0)
+
+function second_derivative(func,i,j,args; step=1e-8)
+    first_func(args) = cs_derivative(func,i,args)
+    mask = zeros(length(args))
+    mask[j] += step
+    sec = (first_func(args + mask) - first_func(args))/step
+    return sec
+end
+
+function fd_hessian(func, args)
+    simple_jacobian = zeros(3,3)
+    for j in 1:3
+        for i in 1:3
+            simple_jacobian[j,i] = second_derivative(func,i,j,convert(Vector{Complex{Float64}},args))
+        end
     end
+    return simple_jacobian
+end
+simple_jacobian = fd_hessian(simple,[r0,theta0,phi0])
+simple_jacobian_anal = [
+    d2sdr2(r0,theta0,phi0) d2sdrdt(r0,theta0,phi0) d2sdrdp(r0,theta0,phi0);
+    d2sdrdt(r0,theta0,phi0) d2sdt2(r0,theta0,phi0) d2sdtdp(r0,theta0,phi0);
+    d2sdrdp(r0,theta0,phi0) d2sdtdp(r0,theta0,phi0) d2sdp2(r0,theta0,phi0);
+]
+
+for i in 1:length(simple_jacobian)
+    @test isapprox(simple_jacobian[i], simple_jacobian_anal[i]; atol=1e-6)
+end
+
+# test chain rule
+args = [r0,theta0,phi0]
+spherical_grad = [cs_derivative(simple,i,convert(Vector{Complex{Float64}},args)) for i in 1:3]
+spherical_hessian = fd_hessian(simple, args)
+d2rkdxidxj = d2rdx2(args...)
+drjdxi = drdx(args...)
+
+cartesian_hessian = zeros(3,3)
+for k in 1:3
+    cartesian_hessian .+= d2rkdxidxj[:,:,k] * spherical_grad[k]
+end
+
+cartesian_hessian .+= drjdxi * spherical_hessian * transpose(drjdxi)
+
+cartesian_hessian_fd = fd_hessian(simple_cart, spherical_2_cartesian(args...;vec=true))
+
+for i in 1:length(cartesian_hessian)
+    @test isapprox(cartesian_hessian[i], cartesian_hessian_fd[i]; atol=1e-5)
+end
+
 end

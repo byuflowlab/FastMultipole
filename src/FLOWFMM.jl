@@ -7,7 +7,7 @@ import Base.:^
 # const THETA = 4
 const ONE_OVER_4PI = 1/4/pi
 
-for file in ["misc", "potential", "element", "tree", "direct", "spherical", "fmm"]
+for file in ["misc", "derivatives", "potential", "element", "tree", "direct", "spherical", "fmm"]
     include(file*".jl")
 end
 
