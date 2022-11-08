@@ -1,36 +1,27 @@
-"""
-    direct!(targets, source)
+# """
+#     direct!(targets, source)
 
-Uses a naive direct algorithm to evaluate the influence of all sources on all targets.
+# Uses a naive direct algorithm to evaluate the influence of all sources on all targets.
 
-# Inputs
+# # Inputs
 
-- `targets::Vector{element}`- a vector of target elements
-- `sources::Vector{element}`- a vector of source elements
+# - `targets::Vector{element}`- a vector of target elements
+# - `sources::Vector{element}`- a vector of source elements
 
-"""
-function direct!(targets::Vector, sources::Vector, P2P!::Function)
-    for target in targets
-        for source in sources
-            P2P!(target, source)
-        end
-    end
-end
+# """
+# function direct!(targets::Vector, sources::Vector, P2P!::Function)
+#     for target in targets
+#         for source in sources
+#             P2P!(target, source)
+#         end
+#     end
+# end
 
 """
     direct!(elements)
 
-Assumes sources and targets are identical sets.
-
-# Optional Arguments
-
-- `reflex`- if `true`, includes interactions of each element on itself
-
+Direct calculation of induced potential (no FMM acceleration).
 """
-function direct!(elements::Vector, P2P!::Function; reflex=false)
-    for (i,target) in enumerate(elements)
-        for (j,source) in enumerate(elements)
-            if i!=j || reflex; P2P!(target, source); end
-        end
-    end
+function direct!(elements)
+    elements.direct!(view(elements.potential,:,:), elements.bodies[i_POSITION,:], elements.bodies)
 end

@@ -46,7 +46,7 @@ for vorton in vortons
 end
 
 # manually build tree for testing
-# Branch(n_branches, n_elements, i_child, i_start, center, radius, multipole_expansion, local_expansion)
+# Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
 expansion_order = 9
 x_branch_1 = [0.0,0,0]
 branch_1 = fmm.Branch(2, 2, 2, 1, x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
@@ -56,16 +56,16 @@ x_branch_3 = xs[:,2] .+ [0.02, -0.04, 0.01]
 branch_3 = fmm.Branch(-1, 1, -1, 2, x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
 
 # using FMM
-# tree = fmm.Tree(indices, branches, [expansion_order], n_per_branch, P2M!, P2P!)
-tree = fmm.Tree([1,2], [branch_1, branch_2, branch_3], [expansion_order], 1, P2M!, P2P!)
+# tree = fmm.Tree(indices, branches, [expansion_order], n_per_branch, B2M!, P2P!)
+tree = fmm.Tree([1,2], [branch_1, branch_2, branch_3], [expansion_order], 1, B2M!, P2P!)
 
 # perform FMM manually since we artificially constructed the tree
-fmm.P2M!(tree, vortons, 2)
-fmm.P2M!(tree, vortons, 3)
+fmm.B2M!(tree, vortons, 2)
+fmm.B2M!(tree, vortons, 3)
 fmm.M2L!(tree, 2, 3)
 fmm.M2L!(tree, 3, 2)
-fmm.L2P!(tree, vortons, 2)
-fmm.L2P!(tree, vortons, 3)
+fmm.L2B!(tree, vortons, 2)
+fmm.L2B!(tree, vortons, 3)
 
 # theta = 2 # cutoff radius squared
 # fmm.fmm!(tree, vortons, theta)

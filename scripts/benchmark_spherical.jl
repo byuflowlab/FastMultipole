@@ -86,7 +86,7 @@ function benchmark_fmm(direct_files, ns, expansion_orders, ns_per_branch, thetas
 
             println("n = $n elements...")
             println("\tBuilding Tree...")
-            time_tree = @elapsed tree = fmm.Tree(masses, P2M!, P2P!; expansion_order, n_per_branch)
+            time_tree = @elapsed tree = fmm.Tree(masses, B2M!, P2P!; expansion_order, n_per_branch)
             println("\t\tcartesian tree time: $(time_tree) seconds")
 
             println("\tComputing FMM...")

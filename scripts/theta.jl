@@ -22,7 +22,7 @@ function test_accuracy(theta, expansion_order, n_per_branch=1)
     for i in 1:length(masses)
         masses[i].potential .*= 0
     end
-    time_fmm = @elapsed tree = fmm.fmm!(masses, expansion_order, n_per_branch, theta, P2M!, P2P!)
+    time_fmm = @elapsed tree = fmm.fmm!(masses, expansion_order, n_per_branch, theta, B2M!, P2P!)
 
     potential_fmm = [mass.potential[1] for mass in masses]
     for i in 1:length(masses)
