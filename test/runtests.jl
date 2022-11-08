@@ -350,8 +350,6 @@ elements.B2M!(tree, tree.branches[i_branch], bodies[:,new_order_index[i_mass]], 
 # fmm.cartesian_2_spherical!(this_dx)
 # fmm.regular_harmonic!(mp_expansion, this_dx..., expansion_order)
 
-# @show mp_expansion * ms[i_mass] tree.branches[i_branch].multipole_expansion
-
 center = tree.branches[i_branch].center
 
 x_target = [10.1,-7.3,8.6]

@@ -66,7 +66,6 @@ function branch!(branches, bodies, buffer, i_start, i_end, i_branch, center, rad
         for i_body in i_start:i_end
             x = bodies[1:3,i_body]
             i_octant = get_octant(x, center)
-            # @show x center (i_octant-0b1) indices
             octant_attendance[i_octant] += 1
         end
 
