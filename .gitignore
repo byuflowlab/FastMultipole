@@ -33,3 +33,6 @@ Manifest.toml
 # data
 *.jld
 *.zip
+*.vts
+*.vtk
+*.vtu
