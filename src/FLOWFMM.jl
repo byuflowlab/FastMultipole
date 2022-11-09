@@ -2,7 +2,8 @@ module FLOWFMM
 
 import Base.:^
 # import Statistics as S
-# import LinearAlgebra as LA
+using LinearAlgebra
+using StaticArrays
 
 # const THETA = 4
 const ONE_OVER_4PI = 1/4/pi

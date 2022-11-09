@@ -16,30 +16,67 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
     # get partial derivatives of the coordinates
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
-    drdx = s_theta * c_phi
-    drdy = s_theta * s_phi
-    drdz = c_theta
-    dthetadx = c_theta * c_phi / rho
-    dthetady = c_theta * s_phi / rho
-    dthetadz = -s_theta / rho
-    dphidx = -s_phi / rho / s_theta
-    dphidy = c_phi / rho / s_theta
-    dphidz = 0.0
+    # drdx = s_theta * c_phi
+    # drdy = s_theta * s_phi
+    # drdz = c_theta
+    # dthetadx = c_theta * c_phi / rho
+    # dthetady = c_theta * s_phi / rho
+    # dthetadz = -s_theta / rho
+    # dphidx = -s_phi / rho / s_theta
+    # dphidy = c_phi / rho / s_theta
+    # dphidz = 0.0
 
-    workspace *= 0
+    drjdxi = @SMatrix [
+        s_theta*c_phi c_theta*c_phi/rho -s_phi/rho/s_theta
+        s_theta * s_phi c_theta * s_phi / rho c_phi / rho / s_theta
+        c_theta -s_theta / rho 0
+    ]
+
+    drdxidxj = @SMatrix [
+        (1-cos(phi)^2 * sin(theta)^2)/rho -sin(theta)^2*cos(phi)*sin(phi)/rho -sin(theta)*cos(phi)*cos(theta)/rho;
+        (-sin(theta)^2*cos(phi)*sin(phi))/rho (1-sin(theta)^2*sin(phi)^2)/rho -sin(theta)*sin(phi)*cos(theta)/rho;
+        -sin(theta)*cos(phi)*cos(theta)/rho -sin(theta)*sin(phi)*cos(theta)/rho sin(theta)^2/rho
+    ]
+    dthetadxidxj = @SMatrix [
+        cos(theta)/sin(theta)*(1-cos(phi)^2*(1+2*sin(theta)^2))/rho^2 -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/rho^2 cos(phi)*(1-2*cos(theta)^2)/rho^2;
+        -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/rho^2 cos(theta)/sin(theta)*(1-sin(phi)^2*(1+2*sin(theta)^2))/rho^2 (2*sin(theta)^2-1)/rho^2*sin(phi);
+        cos(phi)*(1-2*cos(theta)^2)/rho^2 (2*sin(theta)^2-1)/rho^2*sin(phi) 2*sin(theta)*cos(theta)/rho^2
+    ]
+    dphidxidxj = @SMatrix [
+        2*cos(phi)*sin(phi)/rho^2/sin(theta)^2 (2*sin(phi)^2-1)/rho^2/sin(theta)^2 0;
+        (2*sin(phi)^2-1)/rho^2/sin(theta)^2 -2*sin(phi)*cos(phi)/rho^2/sin(theta)^2 0;
+        0 0 0
+    ]
+
+    # convert Hessian to cartesian coordinates
+    workspace3x3 = view(workspace,:,1:3)
     for ind in 1:4
-        workspace[1,ind] += potential_jacobian[1,ind] * drdx +
-                                potential_jacobian[2,ind] * dthetadx +
-                                potential_jacobian[3,ind] * dphidx
-        workspace[2,ind] += potential_jacobian[1,ind] * drdy +
-                                potential_jacobian[2,ind] * dthetady +
-                                potential_jacobian[3,ind] * dphidy
-        workspace[3,ind] += potential_jacobian[1,ind] * drdz +
-                                potential_jacobian[2,ind] * dthetadz
+        workspace3x3 .= potential_hessian[:,:,ind]
+        potential_hessian[:,:,ind] .= drjdxi * workspace3x3 * transpose(drjdxi)
+        potential_hessian[:,:,ind] .+= drdxidxj * potential_jacobian[1,ind]
+        potential_hessian[:,:,ind] .+= dthetadxidxj * potential_jacobian[2,ind]
+        potential_hessian[:,:,ind] .+= dphidxidxj * potential_jacobian[3,ind]
     end
-    potential_jacobian .= workspace
 
-    # TODO: convert Hessian to cartesian coordinates
+    workspace .= potential_jacobian
+    # potential_jacobian[1] += 100
+    # if workspace[1] == potential_jacobian[1]
+    #     println("REFERNCE ERROR")
+    # end
+    # potential_jacobian[1] -= 100
+
+    mul!(potential_jacobian, drjdxi, workspace)
+    # for ind in 1:4
+    #     workspace[1,ind] += potential_jacobian[1,ind] * drdx +
+    #                             potential_jacobian[2,ind] * dthetadx +
+    #                             potential_jacobian[3,ind] * dphidx
+    #     workspace[2,ind] += potential_jacobian[1,ind] * drdy +
+    #                             potential_jacobian[2,ind] * dthetady +
+    #                             potential_jacobian[3,ind] * dphidy
+    #     workspace[3,ind] += potential_jacobian[1,ind] * drdz +
+    #                             potential_jacobian[2,ind] * dthetadz
+    # end
+    # potential_jacobian .= workspace
 
     return nothing
 end
