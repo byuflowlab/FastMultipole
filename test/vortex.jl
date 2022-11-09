@@ -67,6 +67,13 @@ function VortexParticles(position, strength;
     velocity = zeros(3,N),
 )
     bodies = vcat(position, zeros(1,N), strength)
-    VortexParticles(bodies, potential, velocity, direct_vortex!, B2M_vortex!)
+    return VortexParticles(bodies, potential, velocity, direct_vortex!, B2M_vortex!)
 end
 
+function VortexParticles(bodies;
+    N = size(bodies)[2],
+    potential = zeros(52,N),
+    velocity = zeros(3,N),
+)
+    return VortexParticles(bodies, potential, velocity, direct_vortex!, B2M_vortex!)
+end
