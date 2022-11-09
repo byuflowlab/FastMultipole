@@ -1,4 +1,6 @@
 using Test
+import FLOWFMM
+fmm = FLOWFMM
 
 @testset "derivatives" begin
 """
@@ -88,7 +90,7 @@ fd = d2rdx2_fd(x,y,z)
 anal = d2rdx2_cart(x,y,z)
 
 for i in 1:length(fd)
-    @test isapprox(fd[i], anal[i]; atol=1e-4)
+    @test isapprox(fd[i], anal[i]; atol=1e-3)
 end
 end
 
@@ -168,7 +170,7 @@ function cs_derivative(func, i, args; step=1e-25)
     return imag(func(args))/step
 end
 
-function simple(X) 
+function simple(X)
     r = X[1]
     theta = X[2]
     phi = X[3]
@@ -256,7 +258,23 @@ cartesian_hessian .+= drjdxi * spherical_hessian * transpose(drjdxi)
 cartesian_hessian_fd = fd_hessian(simple_cart, spherical_2_cartesian(args...;vec=true))
 
 for i in 1:length(cartesian_hessian)
-    @test isapprox(cartesian_hessian[i], cartesian_hessian_fd[i]; atol=1e-5)
+    @test isapprox(cartesian_hessian[i], cartesian_hessian_fd[i]; atol=1e-4)
 end
 
+# now test FMM function
+potential_hessian = zeros(3,3,4)
+potential_jacobian = zeros(3,4)
+for i in 1:4
+    potential_hessian[:,:,i] .= spherical_hessian
+    potential_jacobian[:,i] .= spherical_grad
+end
+workspace = zeros(3,4)
+
+fmm.spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r0, theta0, phi0)
+
+for i in 1:3
+    for j in 1:3
+        @test isapprox(cartesian_hessian[i,j], potential_hessian[i,j,1]; atol=1e-12)
+    end
+end
 end
