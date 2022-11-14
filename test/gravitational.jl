@@ -1,10 +1,9 @@
 import FLOWFMM as fmm
 i_POSITION = fmm.i_POSITION
-i_STRENGTH = fmm.i_STRENGTH
+i_STRENGTH = 4:7
 i_POTENTIAL = fmm.i_POTENTIAL
 i_POTENTIAL_JACOBIAN = fmm.i_POTENTIAL_JACOBIAN
 i_POTENTIAL_HESSIAN = fmm.i_POTENTIAL_HESSIAN
-i_VELOCITY = fmm.i_VELOCITY
 
 #####
 ##### gravitational kernel and mass elements

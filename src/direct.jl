@@ -23,5 +23,5 @@
 Direct calculation of induced potential (no FMM acceleration).
 """
 function direct!(elements)
-    elements.direct!(view(elements.potential,:,:), elements.bodies[i_POSITION,:], elements.bodies)
+    elements.direct!(elements.potential, elements.bodies[i_POSITION,:], elements.bodies)
 end

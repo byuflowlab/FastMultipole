@@ -30,7 +30,7 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(elements; expansion_order=2, n_per_branch=1)
+function Tree(elements, expansion_order::Int, n_per_branch)
     # initialize objects
     bodies = elements.bodies
     buffer = similar(bodies)

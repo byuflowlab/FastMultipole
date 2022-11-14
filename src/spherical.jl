@@ -16,15 +16,6 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
     # get partial derivatives of the coordinates
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
-    # drdx = s_theta * c_phi
-    # drdy = s_theta * s_phi
-    # drdz = c_theta
-    # dthetadx = c_theta * c_phi / rho
-    # dthetady = c_theta * s_phi / rho
-    # dthetadz = -s_theta / rho
-    # dphidx = -s_phi / rho / s_theta
-    # dphidy = c_phi / rho / s_theta
-    # dphidz = 0.0
 
     drjdxi = @SMatrix [
         s_theta*c_phi c_theta*c_phi/rho -s_phi/rho/s_theta
@@ -32,51 +23,38 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
         c_theta -s_theta / rho 0
     ]
 
-    drdxidxj = @SMatrix [
-        (1-cos(phi)^2 * sin(theta)^2)/rho -sin(theta)^2*cos(phi)*sin(phi)/rho -sin(theta)*cos(phi)*cos(theta)/rho;
-        (-sin(theta)^2*cos(phi)*sin(phi))/rho (1-sin(theta)^2*sin(phi)^2)/rho -sin(theta)*sin(phi)*cos(theta)/rho;
-        -sin(theta)*cos(phi)*cos(theta)/rho -sin(theta)*sin(phi)*cos(theta)/rho sin(theta)^2/rho
-    ]
-    dthetadxidxj = @SMatrix [
-        cos(theta)/sin(theta)*(1-cos(phi)^2*(1+2*sin(theta)^2))/rho^2 -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/rho^2 cos(phi)*(1-2*cos(theta)^2)/rho^2;
-        -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/rho^2 cos(theta)/sin(theta)*(1-sin(phi)^2*(1+2*sin(theta)^2))/rho^2 (2*sin(theta)^2-1)/rho^2*sin(phi);
-        cos(phi)*(1-2*cos(theta)^2)/rho^2 (2*sin(theta)^2-1)/rho^2*sin(phi) 2*sin(theta)*cos(theta)/rho^2
-    ]
-    dphidxidxj = @SMatrix [
-        2*cos(phi)*sin(phi)/rho^2/sin(theta)^2 (2*sin(phi)^2-1)/rho^2/sin(theta)^2 0;
-        (2*sin(phi)^2-1)/rho^2/sin(theta)^2 -2*sin(phi)*cos(phi)/rho^2/sin(theta)^2 0;
-        0 0 0
-    ]
-
     # convert Hessian to cartesian coordinates
     workspace3x3 = view(workspace,:,1:3)
     for ind in 1:4
         workspace3x3 .= potential_hessian[:,:,ind]
         potential_hessian[:,:,ind] .= drjdxi * workspace3x3 * transpose(drjdxi)
-        potential_hessian[:,:,ind] .+= drdxidxj * potential_jacobian[1,ind]
-        potential_hessian[:,:,ind] .+= dthetadxidxj * potential_jacobian[2,ind]
-        potential_hessian[:,:,ind] .+= dphidxidxj * potential_jacobian[3,ind]
+        for k_coord in 1:3 # loop over r, theta, and phi to save me some space on the stack
+            if k_coord == 1 # r coordinate
+                drkdxidxj = @SMatrix [
+                    (1-cos(phi)^2 * sin(theta)^2)/rho -sin(theta)^2*cos(phi)*sin(phi)/rho -sin(theta)*cos(phi)*cos(theta)/rho;
+                    (-sin(theta)^2*cos(phi)*sin(phi))/rho (1-sin(theta)^2*sin(phi)^2)/rho -sin(theta)*sin(phi)*cos(theta)/rho;
+                    -sin(theta)*cos(phi)*cos(theta)/rho -sin(theta)*sin(phi)*cos(theta)/rho sin(theta)^2/rho
+                ]
+            elseif k_coord == 2 # theta coordinate
+                drkdxidxj = @SMatrix [
+                    cos(theta)/sin(theta)*(1-cos(phi)^2*(1+2*sin(theta)^2))/rho^2 -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/rho^2 cos(phi)*(1-2*cos(theta)^2)/rho^2;
+                    -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/rho^2 cos(theta)/sin(theta)*(1-sin(phi)^2*(1+2*sin(theta)^2))/rho^2 (2*sin(theta)^2-1)/rho^2*sin(phi);
+                    cos(phi)*(1-2*cos(theta)^2)/rho^2 (2*sin(theta)^2-1)/rho^2*sin(phi) 2*sin(theta)*cos(theta)/rho^2
+                ]
+            else # phi coordinate
+                drkdxidxj = @SMatrix [
+                    2*cos(phi)*sin(phi)/rho^2/sin(theta)^2 (2*sin(phi)^2-1)/rho^2/sin(theta)^2 0;
+                    (2*sin(phi)^2-1)/rho^2/sin(theta)^2 -2*sin(phi)*cos(phi)/rho^2/sin(theta)^2 0;
+                    0 0 0
+                ]
+            end
+            potential_hessian[:,:,ind] .+= drkdxidxj * potential_jacobian[k_coord,ind]
+        end
     end
 
     workspace .= potential_jacobian
-    # potential_jacobian[1] += 100
-    # if workspace[1] == potential_jacobian[1]
-    #     println("REFERNCE ERROR")
-    # end
-    # potential_jacobian[1] -= 100
 
     mul!(potential_jacobian, drjdxi, workspace)
-    # for ind in 1:4
-    #     workspace[1,ind] += potential_jacobian[1,ind] * drdx +
-    #                             potential_jacobian[2,ind] * dthetadx +
-    #                             potential_jacobian[3,ind] * dphidx
-    #     workspace[2,ind] += potential_jacobian[1,ind] * drdy +
-    #                             potential_jacobian[2,ind] * dthetady +
-    #                             potential_jacobian[3,ind] * dphidy
-    #     workspace[3,ind] += potential_jacobian[1,ind] * drdz +
-    #                             potential_jacobian[2,ind] * dthetadz
-    # end
-    # potential_jacobian .= workspace
 
     return nothing
 end
@@ -397,17 +375,19 @@ function L2B!(tree, elements, i_branch)
     harmonics_theta = Vector{Complex{Float64}}(undef, ((tree.expansion_order[1]+1) * (tree.expansion_order[1]+2)) >> 1)
     harmonics_theta_2 = Vector{Complex{Float64}}(undef, ((tree.expansion_order[1]+1) * (tree.expansion_order[1]+2)) >> 1)
     workspace = zeros(3,4)
+    spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
     for i_body in branch.first_body:branch.first_body + branch.n_bodies - 1
         body = elements.bodies[:,i_body]
         body_potential = view(elements.potential,:,i_body)
-        L2B!(body_potential, harmonics, harmonics_theta, harmonics_theta_2, workspace, body, tree, branch) # fix calling syntaxs
+        L2B!(body_potential, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, body, tree, branch) # fix calling syntaxs
+        spherical_potential .*= 0
     end
 end
 
-@inline function L2B!(body_potential, harmonics, harmonics_theta, harmonics_theta_2, workspace, body, tree, branch)
-    potential = view(body_potential,i_POTENTIAL)
-    potential_jacobian = reshape(view(body_potential, i_POTENTIAL_JACOBIAN),3,4)
-    potential_hessian = reshape(view(body_potential, i_POTENTIAL_HESSIAN),3,3,4)
+@inline function L2B!(body_potential, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, body, tree, branch)
+    potential = view(spherical_potential,i_POTENTIAL)
+    potential_jacobian = reshape(view(spherical_potential, i_POTENTIAL_JACOBIAN),3,4)
+    potential_hessian = reshape(view(spherical_potential, i_POTENTIAL_HESSIAN),3,3,4)
     dx = body[1:3] - branch.center
     cartesian_2_spherical!(dx)
     r, theta, phi = dx
@@ -423,13 +403,13 @@ end
             # dJ_potential[3,ind] += 0 # dPsi/dphi
             potential_hessian[1,1,ind] += n * (n-1) / r^2 * real(branch.local_expansion[ind][nms] * harmonics[nms]) # d2Psi/dr2
             potential_hessian[2,1,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dtheta dr
-            # potential_hessian[3,1,ind] += # d2Psi/dphi dr
+            # potential_hessian[3,1,ind] += 0 # d2Psi/dphi dr
             potential_hessian[1,2,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # d2Psi/dr dtheta
             potential_hessian[2,2,ind] += real(branch.local_expansion[ind][nms] * harmonics_theta_2[nms]) # d2Psi/dtheta2
-            # potential_hessian[3,2,ind] += # d2Psi/dphi dtheta
-            # potential_hessian[1,3,ind] += # d2Psi/dr dphi
-            # potential_hessian[2,3,ind] += # d2Psi/dtheta dphi
-            # potential_hessian[3,3,ind] += # d2Psi/dphi2
+            # potential_hessian[3,2,ind] += 0 # d2Psi/dphi dtheta
+            # potential_hessian[1,3,ind] += 0 # d2Psi/dr dphi
+            # potential_hessian[2,3,ind] += 0 # d2Psi/dtheta dphi
+            # potential_hessian[3,3,ind] += 0 # d2Psi/dphi2
         end
         for m in 1:n # m > 0
             # nm = n * n + n + m + 1
@@ -453,4 +433,5 @@ end
         end
     end
     spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, dx...)
+    body_potential .+= spherical_potential
 end

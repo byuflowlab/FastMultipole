@@ -1,11 +1,11 @@
 function P2P!(tree, elements, i_target, j_source)
     target_branch = tree.branches[i_target]
     is_target = target_branch.first_body:target_branch.first_body+target_branch.n_bodies-1
-    target_positions = view(elements.bodies,i_POSITION,is_target)
+    target_positions = elements.bodies[i_POSITION,is_target]
     target_potential = view(elements.potential, :, is_target)
     source_branch = tree.branches[j_source]
     is_source = source_branch.first_body:source_branch.first_body+source_branch.n_bodies-1
-    sources = view(elements.bodies,:,is_source)
+    sources = elements.bodies[:,is_source]
     elements.direct!(target_potential, target_positions, sources)
 end
 
@@ -19,11 +19,13 @@ function upward_pass!(tree, elements, i_branch)
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
         upward_pass!(tree, elements, i_child)
     end
-
+    
     # perform P2M (leaf level) or M2M (not leaf level) translations
     if branch.first_branch == -1 # no child branches
+        # println("UP: B2M: $i_branch")
         B2M!(tree, elements, i_branch)
     else
+        # println("UP: M2M: $i_branch")
         M2M!(tree, i_branch)
     end
 end
@@ -38,10 +40,12 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta)
     target_branch = branches[i_target]
     spacing = source_branch.center - target_branch.center
     spacing_squared = spacing' * spacing
-    threshold_squared = (target_branch.radius + source_branch.radius) * (target_branch.radius + source_branch.radius) * theta # theta is the number of radii squared
+    threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
     if spacing_squared >= threshold_squared # meet separation criteria
         M2L!(tree, i_target, j_source)
+        # println("HP: M2L: $i_target $j_source")
     elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
+        # println("HP: P2P: $i_target $j_source")
         P2P!(tree, elements, i_target, j_source)
     elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
         for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
@@ -64,8 +68,10 @@ function downward_pass!(tree, elements, j_source)
 
     # if a leaf, perform L2P on
     if branch.first_branch == -1 # leaf
+        # println("DP: L2B: $j_source")
         L2B!(tree, elements, j_source)
     else # not a leaf, so perform L2L! and recurse
+        # println("DP: L2L: $j_source")
         L2L!(tree, j_source)
         for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
             downward_pass!(tree, elements, i_child)
@@ -80,8 +86,13 @@ function fmm!(tree::Tree, elements, theta; reset_tree=true)
     downward_pass!(tree, elements)
 end
 
-function fmm!(elements, expansion_order, n_per_branch, theta)
-    tree = Tree(elements; expansion_order, n_per_branch)
-    fmm!(tree, elements, theta)
+"""
+Note: this function merely adds to existing potential of its elements to avoid overwriting potential calcualted due to other sources.
+
+The user must reset the potential manually.
+"""
+function fmm!(elements, options::Options)
+    tree = Tree(elements, options.expansion_order, options.n_per_branch)
+    fmm!(tree, elements, options.theta)
     return tree
 end
