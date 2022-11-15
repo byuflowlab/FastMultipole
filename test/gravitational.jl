@@ -10,6 +10,7 @@ i_POTENTIAL_HESSIAN = fmm.i_POTENTIAL_HESSIAN
 #####
 struct Gravitational
     bodies
+    index
     potential
     velocity
     direct!
@@ -61,7 +62,8 @@ end
 
 function Gravitational(bodies)
     N = size(bodies)[2]
+    index = zeros(Int32,N)
     potential = zeros(52,N)
     velocity = zeros(3,N)
-    return Gravitational(bodies, potential, velocity, direct_gravitational!, B2M_gravitational!)
+    return Gravitational(bodies, index, potential, velocity, direct_gravitational!, B2M_gravitational!)
 end

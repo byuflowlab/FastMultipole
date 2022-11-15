@@ -11,13 +11,14 @@ const i_POSITION_vortex = fmm.i_POSITION
 const i_STRENGTH_vortex = 4:6
 const i_POTENTIAL_SCALAR = fmm.i_POTENTIAL[1] # 1:4
 const i_POTENTIAL_VECTOR = fmm.i_POTENTIAL[2:4]
-const i_POTENTIAL_JACOBIAN = fmm.i_POTENTIAL_JACOBIAN # 5:16
-const i_POTENTIAL_HESSIAN = fmm.i_POTENTIAL_HESSIAN # 17:52
+i_POTENTIAL_JACOBIAN = fmm.i_POTENTIAL_JACOBIAN # 5:16
+i_POTENTIAL_HESSIAN = fmm.i_POTENTIAL_HESSIAN # 17:52
 const i_VELOCITY_vortex = 1:3
 const i_STRETCHING_vortex = 4:6
 
 struct VortexParticles
     bodies
+    index
     potential
     velocity_stretching # velocity and stretching term
     direct!
@@ -108,11 +109,12 @@ end
 
 function VortexParticles(bodies;
     N = size(bodies)[2],
+    index = zeros(Int32,N),
     potential = zeros(52,N),
     velocity_stretching = zeros(3+3,N),
 )
     @assert size(bodies)[1] == 6 "bodies size first index is incorrect; got $(size(bodies)[1]); expected 6"
-    return VortexParticles(bodies, potential, velocity_stretching, direct_vortex!, B2M_vortex!)
+    return VortexParticles(bodies, index, potential, velocity_stretching, direct_vortex!, B2M_vortex!)
 end
 
 @inline function update_velocity_stretching!(velocity, body, potential)
@@ -191,7 +193,7 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     else
         fmm.fmm!(vortex_particles, fmm_options)
     end
-    
+
     # convect bodies
     bodies = vortex_particles.bodies
     potential = vortex_particles.potential

@@ -34,6 +34,7 @@ function Tree(elements, expansion_order::Int, n_per_branch)
     # initialize objects
     bodies = elements.bodies
     buffer = similar(bodies)
+    index = elements.index
     branches = Vector{Branch}(undef,1)
 
     # recursively build branches
@@ -42,7 +43,7 @@ function Tree(elements, expansion_order::Int, n_per_branch)
     i_branch = 1
     center, radius = center_radius(elements; scale_radius = 1.00001)
     level = 0
-    branch!(branches, bodies, buffer, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+    branch!(branches, bodies, buffer, index, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # assemble tree
     tree = Tree(branches, [expansion_order], n_per_branch)
@@ -50,7 +51,7 @@ function Tree(elements, expansion_order::Int, n_per_branch)
     return tree
 end
 
-function branch!(branches, bodies, buffer, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+function branch!(branches, bodies, buffer, index, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = 0
     n_bodies = i_end - i_start + 1
     multipole_expansion = initialize_expansion(expansion_order)
@@ -95,11 +96,7 @@ function branch!(branches, bodies, buffer, i_start, i_end, i_branch, center, rad
             x = bodies[1:3,i_body]
             i_octant = get_octant(x, center)
             buffer[:,counter[i_octant]] .= bodies[:,i_body]
-            bodies[1,i_body] += 45
-            if buffer[1,i_body] == bodies[1,i_body]
-                println("Warning: reference error")
-            end
-            bodies[1,i_body] -= 45
+            index[i_body] = counter[i_octant]
             counter[i_octant] += 1
         end
 
@@ -119,7 +116,7 @@ function branch!(branches, bodies, buffer, i_start, i_end, i_branch, center, rad
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, bodies, buffer, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
+                branch!(branches, bodies, buffer, index, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
                 i_tape += 1
             end
         end
