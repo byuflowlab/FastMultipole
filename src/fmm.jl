@@ -1,12 +1,16 @@
-function P2P!(tree, elements, i_target, j_source)
+function P2P!(tree, elements_tuple::Tuple, i_target, j_source)
     target_branch = tree.branches[i_target]
-    is_target = target_branch.first_body:target_branch.first_body+target_branch.n_bodies-1
-    target_positions = elements.bodies[i_POSITION,is_target]
-    target_potential = view(elements.potential, :, is_target)
     source_branch = tree.branches[j_source]
-    is_source = source_branch.first_body:source_branch.first_body+source_branch.n_bodies-1
-    sources = elements.bodies[:,is_source]
-    elements.direct!(target_potential, target_positions, sources)
+    for (i_source,source_elements) in enumerate(elements_tuple)
+        for (i_target,target_elements) in enumerate(elements_tuple)
+            is_target = target_branch.first_body[i_target]:target_branch.first_body[i_target]+target_branch.n_bodies[i_target]-1
+            target_positions = target_elements.bodies[i_POSITION,is_target]
+            target_potential = view(target_elements.potential, :, is_target)
+            is_source = source_branch.first_body[i_source]:source_branch.first_body[i_source]+source_branch.n_bodies[i_source]-1
+            sources = source_elements.bodies[:,is_source]
+            source_elements.direct!(target_potential, target_positions, sources)
+        end
+    end
 end
 
 function upward_pass!(tree::Tree, elements)
@@ -19,7 +23,7 @@ function upward_pass!(tree, elements, i_branch)
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
         upward_pass!(tree, elements, i_child)
     end
-    
+
     # perform P2M (leaf level) or M2M (not leaf level) translations
     if branch.first_branch == -1 # no child branches
         # println("UP: B2M: $i_branch")
@@ -30,7 +34,7 @@ function upward_pass!(tree, elements, i_branch)
     end
 end
 
-function horizontal_pass!(tree, elements, theta)
+function horizontal_pass!(tree, elements::Tuple, theta)
     horizontal_pass!(tree, elements, 1, 1, theta)
 end
 
@@ -87,11 +91,25 @@ function fmm!(tree::Tree, elements, theta; reset_tree=true)
 end
 
 """
+    fmm!(elements::Tuple{Element1, Element2,...}, options::Options)
+
+Calculates the influence of all scalar and/or vector potential elements using the fast multipole method in spherical harmonics.
+
+# Inputs
+
+- `elements::Tuple{Element1, Element2, ...}`- a tuple of structs, each containing the following members:
+
+    * `bodies::Array{Float64,2}`- 3+4+mxN array containing element positions, strengths, and m other values that must be sorted into the octree
+    * `index::Vector{Int32}`- length N; `index[i]` contains the new index of the element that used to occupy the ith position before being sorted into the octree
+    * `potential::Array{Float64,2}`- 4+12+36xN array of the potential, Jacobian, and Hessian that are reset every iteration (and don't require sorting)
+    * `direct!::Function`- function calculates the direct influence of the body at the specified location
+    * `B2M!::Function`- function converts the body's influence into a multipole expansion
+
 Note: this function merely adds to existing potential of its elements to avoid overwriting potential calcualted due to other sources.
 
 The user must reset the potential manually.
 """
-function fmm!(elements, options::Options)
+function fmm!(elements::Tuple, options::Options)
     tree = Tree(elements, options.expansion_order, options.n_per_branch)
     fmm!(tree, elements, options.theta)
     return tree

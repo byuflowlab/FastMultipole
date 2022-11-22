@@ -22,6 +22,10 @@
 
 Direct calculation of induced potential (no FMM acceleration).
 """
-function direct!(elements)
-    elements.direct!(elements.potential, elements.bodies[i_POSITION,:], elements.bodies)
+function direct!(elements_tuple::Tuple)
+    for source_elements in elements_tuple
+        for target_elements in elements_tuple
+            source_elements.direct!(target_elements.potential, target_elements.bodies[i_POSITION,:], source_elements.bodies)
+        end
+    end
 end

@@ -22,9 +22,9 @@ function B2M_gravitational!(tree, branch, bodies, n_bodies, harmonics)
         dx = bodies[i_POSITION,i_body] - branch.center
         q = bodies[i_STRENGTH,i_body]
         fmm.cartesian_2_spherical!(dx)
-        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order[1]) # Ylm^* -> -dx[3]
+        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order) # Ylm^* -> -dx[3]
         # update values
-        for l in 0:tree.expansion_order[1]
+        for l in 0:tree.expansion_order
             for m in 0:l
                 i_solid_harmonic = l^2 + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
