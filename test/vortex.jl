@@ -2,11 +2,13 @@
 
 import FLOWFMM as fmm
 import WriteVTK
+using SpecialFunctions:erf
 
 #####
 ##### classic vortex particle method
 #####
 const ONE_OVER_4PI = 1/4/pi
+const sqrt2 = sqrt(2)
 const i_POSITION_vortex = fmm.i_POSITION
 const i_STRENGTH_vortex = 4:6
 const i_POTENTIAL_SCALAR = fmm.i_POTENTIAL[1] # 1:4
@@ -47,28 +49,78 @@ function direct_vortex!(target_potential, target_positions, source_bodies)
             r = sqrt(dx' * dx)
             if r > 0
                 # calculate induced potential
-                d_potential = source_bodies[i_STRENGTH_vortex,j_source] / r
-                target_potential[i_POTENTIAL_VECTOR,i_target] .+= d_potential
+                gamma_over_R = source_bodies[i_STRENGTH_vortex,j_source] / r
+                target_potential[i_POTENTIAL_VECTOR,i_target] .+= gamma_over_R
 
                 # calculate induced jacobian
                 # off diagonal elements are formed from the vector potential
                 # diagonal elements are omitted (not needed?)
-                gamma_over_R3 = source_bodies[i_STRENGTH_vortex,j_source] / r^3
+                # gamma_over_R3 = source_bodies[i_STRENGTH_vortex,j_source] / r^3
+                gamma_over_R /= r^2
                 for j_potential in 2:4
                     for i_r in 1:3
-                        target_jacobian[i_r,j_potential] -= gamma_over_R3[j_potential-1] * dx[i_r]
+                        target_jacobian[i_r,j_potential] -= gamma_over_R[j_potential-1] * dx[i_r]
                     end
                 end
-                gamma_over_R3 /= r^2
-                target_hessian[1,1,i_POTENTIAL_VECTOR] += gamma_over_R3 .* (2 * dx[1]^2 - dx[2]^2 - dx[3]^2) # dx2
-                target_hessian[1,2,i_POTENTIAL_VECTOR] += gamma_over_R3 * 3 * dx[1] * dx[2] # dxdy
-                target_hessian[1,3,i_POTENTIAL_VECTOR] += gamma_over_R3 * 3 * dx[1] * dx[3] # dxdz
-                target_hessian[2,1,i_POTENTIAL_VECTOR] += gamma_over_R3 * 3 * dx[1] * dx[2] # dxdy
-                target_hessian[2,2,i_POTENTIAL_VECTOR] += gamma_over_R3 .* (-dx[1]^2 + 2 * dx[2]^2 - dx[3]^2) # dy2
-                target_hessian[2,3,i_POTENTIAL_VECTOR] += gamma_over_R3 * 3 * dx[2] * dx[3] # dydz
-                target_hessian[3,1,i_POTENTIAL_VECTOR] += gamma_over_R3 * 3 * dx[1] * dx[3] # dxdz
-                target_hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R3 * 3 * dx[2] * dx[3] # dydz
-                target_hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R3 .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
+                gamma_over_R /= r^2
+                target_hessian[1,1,i_POTENTIAL_VECTOR] += gamma_over_R .* (2 * dx[1]^2 - dx[2]^2 - dx[3]^2) # dx2
+                target_hessian[1,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
+                target_hessian[1,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
+                target_hessian[2,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
+                target_hessian[2,2,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 + 2 * dx[2]^2 - dx[3]^2) # dy2
+                target_hessian[2,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
+                target_hessian[3,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
+                target_hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
+                target_hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
+            end
+        end
+    end
+end
+
+"""
+Gaussian smoothing.
+"""
+function direct_vortex_gaussian!(target_potential, target_positions, source_bodies)
+    n_targets = size(target_potential)[2]
+    n_sources = size(source_bodies)[2]
+    for j_source in 1:n_sources
+        x_source = source_bodies[i_POSITION_vortex,j_source]
+        for i_target in 1:n_targets
+            target_jacobian = reshape(view(target_potential,i_POTENTIAL_JACOBIAN,i_target),3,4)
+            target_hessian = reshape(view(target_potential,i_POTENTIAL_HESSIAN,i_target),3,3,4)
+            x_target = target_positions[:,i_target]
+            dx = x_target - x_source
+            r2 = dx' * dx
+            if r2 > 0
+                r = sqrt(r2)
+                # calculate induced potential
+                erfrs2 = erf(r/sqrt2)
+                sigma = source_bodies[i_SIGMA,j_source]
+                gamma_over_R = source_bodies[i_STRENGTH_vortex,j_source] / r * erfrs2 / sigma
+                target_potential[i_POTENTIAL_VECTOR,i_target] .+= gamma_over_R
+
+                # calculate induced jacobian
+                # off diagonal elements are formed from the vector potential
+                # diagonal elements are omitted (not needed?)
+                # gamma_over_R3 = source_bodies[i_STRENGTH_vortex,j_source] / r^3
+                dGdr = -erfrs2/r2 + sqrt2/sqrt(pi)/r*exp(-r2/2)
+                # gamma_over_R /= r^2
+                # gamma_over_R *=
+                for j_potential in 2:4
+                    for i_r in 1:3
+                        target_jacobian[i_r,j_potential] -= gamma_over_R[j_potential-1] * dx[i_r]
+                    end
+                end
+                gamma_over_R /= r^2
+                target_hessian[1,1,i_POTENTIAL_VECTOR] += gamma_over_R .* (2 * dx[1]^2 - dx[2]^2 - dx[3]^2) # dx2
+                target_hessian[1,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
+                target_hessian[1,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
+                target_hessian[2,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
+                target_hessian[2,2,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 + 2 * dx[2]^2 - dx[3]^2) # dy2
+                target_hessian[2,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
+                target_hessian[3,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
+                target_hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
+                target_hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
             end
         end
     end
@@ -157,29 +209,6 @@ function update_velocity_stretching!(vortex_particles::VortexParticles)
     end
 end
 
-# @inline function update_stretching!(velocity, body, potential)
-#     # jacobian of the velocity
-#     hessian = reshape(potential[i_POTENTIAL_HESSIAN],3,3,4)
-#     duidxj = @SMatrix [
-#         -hessian[1,1,1]+hessian[2,1,4]-hessian[3,1,3] -hessian[1,2,1]+hessian[2,2,4]-hessian[3,2,3] -hessian[1,3,1]+hessian[2,3,4]-hessian[3,3,3];
-#         -hessian[2,1,1]+hessian[3,1,2]-hessian[1,1,4] -hessian[2,2,1]+hessian[3,2,2]-hessian[1,2,4] -hessian[2,3,1]+hessian[3,3,2]-hessian[1,3,4];
-#         -hessian[3,1,1]+hessian[1,1,3]-hessian[2,1,2] -hessian[3,2,1]+hessian[1,2,3]-hessian[2,2,2] -hessian[3,3,1]+hessian[1,3,3]-hessian[2,3,2];
-#     ]
-#     # vorticity = @SVector [
-#     #     jacobian[2,3] - jacobian[3,2],
-#     #     jacobian[3,1] - jacobian[1,3],
-#     #     jacobian[1,2] - jacobian[2,1]
-#     # ]
-#     # stretching term (omega dot nabla)
-
-#     # strength total derivative
-#     check = deepcopy(velocity[4:6])
-#     mul!(velocity[4:6], duidxj, body[i_STRENGTH_vortex])
-#     if prod(check .== velocity[4:6])
-#         println("REFERENCE ERROR: update_velocity!")
-#     end
-# end
-
 "Assumes velocities and potential and derivatives are already calculated."
 function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     # reset potential
@@ -191,7 +220,7 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     if direct
         fmm.direct!(vortex_particles)
     else
-        fmm.fmm!(vortex_particles, fmm_options)
+        fmm.fmm!((vortex_particles,), fmm_options)
     end
 
     # convect bodies
@@ -219,14 +248,14 @@ function convect!(vortex_particles::VortexParticles, nsteps;
     save && save_vtk(filename, vortex_particles; compress)
     for istep in 1:nsteps
         integrate!(vortex_particles, fmm_options, direct)
-        save && save_vtk(filename, vortex_particles; compress)
+        save && save_vtk(filename, vortex_particles, istep; compress)
     end
     return nothing
 end
 
-function save_vtk(filename, vortex_particles::VortexParticles; compress=false)
+function save_vtk(filename, vortex_particles::VortexParticles, nt=0; compress=false)
     n_bodies = size(vortex_particles.bodies)[2]
-    WriteVTK.vtk_grid(filename, reshape(vortex_particles.bodies[i_POSITION_vortex,:], 3, n_bodies,1,1); compress) do vtk
+    WriteVTK.vtk_grid(filename*"."*string(nt)*".vts", reshape(vortex_particles.bodies[i_POSITION_vortex,:], 3, n_bodies,1,1); compress) do vtk
         vtk["vector strength"] = reshape(vortex_particles.bodies[i_STRENGTH_vortex,:],3,n_bodies,1,1)
         vtk["scalar potential"] = reshape(vortex_particles.potential[i_POTENTIAL_SCALAR,:],n_bodies,1,1)
         vtk["vector potential"] = reshape(vortex_particles.potential[i_POTENTIAL_VECTOR,:],3,n_bodies,1,1)

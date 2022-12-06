@@ -89,7 +89,7 @@ theta = 4
 dt = 1.0
 fmm_options = fmm.Options(expansion_order, n_per_branch, theta)
 integrate! = Euler(dt)
-nsteps = 10
+nsteps = 200
 
 convect!(vortex_particles, nsteps;
         # integration options
