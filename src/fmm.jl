@@ -110,7 +110,7 @@ Note: this function merely adds to existing potential of its elements to avoid o
 The user must reset the potential manually.
 """
 function fmm!(elements::Tuple, options::Options)
-    tree = Tree(elements, options.expansion_order, options.n_per_branch)
+    tree = Tree(elements, options.expansion_order, options.n_per_branch, options.targets_index)
     fmm!(tree, elements, options.theta)
     return tree
 end

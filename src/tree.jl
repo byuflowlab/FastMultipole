@@ -9,6 +9,7 @@ struct Branch{TF}
     radius::TF              # side lengths of the rectangle encapsulating the branch
     multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
+    is_target::Bool
 end
 
 struct Tree{TF}
@@ -31,8 +32,10 @@ Constructs an octree of the provided element objects.
     * `velocity::Array{Float64,2}`- 3xN array of the velocity vectors at each element, reset every iteration, and calculated in post-processing
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
+
+- `targets_index::Vector{Int}`- vector containing the indices of each member of the `elements_tuple` argument which is to be a target
 """
-function Tree(elements_tuple::Tuple, expansion_order, n_per_branch)
+function Tree(elements_tuple::Tuple, expansion_order, n_per_branch, targets_index)
     # initialize objects
     bodies_list = [elements.bodies for elements in elements_tuple]
     buffer_list = [similar(bodies) for bodies in bodies_list]
@@ -45,7 +48,7 @@ function Tree(elements_tuple::Tuple, expansion_order, n_per_branch)
     i_branch = 1
     center, radius = center_radius(elements_tuple; scale_radius = 1.00001)
     level = 0
-    branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+    branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index)
 
     # assemble tree
     tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch))
@@ -53,7 +56,7 @@ function Tree(elements_tuple::Tuple, expansion_order, n_per_branch)
     return tree
 end
 
-function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
     n_types = length(i_start)
@@ -61,7 +64,8 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
     local_expansion = initialize_expansion(expansion_order)
     if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a leaf; no new branches needed
         i_child = Int32(-1)
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
+        is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
+        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target)
         branches[i_branch] = branch
         return nothing
     else # not a leaf; branch children
@@ -79,10 +83,11 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
         for i_octant in 1:8
             n_branches += true in (octant_attendance[i_octant,:] .> 0) # check for elements of any type
         end
-        
+
         # create branch
         i_child = Int32(length(branches) + 1)
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
+        is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
+        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target)
 
         # sort bodies
         ## write offsets

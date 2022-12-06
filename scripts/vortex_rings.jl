@@ -87,7 +87,8 @@ theta = 4
 # vortex_particles.velocity_stretching .*= 0
 
 dt = 1.0
-fmm_options = fmm.Options(expansion_order, n_per_branch, theta)
+targets = 1
+fmm_options = fmm.Options(expansion_order, n_per_branch, theta, targets)
 integrate! = Euler(dt)
 nsteps = 200
 
