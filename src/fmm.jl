@@ -45,49 +45,53 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta)
     spacing = source_branch.center - target_branch.center
     spacing_squared = spacing' * spacing
     threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
-    if spacing_squared >= threshold_squared # meet separation criteria
-        M2L!(tree, i_target, j_source)
-        # println("HP: M2L: $i_target $j_source")
-    elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
-        # println("HP: P2P: $i_target $j_source")
-        P2P!(tree, elements, i_target, j_source)
-    elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-            horizontal_pass!(tree, elements, i_child, j_source, theta)
-        end
-    else
-        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-            horizontal_pass!(tree, elements, i_target, j_child, theta)
+    if target_branch.is_target
+        if spacing_squared >= threshold_squared # meet separation criteria
+            M2L!(tree, i_target, j_source)
+            # println("HP: M2L: $i_target $j_source")
+        elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
+            # println("HP: P2P: $i_target $j_source")
+            P2P!(tree, elements, i_target, j_source)
+        elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
+            for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+                horizontal_pass!(tree, elements, i_child, j_source, theta)
+            end
+        else
+            for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+                horizontal_pass!(tree, elements, i_target, j_child, theta)
+            end
         end
     end
 end
 
-function downward_pass!(tree, elements)
-    downward_pass!(tree, elements, 1)
+function downward_pass!(tree, elements, targets_index)
+    downward_pass!(tree, elements, 1, targets_index)
 end
 
-function downward_pass!(tree, elements, j_source)
+function downward_pass!(tree, elements, j_source, targets_index)
     # expose branch
     branch = tree.branches[j_source]
 
-    # if a leaf, perform L2P on
-    if branch.first_branch == -1 # leaf
-        # println("DP: L2B: $j_source")
-        L2B!(tree, elements, j_source)
-    else # not a leaf, so perform L2L! and recurse
-        # println("DP: L2L: $j_source")
-        L2L!(tree, j_source)
-        for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
-            downward_pass!(tree, elements, i_child)
+    if branch.is_target
+        # if a leaf, perform L2P on
+        if branch.first_branch == -1 # leaf
+            # println("DP: L2B: $j_source")
+            L2B!(tree, elements, j_source, targets_index)
+        else # not a leaf, so perform L2L! and recurse
+            # println("DP: L2L: $j_source")
+            L2L!(tree, j_source)
+            for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+                downward_pass!(tree, elements, i_child)
+            end
         end
     end
 end
 
-function fmm!(tree::Tree, elements, theta; reset_tree=true)
+function fmm!(tree::Tree, elements, options::Options; reset_tree=true)
     if reset_tree; reset_expansions!(tree); end
     upward_pass!(tree, elements)
-    horizontal_pass!(tree, elements, theta)
-    downward_pass!(tree, elements)
+    horizontal_pass!(tree, elements, options.theta)
+    downward_pass!(tree, elements, options.targets_index)
 end
 
 """

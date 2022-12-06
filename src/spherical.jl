@@ -371,18 +371,19 @@ function L2L!(tree, j_source)
 end
 
 "Calculates the potential at all child elements of a branch."
-function L2B!(tree, elements_tuple::Tuple, i_branch)
+function L2B!(tree, elements_tuple::Tuple, i_branch, targets_index)
     branch = tree.branches[i_branch]
     harmonics = Vector{Complex{Float64}}(undef, ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
     harmonics_theta = Vector{Complex{Float64}}(undef, ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
     harmonics_theta_2 = Vector{Complex{Float64}}(undef, ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
     workspace = zeros(3,4)
     spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
-    for (i_type, elements) in enumerate(elements_tuple)
+    for (i_target, elements) in enumerate(elements_tuple[targets_index])
+        i_type = targets_index[i_target]
         for i_body in branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1
             body = elements.bodies[:,i_body]
             body_potential = view(elements.potential,:,i_body)
-            L2B!(body_potential, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, body, tree, branch) # fix calling syntaxs
+            L2B!(body_potential, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, body, tree, branch)
             spherical_potential .*= 0
         end
     end
