@@ -29,3 +29,13 @@ function direct!(elements_tuple::Tuple)
         end
     end
 end
+
+function direct!(elements_tuple::Tuple, options::Options; swap_source_target=false)
+    sources_index = swap_source_target ? options.targets_index : options.sources_index
+    targets_index = swap_source_target ? options.sources_index : options.targets_index
+    for source_elements in elements_tuple[sources_index]
+        for target_elements in elements_tuple[targets_index]
+            source_elements.direct!(target_elements.potential, target_elements.bodies[i_POSITION,:], source_elements.bodies)
+        end
+    end
+end

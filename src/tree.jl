@@ -10,6 +10,7 @@ struct Branch{TF}
     multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
     is_target::Bool
+    is_source::Bool
 end
 
 struct Tree{TF}
@@ -17,6 +18,8 @@ struct Tree{TF}
     expansion_order::Int16
     n_per_branch::Int32    # max number of bodies in a leaf
 end
+
+Tree(branches, expansion_order, n_per_branch) = Tree(branches, Int16(expansion_order), Int32(n_per_branch))
 
 """
     Tree(elements; expansion_order=2, n_per_branch=1)
@@ -35,7 +38,13 @@ Constructs an octree of the provided element objects.
 
 - `targets_index::Vector{Int}`- vector containing the indices of each member of the `elements_tuple` argument which is to be a target
 """
-function Tree(elements_tuple::Tuple, expansion_order, n_per_branch, targets_index)
+function Tree(elements_tuple::Tuple, options::Options)
+    # unpack options
+    expansion_order = options.expansion_order
+    n_per_branch = options.n_per_branch
+    targets_index = options.targets_index
+    sources_index = options.sources_index
+
     # initialize objects
     bodies_list = [elements.bodies for elements in elements_tuple]
     buffer_list = [similar(bodies) for bodies in bodies_list]
@@ -48,7 +57,7 @@ function Tree(elements_tuple::Tuple, expansion_order, n_per_branch, targets_inde
     i_branch = 1
     center, radius = center_radius(elements_tuple; scale_radius = 1.00001)
     level = 0
-    branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index)
+    branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
 
     # assemble tree
     tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch))
@@ -56,7 +65,7 @@ function Tree(elements_tuple::Tuple, expansion_order, n_per_branch, targets_inde
     return tree
 end
 
-function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index)
+function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
     n_types = length(i_start)
@@ -65,7 +74,8 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
     if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a leaf; no new branches needed
         i_child = Int32(-1)
         is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target)
+        is_source = maximum(n_bodies[sources_index]) > 0 ? true : false
+        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target, is_source)
         branches[i_branch] = branch
         return nothing
     else # not a leaf; branch children
@@ -87,7 +97,8 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
         # create branch
         i_child = Int32(length(branches) + 1)
         is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target)
+        is_source = maximum(n_bodies[sources_index]) > 0 ? true : false
+        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target, is_source)
 
         # sort bodies
         ## write offsets
@@ -127,7 +138,7 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, bodies_list, buffer_list, index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
+                branch!(branches, bodies_list, buffer_list, index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch, targets_index, sources_index)
                 i_tape += 1
             end
         end

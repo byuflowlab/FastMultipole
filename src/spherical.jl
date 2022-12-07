@@ -175,7 +175,7 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
     end
 end
 
-function B2M!(tree, elements_tuple::Tuple, i_branch)
+function B2M!(tree, elements_tuple::Tuple, i_branch, sources_index)
     branch = tree.branches[i_branch]
 
     #initialize memory TODO: do this beforehand?
@@ -186,7 +186,8 @@ function B2M!(tree, elements_tuple::Tuple, i_branch)
     #     body = elements.bodies[:,i_body]
     #     elements.B2M!(tree, branch, body, harmonics)
     # end
-    for (i_type, elements) in enumerate(elements_tuple)
+    for (i_iter, elements) in enumerate(elements_tuple[sources_index])
+        i_type = sources_index[i_iter]
         i_bodies = branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1
         elements.B2M!(tree, branch, view(elements.bodies, :, i_bodies), branch.n_bodies[i_type], harmonics)
     end

@@ -208,7 +208,8 @@ end
     @test isapprox(radius, test_radius; atol=1e-4)
 
     # test branch! function
-    tree = fmm.Tree((elements,), 2, 1)
+    options = fmm.Options(2,1,4.0)
+    tree = fmm.Tree((elements,), options)
 
     test_branches = [
         5 0.65 0.65 0.55 0.5500055;
@@ -337,7 +338,10 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 2
-tree = fmm.Tree((elements,), expansion_order, 1)
+n_per_branch = 1
+theta = 4.0
+options = fmm.Options(expansion_order, n_per_branch, theta)
+tree = fmm.Tree((elements,), options)
 
 i_mass = 1
 i_branch = 5 # use the first mass
@@ -411,7 +415,8 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 3
-tree = fmm.Tree((elements,), expansion_order, 1)
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree((elements,), options)
 
 i_branch = 2 # contains 4th and 5th elements
 i_branch_4 = 6 # use the fourth mass
@@ -465,7 +470,8 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-tree = fmm.Tree((elements,), expansion_order, 1)
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree((elements,), options)
 
 branch_i = 2 # contains two elements; 4 and 5
 target_i = new_order_index[4]
@@ -529,7 +535,8 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-tree = fmm.Tree((elements,), expansion_order, 1)
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree((elements,), options)
 
 # local coefficient at branch 2 due to mass 1
 fmm.B2L!(tree, 2, elements.bodies[:,new_order_index[1]])
@@ -555,7 +562,7 @@ fmm.irregular_harmonic!(local_coefficients_check, dx_check..., expansion_order)
 local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
-fmm.L2B!(tree, (elements,), 7)
+fmm.L2B!(tree, (elements,), 7, [1])
 u_fmm = elements.potential[1,new_order_index[5]]
 
 dx_direct = elements.bodies[i_POSITION,new_order_index[5]] - elements.bodies[i_POSITION,new_order_index[1]]
@@ -597,7 +604,8 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 30
-tree = fmm.Tree((elements,), expansion_order, 1)
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree((elements,), options)
 
 i_branch_multipole = 7 # mass 5
 i_branch_local = 5 # mass 1
@@ -667,10 +675,11 @@ elements = Gravitational(bodies)
 
 expansion_order = 24
 theta = 4
-tree = fmm.Tree((elements,), expansion_order, 1)
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree((elements,), options)
 
 # perform upward pass
-fmm.upward_pass!(tree, (elements,))
+fmm.upward_pass!(tree, (elements,), options.sources_index)
 
 # m6 = tree.branches[6].multipole_expansion
 target = [4.1,2.2,3.4]
@@ -694,7 +703,7 @@ fmm.M2B!(mass_target_potential, mass_target, 2, tree)
 u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
-fmm.horizontal_pass!(tree, (elements,), theta)
+fmm.horizontal_pass!(tree, (elements,), theta, [1], [1])
 
 # consider the effect on branch 3 (mass 2)
 elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at mass 2
@@ -702,9 +711,9 @@ elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at ma
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[1]])
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[2]])
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[3]])
-fmm.P2P!(tree, (elements,), 3, 3)
-fmm.P2P!(tree, (elements,), 3, 4)
-fmm.P2P!(tree, (elements,), 3, 5)
+fmm.P2P!(tree, (elements,), 3, 3, [1], [1])
+fmm.P2P!(tree, (elements,), 3, 4, [1], [1])
+fmm.P2P!(tree, (elements,), 3, 5, [1], [1])
 u_fmm_123 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_12 = elements.bodies[i_POSITION,new_order_index[2]] - elements.bodies[i_POSITION,new_order_index[1]]
@@ -717,7 +726,7 @@ u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
 # M2L is performed from branches 6, 7 to branch 3 (containing mass 2)
 # fmm.L2B!(element, tree, branch, harmonics, harmonics_theta)
-fmm.L2B!(tree, (elements,), 3)
+fmm.L2B!(tree, (elements,), 3, [1])
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_42 = elements.bodies[i_POSITION,new_order_index[4]] - elements.bodies[i_POSITION,new_order_index[2]]
@@ -734,7 +743,7 @@ u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
 elements.potential .*= 0
 
 # run fmm (reset potentials with reset_tree flag)
-fmm.fmm!(tree, (elements,), theta; reset_tree=true)
+fmm.fmm!(tree, (elements,), options; reset_tree=true)
 u_fmm = deepcopy(elements.potential[1,:])
 
 elements.potential .*= 0
@@ -1071,23 +1080,24 @@ vortexparticles.potential .*= 0
 # Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
 expansion_order = 9
 x_branch_1 = [0.0,0,0]
-branch_1 = fmm.Branch(Int8(2), Int32.([2]), Int32(2), Int32.([1]), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+branch_1 = fmm.Branch(Int8(2), Int32.([2]), Int32(2), Int32.([1]), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), true, true)
 x_branch_2 = xs[:,1] .+ [0.01, 0.02, -0.03]
-branch_2 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([1]), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+branch_2 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([1]), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), true, true)
 x_branch_3 = xs[:,2] .+ [0.02, -0.04, 0.01]
-branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), true, true)
 
 # using FMM
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch, B2M!, P2P!)
-tree = fmm.Tree([branch_1, branch_2, branch_3], Int16(expansion_order), Int32(1))
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1)
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-fmm.B2M!(tree, (vortexparticles,), 2)
-fmm.B2M!(tree, (vortexparticles,), 3)
+fmm.B2M!(tree, (vortexparticles,), 2, options.sources_index)
+fmm.B2M!(tree, (vortexparticles,), 3, options.sources_index)
 
 fmm.M2L!(tree, 2, 3)
 fmm.M2L!(tree, 3, 2)
-fmm.L2B!(tree, (vortexparticles,), 2)
-fmm.L2B!(tree, (vortexparticles,), 3)
+fmm.L2B!(tree, (vortexparticles,), 2, options.targets_index)
+fmm.L2B!(tree, (vortexparticles,), 3, options.targets_index)
 update_velocity_stretching!(vortexparticles)
 
 for i in 1:2
@@ -1220,14 +1230,15 @@ vortex_particles.velocity_stretching .*= 0
 # branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
 expansion_order = 9
 x_branch_1 = (bodies[1:3,1] + bodies[1:3,2])/2
-branch_1 = fmm.Branch(Int8(2), Int32.([2]), Int32(2), Int32.([1]), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+branch_1 = fmm.Branch(Int8(2), Int32.([2]), Int32(2), Int32.([1]), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), true, true)
 x_branch_2 = bodies[1:3,1] .+ [0.01, 0.02, -0.03]
-branch_2 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([1]), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+branch_2 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([1]), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), true, true)
 x_branch_3 = bodies[1:3,2] .+ [0.02, -0.04, 0.01]
-branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
+branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), true, true)
 
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch)
-tree = fmm.Tree([branch_1, branch_2, branch_3], Int16(expansion_order), Int32(1))
+options = fmm.Options(expansion_order, 1, 4.0)
+tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1)
 # fmm.B2M!(tree, vortex_particles, 2)
 # fmm.B2M!(tree, vortex_particles, 3)
 
@@ -1236,7 +1247,7 @@ tree = fmm.Tree([branch_1, branch_2, branch_3], Int16(expansion_order), Int32(1)
 # fmm.L2B!(tree, vortex_particles, 2)
 # fmm.L2B!(tree, vortex_particles, 3)
 theta = 4
-fmm.fmm!(tree, (vortex_particles,), theta)
+fmm.fmm!(tree, (vortex_particles,), options)
 update_velocity_stretching!(vortex_particles)
 
 psis_fmm = deepcopy(vortex_particles.potential[2:4,:])
@@ -1428,7 +1439,8 @@ n_per_branch = 1
 
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch)
 # tree = fmm.Tree([branch_1, branch_2, branch_3, branch_4], [expansion_order], 1)
-tree = fmm.Tree((vortex_particles,), expansion_order, n_per_branch)
+options = fmm.Options(expansion_order, n_per_branch, 4.0)
+tree = fmm.Tree((vortex_particles,), options)
 # fmm.B2M!(tree, vortex_particles, 2)
 # fmm.B2M!(tree, vortex_particles, 3)
 
@@ -1437,7 +1449,7 @@ tree = fmm.Tree((vortex_particles,), expansion_order, n_per_branch)
 # fmm.L2B!(tree, vortex_particles, 2)
 # fmm.L2B!(tree, vortex_particles, 3)
 theta =2.0
-fmm.fmm!(tree, (vortex_particles,), theta)
+fmm.fmm!(tree, (vortex_particles,), options)
 
 update_velocity_stretching!(vortex_particles)
 
