@@ -49,7 +49,13 @@ function Tree(elements_tuple::Tuple, options::Options)
     bodies_list = [elements.bodies for elements in elements_tuple]
     buffer_list = [similar(bodies) for bodies in bodies_list]
     index_list = [elements.index for elements in elements_tuple]
+    buffer_index_list = [similar(index) for index in index_list]
     branches = Vector{Branch{BRANCH_TYPE}}(undef,1)
+
+    # update index lists
+    for index in index_list
+        index .= 1:length(index)
+    end
 
     # recursively build branches
     i_start = ones(Int32,length(elements_tuple))
@@ -57,7 +63,16 @@ function Tree(elements_tuple::Tuple, options::Options)
     i_branch = 1
     center, radius = center_radius(elements_tuple; scale_radius = 1.00001)
     level = 0
-    branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
+    branch!(branches, bodies_list, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
+
+    # invert index
+    for (i_type,index) in enumerate(index_list)
+        buffer_index = buffer_index_list[i_type]
+        for i_body in 1:length(index)
+            buffer_index[index[i_body]] = i_body
+        end
+        index .= buffer_index
+    end
 
     # assemble tree
     tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch))
@@ -65,7 +80,7 @@ function Tree(elements_tuple::Tuple, options::Options)
     return tree
 end
 
-function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
+function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
     n_types = length(i_start)
@@ -117,11 +132,14 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
                 x = bodies_list[i_type][1:3,i_body]
                 i_octant = get_octant(x, center)
                 buffer_list[i_type][:,counter[i_octant,i_type]] .= bodies_list[i_type][:,i_body]
-                index_list[i_type][i_body] = counter[i_octant,i_type]
-                counter[i_octant,i_type] += 1
+                buffer_index_list[i_type][counter[i_octant,i_type]] = index_list[i_type][i_body]
+                counter[i_octant,i_type] += 1 
             end
             # place sorted bodies
             bodies_list[i_type][:,i_start[i_type]:i_end[i_type]] .= buffer_list[i_type][:,i_start[i_type]:i_end[i_type]]
+            
+            # update index_list
+            index_list[i_type] .= buffer_index_list[i_type]
         end
 
         # recursively build new branches
@@ -138,10 +156,21 @@ function branch!(branches, bodies_list, buffer_list, index_list, i_start, i_end,
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, bodies_list, buffer_list, index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch, targets_index, sources_index)
+                branch!(branches, bodies_list, buffer_list, index_list, buffer_index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch, targets_index, sources_index)
                 i_tape += 1
             end
         end
+    end
+end
+
+function resort!(elements_tuple::Tuple)
+    n_types = length(elements_tuple)
+    for (i_type, elements) in enumerate(elements_tuple)
+        bodies = elements.bodies
+        potential = elements.potential
+        index = elements.index
+        bodies .= bodies[:,index]
+        potential .= potential[:,index]
     end
 end
 
