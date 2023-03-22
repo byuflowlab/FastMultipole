@@ -36,11 +36,11 @@ function upward_pass!(tree, elements, i_branch, sources_index)
     end
 end
 
-function horizontal_pass!(tree, elements::Tuple, theta, targets_index, sources_index)
-    horizontal_pass!(tree, elements, 1, 1, theta, targets_index, sources_index)
+function horizontal_pass!(tree, elements::Tuple, theta, targets_index, sources_index, local_P2P=true)
+    horizontal_pass!(tree, elements, 1, 1, theta, targets_index, sources_index, local_P2P)
 end
 
-function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_index, sources_index)
+function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_index, sources_index, local_P2P=true)
     branches = tree.branches
     source_branch = branches[j_source]
     target_branch = branches[i_target]
@@ -50,17 +50,15 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
     if target_branch.is_target
         if spacing_squared >= threshold_squared # meet separation criteria
             M2L!(tree, i_target, j_source)
-            # println("HP: M2L: $i_target $j_source")
-        elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
-            # println("HP: P2P: $i_target $j_source")
+        elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source)# both leaves
             P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
         elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
             for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-                horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index)
+                horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index, local_P2P)
             end
         else
             for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-                horizontal_pass!(tree, elements, i_target, j_child, theta, targets_index, sources_index)
+                horizontal_pass!(tree, elements, i_target, j_child, theta, targets_index, sources_index, local_P2P)
             end
         end
     end
@@ -77,10 +75,8 @@ function downward_pass!(tree, elements, j_source, targets_index)
     if branch.is_target
         # if a leaf, perform L2P on
         if branch.first_branch == -1 # leaf
-            # println("DP: L2B: $j_source")
             L2B!(tree, elements, j_source, targets_index)
         else # not a leaf, so perform L2L! and recurse
-            # println("DP: L2L: $j_source")
             L2L!(tree, j_source)
             for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
                 downward_pass!(tree, elements, i_child, targets_index)
@@ -130,11 +126,11 @@ function upward_pass_swapped!(tree, elements, i_branch, targets_index)
     end
 end
 
-function horizontal_pass_swapped!(tree, elements::Tuple, theta, targets_index, sources_index)
-    horizontal_pass!(tree, elements, 1, 1, theta, targets_index, sources_index)
+function horizontal_pass_swapped!(tree, elements::Tuple, theta, targets_index, sources_index, local_P2P=true)
+    horizontal_pass_swapped!(tree, elements, 1, 1, theta, targets_index, sources_index, local_P2P)
 end
 
-function horizontal_pass_swapped!(tree, elements, i_target, j_source, theta, targets_index, sources_index)
+function horizontal_pass_swapped!(tree, elements, i_target, j_source, theta, targets_index, sources_index, local_P2P=true)
     branches = tree.branches
     source_branch = branches[j_source]
     target_branch = branches[i_target]
@@ -144,17 +140,15 @@ function horizontal_pass_swapped!(tree, elements, i_target, j_source, theta, tar
     if target_branch.is_source
         if spacing_squared >= threshold_squared # meet separation criteria
             M2L!(tree, i_target, j_source)
-            # println("HP: M2L: $i_target $j_source")
-        elseif source_branch.first_branch == target_branch.first_branch == -1 # both leaves
-            # println("HP: P2P: $i_target $j_source")
+        elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source) # both leaves
             P2P!(tree, elements, i_target, j_source, sources_index, targets_index)
         elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
             for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-                horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index)
+                horizontal_pass_swapped!(tree, elements, i_child, j_source, theta, targets_index, sources_index, local_P2P)
             end
         else
             for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-                horizontal_pass!(tree, elements, i_target, j_child, theta, targets_index, sources_index)
+                horizontal_pass_swapped!(tree, elements, i_target, j_child, theta, targets_index, sources_index, local_P2P)
             end
         end
     end
@@ -186,15 +180,15 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, elements, options::Options; reset_tree=true, swap_source_target=false)
+function fmm!(tree::Tree, elements, options::Options; reset_tree=true, swap_source_target=false, local_P2P=true)
     if reset_tree; reset_expansions!(tree); end
     if swap_source_target
         upward_pass_swapped!(tree, elements, options.targets_index)
-        horizontal_pass_swapped!(tree, elements, options.theta, options.targets_index, options.sources_index)
+        horizontal_pass_swapped!(tree, elements, options.theta, options.targets_index, options.sources_index, local_P2P)
         downward_pass_swapped!(tree, elements, options.sources_index)
     else
         upward_pass!(tree, elements, options.sources_index)
-        horizontal_pass!(tree, elements, options.theta, options.targets_index, options.sources_index)
+        horizontal_pass!(tree, elements, options.theta, options.targets_index, options.sources_index, local_P2P)
         downward_pass!(tree, elements, options.targets_index)
     end
 end
@@ -218,8 +212,8 @@ Note: this function merely adds to existing potential of its elements to avoid o
 
 The user must reset the potential manually.
 """
-function fmm!(elements::Tuple, options::Options)
+function fmm!(elements::Tuple, options::Options; optargs...)
     tree = Tree(elements, options)
-    fmm!(tree, elements, options)
+    fmm!(tree, elements, options; optargs...)
     return tree
 end

@@ -3,6 +3,7 @@ import Statistics
 S = Statistics
 import Symbolics
 sym = Symbolics
+using StaticArrays
 
 import FLOWFMM
 fmm = FLOWFMM
@@ -1319,22 +1320,6 @@ function d2psidx2(target_x, source_x, source_gamma)
     return hessian
 end
 
-function d2psidx2(target_x, source_x, source_gamma)
-    dx = target_x - source_x
-    dx_norm = sqrt(dx' * dx)
-    x, y, z = dx
-    hessian = zeros(3,3,3)
-    d2dr2 = [
-        2x^2-y^2-z^2 3x*y 3x*z;
-        3x*y 2y^2-x^2-z^2 3y*z;
-        3x*z 3y*z 2z^2-x^2-y^2
-    ] / dx_norm^5
-    hessian[:,:,1] = d2dr2 * source_gamma[1]
-    hessian[:,:,2] = d2dr2 * source_gamma[2]
-    hessian[:,:,3] = d2dr2 * source_gamma[3]
-    return hessian
-end
-
 function u(target_x, source_x, source_gamma)
     dx = target_x  - source_x
     dx_norm = sqrt(dx' * dx)
@@ -1468,6 +1453,114 @@ end
 ss_fmm = deepcopy(vortex_particles.velocity_stretching[4:6,:])
 for i in 1:length(ss)
     @test isapprox(ss_fmm[i], ss[i];rtol=1e-12)
+end
+
+end
+
+@testset "local P2P" begin
+
+bodies = [
+    0.205395  10.261945  0.870219  0.0933026  0.58933
+    0.884498  11.125261  0.65333   0.293028   0.806995
+    0.82999   12.39037   0.396068  0.563952   0.227808
+    0.412938  3.578483  0.818427  0.688908   0.173329
+] # one way out there to trigger multipole expansion
+
+struct TestBodies
+    bodies # 16 x N array containing the control point, corner points, and panel strength
+    index # N vector of integers
+    potential
+    direct!
+    B2M!
+end
+
+i_POSITION = 1:3
+i_STRENGTH = 4
+
+function update_potential_direct!(target_potential, target_positions, source_bodies)
+    n_targets = size(target_potential)[2]
+    n_sources = size(source_bodies)[2]
+    for i_target in 1:n_targets
+        target_jacobian = reshape(view(target_potential,i_POTENTIAL_JACOBIAN,i_target),3,4)
+        target_hessian = reshape(view(target_potential,i_POTENTIAL_HESSIAN,i_target),3,3,4)
+        x_target = SVector{3}(target_positions[:,i_target])
+        for j_source in 1:n_sources
+            # potential, jacobian
+            x_source = SVector{3}(source_bodies[i_POSITION,j_source])
+            strength = source_bodies[i_STRENGTH,j_source]
+            dx = x_target - x_source
+            r = sqrt(dx' * dx)
+            if r > 1e-15
+                phi = strength/r
+                r3 = r^3
+                dphidx = SVector{3}(-strength*dx[1]/r3, -strength*dx[2]/r3, -strength*dx[3]/r3)
+
+                target_potential[i_POTENTIAL_SCALAR,i_target] += phi
+                target_jacobian[:,1] .+= dphidx
+
+                # calculate hessian
+                x, y, z = dx
+                denom = r3 * r^2
+                target_hessian[:,1,i_POTENTIAL_SCALAR] .+= (2*x^2 - y^2 - z^2) / denom * strength, 3*x*y / denom * strength, 3*x*z / denom * strength
+                target_hessian[:,2,i_POTENTIAL_SCALAR] .+= 3*x*y / denom * strength, (2*y^2 - x^2 - z^2) / denom * strength, 3*y*z / denom * strength
+                target_hessian[:,3,i_POTENTIAL_SCALAR] .+= 3*x*z / denom * strength, 3*y*z / denom * strength, (2*z^2 - x^2 - y^2) / denom * strength
+            end
+        end
+    end
+end
+
+function B2M_test!(tree, branch, bodies, n_bodies, harmonics)
+    for i_body in 1:n_bodies
+        dx = bodies[i_POSITION,i_body] - branch.center
+        q = bodies[i_STRENGTH,i_body]
+        fmm.cartesian_2_spherical!(dx)
+        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order) # Ylm^* -> -dx[3]
+        # update values
+        for l in 0:tree.expansion_order
+            for m in 0:l
+                i_solid_harmonic = l^2 + l + m + 1
+                i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
+                dim = 1 # just the scalar potential
+                branch.multipole_expansion[dim][i_compressed] += harmonics[i_solid_harmonic] * q
+            end
+        end
+    end
+end
+
+
+testbodies = TestBodies(bodies, zeros(Int32,size(bodies)[2]), zeros(eltype(bodies),fmm.i_POTENTIAL_HESSIAN[end],size(bodies)[2]),
+    update_potential_direct!, B2M_test!
+)
+
+options = fmm.Options(8, 2, 4.0)
+tree = fmm.Tree((testbodies,), options)
+
+# note that `tree.branches[3].n_bodies = 2` 
+# this is the branch we will test
+# because tree.branches[3].first_body = 2
+# bodies 2 and 3 are the ones in this branch
+
+# compute the potential induced by all bodies outside the current cell
+population = [
+    [1], [2,3], [2,3], [4], [5]
+] # which elements are in the same leaf level cell
+for i_target in 1:size(testbodies.bodies)[2]
+    for i_source in 1:size(testbodies.bodies)[2]
+        if !(i_source in population[i_target])
+            testbodies.direct!(reshape(view(testbodies.potential,:,i_target),size(testbodies.potential)[1],1), reshape(testbodies.bodies[i_POSITION,i_target],3,1), reshape(testbodies.bodies[:,i_source], size(testbodies.bodies)[1], 1))
+        end
+    end
+end
+direct_potential = deepcopy(testbodies.potential)
+
+# reset potential
+testbodies.potential .= 0.0
+
+# compute using FMM
+fmm.fmm!(tree, (testbodies,), options; local_P2P=false)
+
+for i in 1:length(testbodies.potential)
+    @test isapprox(testbodies.potential[i], direct_potential[i], atol=1e-5)
 end
 
 end
