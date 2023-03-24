@@ -30,7 +30,7 @@ function direct!(elements_tuple::Tuple)
     end
 end
 
-function direct!(elements_tuple::Tuple, options::Options, targets_index, sources_index)
+function direct!(elements_tuple::Tuple, targets_index, sources_index)
     for source_elements in elements_tuple[sources_index]
         for target_elements in elements_tuple[targets_index]
             source_elements.direct!(target_elements.potential, target_elements.bodies[i_POSITION,:], source_elements.bodies)
