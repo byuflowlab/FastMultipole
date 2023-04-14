@@ -9,6 +9,8 @@ struct Branch{TF}
     radius::TF              # side lengths of the rectangle encapsulating the branch
     multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
+    lock::ReentrantLock
+    child_lock::ReentrantLock
     is_target::Bool
     is_source::Bool
 end
@@ -90,7 +92,7 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
         i_child = Int32(-1)
         is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
         is_source = maximum(n_bodies[sources_index]) > 0 ? true : false
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target, is_source)
+        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock(), is_target, is_source)
         branches[i_branch] = branch
         return nothing
     else # not a leaf; branch children
@@ -113,7 +115,7 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
         i_child = Int32(length(branches) + 1)
         is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
         is_source = maximum(n_bodies[sources_index]) > 0 ? true : false
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, is_target, is_source)
+        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock(), is_target, is_source)
 
         # sort bodies
         ## write offsets
@@ -237,7 +239,7 @@ function change_expansion_order!(tree::Tree, new_order)
 end
 
 function reset_expansions!(tree)
-    for branch in tree.branches
+    Threads.@threads for branch in tree.branches
         branch.multipole_expansion .*= 0
         branch.local_expansion .*= 0
     end

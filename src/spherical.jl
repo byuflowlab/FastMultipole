@@ -219,10 +219,11 @@ function M2M!(tree, branch, child, harmonics)
     cartesian_2_spherical!(dx)
     regular_harmonic!(harmonics, dx..., tree.expansion_order)
 
+    M = zeros(Complex{Float64}, 4) # vectorize later
     for j in 0:tree.expansion_order # iterate over new Multipole coefficients B_j^k
         for k in 0:j
             i_jk = ((j * (j+1)) >> 1) + k + 1 # current index
-            M = zeros(Complex{Float64}, 4) # vectorize later
+            M .*= 0.0
             for l in 0:j
                 for m in max(-l,-j+k+l):min(k-1,l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) + k - m + 1
@@ -274,11 +275,12 @@ function M2L!(tree, i_local, j_multipole)
     dx = local_branch.center - multipole_branch.center
     cartesian_2_spherical!(dx)
     irregular_harmonic!(harmonics, dx[1], dx[2], dx[3], 2*tree.expansion_order)
+    L = zeros(Complex{Float64}, 4)
     for j in 0:tree.expansion_order
         Cnm = odd_or_even(j)
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
-            L = zeros(Complex{Float64}, 4)
+            L .*= 0.0
             for n in 0:tree.expansion_order
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1

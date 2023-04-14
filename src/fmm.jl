@@ -22,16 +22,18 @@ end
 function upward_pass!(tree, elements, i_branch, sources_index)
     # recursively iterate through branches
     branch = tree.branches[i_branch]
-    for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+    Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
         upward_pass!(tree, elements, i_child, sources_index)
     end
 
     if branch.is_source
         # perform P2M (leaf level) or M2M (not leaf level) translations
-        if branch.first_branch == -1 # leaf level
-            B2M!(tree, elements, i_branch, sources_index)
-        else
-            M2M!(tree, i_branch) # not leaf level
+        lock(branch.lock) do
+            if branch.first_branch == -1 # leaf level
+                B2M!(tree, elements, i_branch, sources_index)
+            else
+                M2M!(tree, i_branch) # not leaf level
+            end
         end
     end
 end
@@ -49,15 +51,19 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
     threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
     if target_branch.is_target
         if spacing_squared >= threshold_squared # meet separation criteria
-            M2L!(tree, i_target, j_source)
+            lock(target_branch.lock) do
+                M2L!(tree, i_target, j_source)
+            end
         elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source)# both leaves
-            P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
+            lock(target_branch.child_lock) do
+                P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
+            end
         elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-            for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+            Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
                 horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index, local_P2P)
             end
         else
-            for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+            Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
                 horizontal_pass!(tree, elements, i_target, j_child, theta, targets_index, sources_index, local_P2P)
             end
         end
@@ -78,7 +84,7 @@ function downward_pass!(tree, elements, j_source, targets_index)
             L2B!(tree, elements, j_source, targets_index)
         else # not a leaf, so perform L2L! and recurse
             L2L!(tree, j_source)
-            for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+            Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
                 downward_pass!(tree, elements, i_child, targets_index)
             end
         end
