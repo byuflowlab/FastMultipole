@@ -6,7 +6,7 @@ struct Branch{TF}
     first_branch::Int32        # index of the first branch
     first_body::Vector{Int32}       # index of the first element
     center::Vector{TF}              # center of the branch
-    radius::TF              # side lengths of the rectangle encapsulating the branch
+    radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
     lock::ReentrantLock
@@ -15,13 +15,14 @@ struct Branch{TF}
     is_source::Bool
 end
 
-struct Tree{TF}
+struct Tree{TF,VVI<:Vector{Vector{Int32}}}
     branches::Vector{Branch{TF}}        # a vector of `Branch` objects composing the tree
     expansion_order::Int16
     n_per_branch::Int32    # max number of bodies in a leaf
+    index_list::VVI
 end
 
-Tree(branches, expansion_order, n_per_branch) = Tree(branches, Int16(expansion_order), Int32(n_per_branch))
+Tree(branches, expansion_order, n_per_branch, index_list) = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list)
 
 """
     Tree(elements; expansion_order=2, n_per_branch=1)
@@ -50,7 +51,7 @@ function Tree(elements_tuple::Tuple, options::Options)
     # initialize objects
     bodies_list = [elements.bodies for elements in elements_tuple]
     buffer_list = [similar(bodies) for bodies in bodies_list]
-    index_list = [elements.index for elements in elements_tuple]
+    index_list = [zeros(Int32,size(bodies)[2]) for bodies in bodies_list]
     buffer_index_list = [similar(index) for index in index_list]
     branches = Vector{Branch{BRANCH_TYPE}}(undef,1)
 
@@ -77,7 +78,7 @@ function Tree(elements_tuple::Tuple, options::Options)
     end
 
     # assemble tree
-    tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch))
+    tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list)
 
     return tree
 end
@@ -165,12 +166,12 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
     end
 end
 
-function resort!(elements_tuple::Tuple)
+function resort!(elements_tuple::Tuple, tree::Tree)
     n_types = length(elements_tuple)
     for (i_type, elements) in enumerate(elements_tuple)
         bodies = elements.bodies
         potential = elements.potential
-        index = elements.index
+        index = tree.index_list[i_type]
         bodies .= bodies[:,index]
         potential .= potential[:,index]
     end
