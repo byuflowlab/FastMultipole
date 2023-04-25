@@ -2,9 +2,9 @@ function update_velocity!(velocity, body, potential)
     # velocity is the curl of the vector potential
     # minus the gradient of the scalar potential
     jacobian = reshape(potential[i_POTENTIAL_JACOBIAN],3,4)
-    velocity[1] = (-jacobian[1,1] + jacobian[2,4] - jacobian[3,3]) * ONE_OVER_4PI
-    velocity[2] = (-jacobian[2,1] + jacobian[3,2] - jacobian[1,4]) * ONE_OVER_4PI
-    velocity[3] = (-jacobian[3,1] + jacobian[1,3] - jacobian[2,2]) * ONE_OVER_4PI
+    velocity[1] = (-jacobian[1,1] + jacobian[2,4] - jacobian[3,3])
+    velocity[2] = (-jacobian[2,1] + jacobian[3,2] - jacobian[1,4])
+    velocity[3] = (-jacobian[3,1] + jacobian[1,3] - jacobian[2,2])
 
     return nothing
 end
@@ -20,7 +20,6 @@ function update_stretching!(stretching, body, potential)
 
     # stretching term (omega dot nabla)
     fmm.mul!(stretching, duidxj, body[i_STRENGTH_vortex])
-    stretching[i_STRETCHING_vortex] .*= ONE_OVER_4PI
 
     return nothing
 end
