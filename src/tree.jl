@@ -11,18 +11,21 @@ struct Branch{TF}
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
     lock::ReentrantLock
     child_lock::ReentrantLock
-    is_target::Bool
-    is_source::Bool
 end
 
+"""
+bodies[index_list] is the same sort operation as performed by the tree
+sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
+"""
 struct Tree{TF,VVI<:Vector{Vector{Int32}}}
     branches::Vector{Branch{TF}}        # a vector of `Branch` objects composing the tree
     expansion_order::Int16
     n_per_branch::Int32    # max number of bodies in a leaf
     index_list::VVI
+    inverse_index_list::VVI
 end
 
-Tree(branches, expansion_order, n_per_branch, index_list) = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list)
+Tree(branches, expansion_order, n_per_branch, index_list, inverse_index_list) = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list)
 
 """
     Tree(elements; expansion_order=2, n_per_branch=1)
@@ -38,26 +41,23 @@ Constructs an octree of the provided element objects.
     * `velocity::Array{Float64,2}`- 3xN array of the velocity vectors at each element, reset every iteration, and calculated in post-processing
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
-
-- `targets_index::Vector{Int}`- vector containing the indices of each member of the `elements_tuple` argument which is to be a target
 """
 function Tree(elements_tuple::Tuple, options::Options)
     # unpack options
     expansion_order = options.expansion_order
     n_per_branch = options.n_per_branch
-    targets_index = options.targets_index
-    sources_index = options.sources_index
 
     # initialize objects
     bodies_list = [elements.bodies for elements in elements_tuple]
     buffer_list = [similar(bodies) for bodies in bodies_list]
     index_list = [zeros(Int32,size(bodies)[2]) for bodies in bodies_list]
+    inverse_index_list = [similar(index) for index in index_list]
     buffer_index_list = [similar(index) for index in index_list]
     branches = Vector{Branch{BRANCH_TYPE}}(undef,1)
 
     # update index lists
-    for index in index_list
-        index .= 1:length(index)
+    for inverse_index in inverse_index_list
+        inverse_index .= 1:length(inverse_index)
     end
 
     # recursively build branches
@@ -66,24 +66,25 @@ function Tree(elements_tuple::Tuple, options::Options)
     i_branch = 1
     center, radius = center_radius(elements_tuple; scale_radius = 1.00001)
     level = 0
-    branch!(branches, bodies_list, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
+    branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # invert index
-    for (i_type,index) in enumerate(index_list)
+    for (i_type,inverse_index) in enumerate(inverse_index_list)
         buffer_index = buffer_index_list[i_type]
-        for i_body in 1:length(index)
-            buffer_index[index[i_body]] = i_body
+        for i_body in 1:length(inverse_index)
+            buffer_index[inverse_index[i_body]] = i_body
         end
-        index .= buffer_index
+        index_list[i_type] .= inverse_index
+        inverse_index .= buffer_index
     end
 
     # assemble tree
-    tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list)
+    tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list)
 
     return tree
 end
 
-function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch, targets_index, sources_index)
+function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
     n_types = length(i_start)
@@ -91,9 +92,7 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
     local_expansion = initialize_expansion(expansion_order)
     if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a leaf; no new branches needed
         i_child = Int32(-1)
-        is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
-        is_source = maximum(n_bodies[sources_index]) > 0 ? true : false
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock(), is_target, is_source)
+        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
         branches[i_branch] = branch
         return nothing
     else # not a leaf; branch children
@@ -114,9 +113,7 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
 
         # create branch
         i_child = Int32(length(branches) + 1)
-        is_target = maximum(n_bodies[targets_index]) > 0 ? true : false
-        is_source = maximum(n_bodies[sources_index]) > 0 ? true : false
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock(), is_target, is_source)
+        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
 
         # sort bodies
         ## write offsets
@@ -135,14 +132,14 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
                 x = bodies_list[i_type][1:3,i_body]
                 i_octant = get_octant(x, center)
                 buffer_list[i_type][:,counter[i_octant,i_type]] .= bodies_list[i_type][:,i_body]
-                buffer_index_list[i_type][counter[i_octant,i_type]] = index_list[i_type][i_body]
+                buffer_index_list[i_type][counter[i_octant,i_type]] = inverse_index_list[i_type][i_body]
                 counter[i_octant,i_type] += 1 
             end
             # place sorted bodies
             bodies_list[i_type][:,i_start[i_type]:i_end[i_type]] .= buffer_list[i_type][:,i_start[i_type]:i_end[i_type]]
             
             # update index_list
-            index_list[i_type] .= buffer_index_list[i_type]
+            inverse_index_list[i_type] .= buffer_index_list[i_type]
         end
 
         # recursively build new branches
@@ -159,13 +156,30 @@ function branch!(branches, bodies_list, buffer_list, index_list, buffer_index_li
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, bodies_list, buffer_list, index_list, buffer_index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch, targets_index, sources_index)
+                branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
                 i_tape += 1
             end
         end
     end
 end
 
+"""
+Undoes the sort operation performed by the tree.
+"""
+function unsort!(elements_tuple::Tuple, tree::Tree)
+    n_types = length(elements_tuple)
+    for (i_type, elements) in enumerate(elements_tuple)
+        bodies = elements.bodies
+        potential = elements.potential
+        inverse_index = tree.inverse_index_list[i_type]
+        bodies .= bodies[:,inverse_index]
+        potential .= potential[:,inverse_index]
+    end
+end
+
+"""
+Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
+"""
 function resort!(elements_tuple::Tuple, tree::Tree)
     n_types = length(elements_tuple)
     for (i_type, elements) in enumerate(elements_tuple)
