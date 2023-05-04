@@ -109,10 +109,10 @@ function regular_harmonic!(harmonics, rho, theta, phi, P)
     y,x = sincos(theta)
     fact = 1
     pl = 1
-    rhom = 1
+    rhom = 1 # rho^l / (l+m)! * (-1)^l
     ei = exp(im * phi)
-    eim = 1.0
-    for m=0:P
+    eim = 1.0 # e^(i * m * phi)
+    for m=0:P # l=m up here
         p = pl
         lpl = m * m + 2 * m + 1
         lml = m * m + 1
@@ -122,7 +122,7 @@ function regular_harmonic!(harmonics, rho, theta, phi, P)
         p = x * (2 * m + 1) * p1
         rhom *= rho
         rhol = rhom
-        for l=m+1:P
+        for l=m+1:P # l>m in here
             lpm = l * l + l + m + 1
             lmm = l * l + l - m + 1
             rhol /= -(l + m)
@@ -270,7 +270,6 @@ function M2L!(tree, i_local, j_multipole)
 
     # preallocate
     harmonics = Vector{Complex{Float64}}(undef, (2*tree.expansion_order + 1)^2)
-
     # get separation vector
     dx = local_branch.center - multipole_branch.center
     cartesian_2_spherical!(dx)
