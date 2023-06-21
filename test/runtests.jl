@@ -1,3 +1,9 @@
+# activate test environment
+if splitpath(Base.active_project())[end-1] == "FLOWFMM"
+    import TestEnv
+    TestEnv.activate()
+end
+
 using Test
 import Statistics
 S = Statistics
@@ -9,9 +15,6 @@ import FLOWFMM
 fmm = FLOWFMM
 
 using LegendrePolynomials
-import PyPlot
-plt = PyPlot
-using LaTeXStrings
 
 test_dir = @__DIR__
 
@@ -74,115 +77,6 @@ include(joinpath(test_dir, "gravitational.jl"))
         @test isapprox(V_tots[i], V_tots_direct[i]; atol=1e-4)
     end
 end
-
-# #####
-# ##### define plotting functions
-# #####
-# function plot_leaf(elements, leaf, fig_name, save_name;
-#     stl = "*", clr = "",
-#     initialize_fig = false,
-#     save_fig = false
-# )
-#     fig = plt.figure(fig_name)
-#     if initialize_fig
-#         fig.clear()
-#         fig.add_subplot(111)
-#     end
-#     ax = fig.get_axes()[1]
-#     n = length(leaf.children)
-#     Xs = zeros(dims,n)
-#     for (i,i_index) in enumerate(leaf.children)
-#         Xs[:,i] .= fmm.get_X(mass,i_index)
-#     end
-#     if clr == ""
-#         ax.scatter(Xs[1,:], Xs[2,:], marker=stl)
-#     else
-#         ax.scatter(Xs[1,:], Xs[2,:], marker=stl, color=clr)
-#     end
-
-
-#     if save_fig
-#         fig.savefig(save_name)
-#     end
-# end
-
-# function plot_leaves(elements, leaves, fig_name, save_name;
-#     stls = ["v", "^", ">", "<", "+", "x", "*"],
-#     clrs = ["b", "r", "g", "y", "c", "m"],
-#     initialize_fig = false,
-#     save_fig = false
-# )
-
-#     for (i,leaf) in enumerate(leaves)
-#         initialize_fig = initialize_fig && i==1 ? true : false
-#         stl = stls[i % length(stls) + 1]
-#         clr = clrs[i % length(clrs) + 1]
-#         this_save_fig = i == length(leaves) ? save_fig : false
-#         plot_leaf(elements, leaf, fig_name, save_name;
-#             stl, clr, initialize_fig, save_fig=this_save_fig
-#         )
-#     end
-# end
-
-# function plot_branch(elements, root, level, branch_i, fig_name, save_name;
-#     stl = "+", clr = "b",
-#     initialize_fig = false,
-#     save_fig = false
-# )
-#     branch = root.branches[level][branch_i]
-#     if initialize_fig
-#         fig = plt.figure(fig_name)
-#         fig.clear()
-#         fig.add_subplot(111)
-#     end
-
-#     if level == 2
-#         leaves = root.branches[1][branch.children]
-#         plot_leaves(elements, leaves, fig_name, save_name;
-#             stls = [stl], clrs = [clr],
-#             initialize_fig = false,
-#             save_fig
-#         )
-#     elseif level > 2
-#         for branch_i in branch.children
-#             plot_branch(elements, root, level-1, branch_i, fig_name, save_name;
-#                 stl, clr,
-#                 initialize_fig = false,
-#                 save_fig
-#             )
-#         end
-#     else
-#         @error "requested plot_branch on level $level; must be >= 2"
-#     end
-# end
-
-# function plot_branches(elements, root, level, fig_name, save_name;
-#     stls = ["v", "^", ">", "<", "+", "x", "*"],
-#     clrs = ["b", "r", "g", "y", "c", "m"],
-#     initialize_fig = false,
-#     save_fig = false
-# )
-#     if level > 1
-#         branches = root.branches[level]
-#         for branch_i in 1:length(branches)
-#             stl = stls[branch_i % length(stls) + 1]
-#             clr = clrs[branch_i % length(clrs) + 1]
-#             this_initialize_fig = branch_i == 1 ? initialize_fig : false
-#             plot_branch(elements, root, level, branch_i, fig_name, save_name;
-#                 stl, clr,
-#                 initialize_fig = this_initialize_fig,
-#                 save_fig = save_fig
-#             )
-#         end
-#     else
-#         plot_leaves(elements, root.branches[level], fig_name, save_name;
-#             stls,
-#             clrs,
-#             initialize_fig,
-#             save_fig
-#         )
-#     end
-# end
 
 # @testset "tree" begin
 
@@ -348,7 +242,7 @@ i_mass = 1
 i_branch = 5 # use the first mass
 
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-elements.B2M!(tree, tree.branches[i_branch], bodies[:,new_order_index[i_mass]], 1, harmonics)
+elements.B2M!(tree.branches[i_branch], bodies[:,new_order_index[i_mass]:new_order_index[i_mass]], harmonics, tree.expansion_order)
 
 # mp_expansion = zeros(Complex{Float64}, (expansion_order+1)^2)
 # this_dx = xs[i_mass,:] - tree.branches[i_branch].center
@@ -424,8 +318,7 @@ i_branch_4 = 6 # use the fourth mass
 # i_branch_5 = 7 # use the fifth mass
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 # using only the 4th mass: (note it has been reordered)
-elements.B2M!(tree, tree.branches[i_branch_4], bodies[:,new_order_index[4]], 1, harmonics) # evaluate multipole coefficients
-# fmm.B2M!(i_branch_5, tree, elements) # evaluate multipole coefficients
+elements.B2M!(tree.branches[i_branch_4], bodies[:,new_order_index[4]:new_order_index[4]], harmonics, tree.expansion_order) # evaluate multipole coefficients
 fmm.M2M!(tree, i_branch) # translate coefficients to the center of branch 2
 
 x_target = [8.3,1.4,-4.2]
@@ -615,7 +508,7 @@ harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
 workspace = zeros(3,4)
 
-elements.B2M!(tree, tree.branches[i_branch_multipole], elements.bodies[:,new_order_index[5]], 1, harmonics)
+elements.B2M!(tree.branches[i_branch_multipole], elements.bodies[:,new_order_index[5]:new_order_index[5]], harmonics, tree.expansion_order)
 
 # # test Multipole # checks out
 # dx_mp = xs[5,:] - tree.branches[i_branch_multipole].center
@@ -1091,7 +984,7 @@ branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3,
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch, B2M!, P2P!)
 options = fmm.Options(expansion_order, 1, 4.0)
 dummy_index = [zeros(Int32,size(vortexparticles.bodies)[2])]
-tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index, dummy_index)
+tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index, dummy_index, dummy_index[1], dummy_index[1])
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 fmm.B2M!(tree, (vortexparticles,), 2, [1])
 fmm.B2M!(tree, (vortexparticles,), 3, [1])
@@ -1241,7 +1134,7 @@ branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3,
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch)
 options = fmm.Options(expansion_order, 1, 4.0)
 dummy_index = [zeros(Int32,size(vortex_particles.bodies)[2])]
-tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index, dummy_index)
+tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index, dummy_index, dummy_index[1], dummy_index[1])
 # fmm.B2M!(tree, vortex_particles, 2)
 # fmm.B2M!(tree, vortex_particles, 3)
 
@@ -1511,14 +1404,14 @@ function update_potential_direct!(target_potential, target_positions, source_bod
     end
 end
 
-function B2M_test!(tree, branch, bodies, n_bodies, harmonics)
-    for i_body in 1:n_bodies
+function B2M_test!(branch, bodies, harmonics, expansion_order)
+    for i_body in 1:size(bodies)[2]
         dx = bodies[i_POSITION,i_body] - branch.center
         q = bodies[i_STRENGTH,i_body]
         fmm.cartesian_2_spherical!(dx)
-        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order) # Ylm^* -> -dx[3]
+        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], expansion_order) # Ylm^* -> -dx[3]
         # update values
-        for l in 0:tree.expansion_order
+        for l in 0:expansion_order
             for m in 0:l
                 i_solid_harmonic = l^2 + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)

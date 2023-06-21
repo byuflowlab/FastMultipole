@@ -182,10 +182,6 @@ function B2M!(tree, elements_tuple::Tuple, i_branch, sources_index)
     harmonics = Vector{Complex{Float64}}(undef, (tree.expansion_order+1)^2)
 
     # iterate over elements
-    # for i_body in branch.first_body:branch.first_body + branch.n_bodies-1
-    #     body = elements.bodies[:,i_body]
-    #     elements.B2M!(tree, branch, body, harmonics)
-    # end
     for (i_iter, elements) in enumerate(elements_tuple[sources_index])
         i_type = sources_index[i_iter]
         i_bodies = branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1
