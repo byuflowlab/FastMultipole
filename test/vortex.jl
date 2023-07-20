@@ -129,14 +129,14 @@ end
 """
 Assumes singular particles.
 """
-function B2M_vortex!(tree, branch, bodies, n_bodies, harmonics)
-    for i_body in 1:n_bodies
+function B2M_vortex!(branch, bodies, harmonics, expansion_order)
+    for i_body in 1:size(bodies)[2]
         dx = bodies[i_POSITION_vortex,i_body] - branch.center
         q = bodies[i_STRENGTH_vortex,i_body]
         fmm.cartesian_2_spherical!(dx)
-        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], tree.expansion_order) # Ylm^* -> -dx[3]
+        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], expansion_order) # Ylm^* -> -dx[3]
         # update values
-        for l in 0:tree.expansion_order
+        for l in 0:expansion_order
             for m in 0:l
                 i_solid_harmonic = l^2 + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)

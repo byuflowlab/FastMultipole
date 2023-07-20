@@ -17,15 +17,17 @@ end
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct Tree{TF,VVI<:Vector{Vector{Int32}}}
+struct Tree{TF,VVI<:Vector{Vector{Int32}},VI<:Vector{Int32}}
     branches::Vector{Branch{TF}}        # a vector of `Branch` objects composing the tree
     expansion_order::Int16
     n_per_branch::Int32    # max number of bodies in a step_through_bodies
     index_list::VVI
     inverse_index_list::VVI
+    leaf_index::VI
+    cumulative_count::VI # starting with 0, a cumulative accounting of how many bodies are in leaf branches
 end
 
-Tree(branches, expansion_order, n_per_branch, index_list, inverse_index_list) = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list)
+Tree(branches, expansion_order::Int64, n_per_branch::Int64, index_list, inverse_index_list, leaf_index, leaf_count) = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, leaf_count)
 
 """
     Tree(elements; expansion_order=2, n_per_branch=1)
@@ -77,8 +79,28 @@ function Tree(elements_tuple::Tuple, options::Options)
         index_list[i_type] .= inverse_index
         inverse_index .= buffer_index
     end
-    
-    tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list)
+
+    # count leaves
+    n_leaves = 0
+    for branch in branches
+        branch.n_branches == 0 && (n_leaves += 1)
+    end
+
+    # create leaf index and leaf count
+    cumulative_count = Vector{Int32}(undef,n_leaves)
+    cumulative_count[1] = 0
+    leaf_index = zeros(Int32,n_leaves)
+    i_leaf_index = 1
+    for (i_branch, branch) in enumerate(branches)
+        if branch.n_branches == 0
+            leaf_index[i_leaf_index] = Int32(i_branch)
+            i_leaf_index < n_leaves && (cumulative_count[i_leaf_index+1] = cumulative_count[i_leaf_index] + sum(branch.n_bodies))
+            i_leaf_index += 1
+        end
+    end
+
+    # assemble tree
+    tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count)
 
     if options.shrinking
         update_radius(elements_tuple,branches,1; options.second_pass)

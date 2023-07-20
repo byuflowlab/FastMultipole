@@ -22,8 +22,8 @@ end
 function upward_pass!(tree, elements, i_branch, sources_index)
     # recursively iterate through branches
     branch = tree.branches[i_branch]
-    for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
-    # Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+    # for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+    Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
         upward_pass!(tree, elements, i_child, sources_index)
     end
     
