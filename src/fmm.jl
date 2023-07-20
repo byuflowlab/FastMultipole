@@ -59,7 +59,7 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
         if contains_sources
             spacing = source_branch.center - target_branch.center
             spacing_squared = spacing' * spacing
-            threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
+            threshold_squared = (target_branch.radius[1] + source_branch.radius[1])^2 * theta # theta is the number of radii squared
             if spacing_squared >= threshold_squared # meet separation criteria
                 lock(target_branch.lock) do
                     M2L!(tree, i_target, j_source)
@@ -68,7 +68,7 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
                 lock(target_branch.child_lock) do
                     P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
                 end
-            elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
+            elseif source_branch.first_branch == -1 || (target_branch.radius[1] >= source_branch.radius[1] && target_branch.first_branch != -1)
                 Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
                     horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index, local_P2P)
                 end

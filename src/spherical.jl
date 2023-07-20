@@ -311,7 +311,7 @@ function B2L!(tree, i_branch, source)
     irregular_harmonics = zeros(Complex{Float64},(tree.expansion_order+1)^2)
     dx = cartesian_2_spherical(source[1:3] - branch.center)
     irregular_harmonic!(irregular_harmonics, dx[1], dx[2], -dx[3], tree.expansion_order)
-    q = source[4:7]
+    q = source[5:8]
     for l in 0:tree.expansion_order
         for m in 0:l
             i_abb = (l * (l+1)) >> 1 + m + 1

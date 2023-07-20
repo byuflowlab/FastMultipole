@@ -1,12 +1,12 @@
 const BRANCH_TYPE = Float64
 
-struct Branch{TF}
+struct Branch{TF, MV3, MV1}
     n_branches::Int8          # number of child branches
     n_bodies::Vector{Int32}          # number of descendent bodies
     first_branch::Int32        # index of the first branch
     first_body::Vector{Int32}       # index of the first element
-    center::Vector{TF}              # center of the branch
-    radius::TF              # side lengths of the cube encapsulating the branch
+    center::MV3            # center of the branch
+    radius::MV1            # side lengths of the cube encapsulating the branch
     multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
     lock::ReentrantLock
@@ -20,7 +20,7 @@ sorted_bodies[inverse_index_list] undoes the sort operation performed by the tre
 struct Tree{TF,VVI<:Vector{Vector{Int32}}}
     branches::Vector{Branch{TF}}        # a vector of `Branch` objects composing the tree
     expansion_order::Int16
-    n_per_branch::Int32    # max number of bodies in a leaf
+    n_per_branch::Int32    # max number of bodies in a step_through_bodies
     index_list::VVI
     inverse_index_list::VVI
 end
@@ -77,9 +77,12 @@ function Tree(elements_tuple::Tuple, options::Options)
         index_list[i_type] .= inverse_index
         inverse_index .= buffer_index
     end
-
-    # assemble tree
+    
     tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list)
+
+    if options.shrinking
+        update_radius(elements_tuple,branches,1; options.second_pass)
+    end
 
     return tree
 end
@@ -90,12 +93,12 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
     n_types = length(i_start)
     multipole_expansion = initialize_expansion(expansion_order)
     local_expansion = initialize_expansion(expansion_order)
-    if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a leaf; no new branches needed
+    if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a step_through_bodies; no new branches needed
         i_child = Int32(-1)
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        branch = Branch(n_branches, n_bodies, i_child, i_start, center, MVector{1}(radius), multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
         branches[i_branch] = branch
         return nothing
-    else # not a leaf; branch children
+    else # not a step_through_bodies; branch children
         # count elements in each octant
         octant_attendance = zeros(Int32, 8, n_types)
         for i_type in 1:n_types # loop over each type
@@ -113,7 +116,7 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
 
         # create branch
         i_child = Int32(length(branches) + 1)
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, MVector{1}(radius), multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
 
         # sort bodies
         ## write offsets
@@ -163,6 +166,102 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
     end
 end
 
+#TODO: update radius and center
+function update_radius(elements_tuple::Tuple, branches, branch_index; second_pass=true)
+    branch = branches[branch_index]
+    if branch.n_branches != 0
+        for b = 0:branch.n_branches - 1
+            update_radius(elements_tuple, branches, branch.first_branch + b; second_pass)
+        end
+        step_through_branches(elements_tuple, branches, branch_index; second_pass)
+    else
+        step_through_bodies(elements_tuple, branches, branch_index; second_pass)
+    end
+    return nothing
+end
+
+function step_through_branches(elements_tuple::Tuple, branches, branch_index; second_pass=true)
+    branch = branches[branch_index]
+
+    first_child_index = branch.first_branch
+    first_child = branches[first_child_index]
+
+    rectangle = MVector{6, Float64}(
+        first_child.center[1]+first_child.radius[1], first_child.center[1]-first_child.radius[1],
+        first_child.center[2]+first_child.radius[1], first_child.center[2]-first_child.radius[1],
+        first_child.center[3]+first_child.radius[1], first_child.center[3]-first_child.radius[1]
+        )
+    for index = 0:branch.n_branches - 1
+        child = branches[first_child_index + index]
+        rectangle[1] = max(child.center[1]+child.radius[1], rectangle[1])
+        rectangle[3] = max(child.center[2]+child.radius[1], rectangle[3])
+        rectangle[5] = max(child.center[3]+child.radius[1], rectangle[5])
+        rectangle[2] = min(child.center[1]-child.radius[1], rectangle[2])
+        rectangle[4] = min(child.center[2]-child.radius[1], rectangle[4])
+        rectangle[6] = min(child.center[3]-child.radius[1], rectangle[6])
+    end
+    branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+    branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+    branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+
+
+    if second_pass
+        branch.radius[1] = 0.0
+        for index = 0:branch.n_branches - 1
+            child = branches[first_child_index + index]
+            distance = sqrt((child.center[1] - branch.center[1])^2 + (child.center[2] - branch.center[2])^2 + (child.center[3] - branch.center[3])^2) + child.radius[1]
+            branch.radius[1] = max(branch.radius[1], distance)
+        end
+    else 
+        branch.radius[1] = sqrt(
+            (rectangle[1] - branch.center[1])^2 + 
+            (rectangle[3] - branch.center[2])^2 + 
+            (rectangle[5] - branch.center[3])^2
+            )
+    end
+
+    return nothing
+end
+
+function step_through_bodies(elements_tuple::Tuple, branches, branch_index; second_pass=true)
+    branch = branches[branch_index]
+    
+    rectangle = MVector{6, Float64}(
+        elements_tuple[1].bodies[1, branch.first_body[1]], elements_tuple[1].bodies[1, branch.first_body[1]],
+        elements_tuple[1].bodies[2, branch.first_body[1]], elements_tuple[1].bodies[2, branch.first_body[1]],
+        elements_tuple[1].bodies[3, branch.first_body[1]], elements_tuple[1].bodies[3, branch.first_body[1]],
+        )
+    for (i_element, element) in enumerate(elements_tuple)
+        for i_body in branch.first_body[i_element]:(branch.first_body[i_element]+branch.n_bodies[i_element]-1)
+            body = element.bodies[:,i_body]
+            rectangle[1] = max(body[1]+body[4], rectangle[1])
+            rectangle[3] = max(body[2]+body[4], rectangle[3])
+            rectangle[5] = max(body[3]+body[4], rectangle[5])
+            rectangle[2] = min(body[1]-body[4], rectangle[2])
+            rectangle[4] = min(body[2]-body[4], rectangle[4])
+            rectangle[6] = min(body[3]-body[4], rectangle[6])
+        end
+    end
+    branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+    branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+    branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+
+
+    if second_pass
+        branch.radius[1] = 0
+        for (i_element, element) in enumerate(elements_tuple)
+            for i_body in branch.first_body[i_element]:(branch.first_body[i_element]+branch.n_bodies[i_element]-1)
+                body = element.bodies[:,i_body]
+                distance = sqrt((body[1] - branch.center[1])^2 + (body[2]- branch.center[2])^2 + (body[3] - branch.center[3])^2) + body[4]
+                branch.radius[1] = max(branch.radius[1], distance)
+        end
+    end
+    else 
+        branch.radius[1] = sqrt((rectangle[1] - branch.center[1])^2 + (rectangle[3] - branch.center[2])^2 + (rectangle[5] - branch.center[3])^2)
+    end
+    return nothing
+end
+
 """
 Undoes the sort operation performed by the tree.
 """
@@ -192,8 +291,8 @@ function resort!(elements_tuple::Tuple, tree::Tree)
 end
 
 function center_radius(elements_tuple::Tuple; scale_radius = 1.00001)
-    x_min = deepcopy(elements_tuple[1].bodies[i_POSITION,1])
-    x_max = deepcopy(elements_tuple[1].bodies[i_POSITION,1])
+    x_min = MVector{3}(elements_tuple[1].bodies[i_POSITION,1])
+    x_max = MVector{3}(elements_tuple[1].bodies[i_POSITION,1])
     for elements in elements_tuple
         for i in 1:size(elements.bodies)[2]
             x = elements.bodies[i_POSITION,i]
