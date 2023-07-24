@@ -32,7 +32,7 @@ function upward_pass!(tree, elements, i_branch, sources_index)
 
     if contains_sources # contains sources
         # perform P2M (leaf level) or M2M (not leaf level) translations
-        lock(branch.lock) do
+        @lock branch.lock begin
             if branch.first_branch == -1 # leaf level
                 B2M!(tree, elements, i_branch, sources_index)
             else
@@ -61,16 +61,9 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
             spacing_squared = spacing' * spacing
             threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
             if spacing_squared >= threshold_squared # meet separation criteria
-                println("time FMM")
-                @time begin
-                lock(target_branch.lock) do
-                    M2L!(tree, i_target, j_source)
-                end
-                end
+                @lock target_branch.lock M2L!(tree, i_target, j_source)
             elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source) # both leaves
-                lock(target_branch.child_lock) do
-                    P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
-                end
+                @lock target_branch.child_lock P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
             elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
                 Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
                     horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index, local_P2P)
