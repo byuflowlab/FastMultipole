@@ -9,8 +9,8 @@ struct Branch{TF}
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
     local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
-    lock::ReentrantLock
-    child_lock::ReentrantLock
+    lock::Threads.SpinLock
+    child_lock::Threads.SpinLock
 end
 
 """
@@ -113,7 +113,7 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
     local_expansion = initialize_expansion(expansion_order)
     if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a leaf; no new branches needed
         i_child = Int32(-1)
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, Threads.SpinLock(), Threads.SpinLock())
         branches[i_branch] = branch
         return nothing
     else # not a leaf; branch children
@@ -134,7 +134,7 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
 
         # create branch
         i_child = Int32(length(branches) + 1)
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, Threads.SpinLock(), Threads.SpinLock())
 
         # sort bodies
         ## write offsets

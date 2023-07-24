@@ -64,7 +64,7 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
                 println("time FMM")
                 @time begin
                     lock(target_branch.lock) do
-                        @time M2L!(tree, i_target, j_source)
+                        M2L!(tree, i_target, j_source)
                     end
                 end
             elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source) # both leaves
