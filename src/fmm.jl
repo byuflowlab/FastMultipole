@@ -62,8 +62,10 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
             threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
             if spacing_squared >= threshold_squared # meet separation criteria
                 println("time FMM")
+                @time begin
                 lock(target_branch.lock) do
-                    @time M2L!(tree, i_target, j_source)
+                    M2L!(tree, i_target, j_source)
+                end
                 end
             elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source) # both leaves
                 lock(target_branch.child_lock) do
