@@ -1,4 +1,5 @@
 const BRANCH_TYPE = Float64
+global SHRINKING_OFFSET = .000001
 
 struct Branch{TF, MV3, MV1}
     n_branches::Int8          # number of child branches
@@ -222,9 +223,16 @@ function step_through_branches(elements_tuple::Tuple, branches, branch_index; se
         rectangle[4] = min(child.center[2]-child.radius[1], rectangle[4])
         rectangle[6] = min(child.center[3]-child.radius[1], rectangle[6])
     end
-    branch.center[1] = (rectangle[1] + rectangle[2]) / 2
-    branch.center[2] = (rectangle[3] + rectangle[4]) / 2
-    branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+
+    if branch.n_branches == 1
+        branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+        branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+        branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+    else
+        branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+        branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+        branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+    end
 
 
     if second_pass
@@ -264,9 +272,16 @@ function step_through_bodies(elements_tuple::Tuple, branches, branch_index; seco
             rectangle[6] = min(body[3]-body[4], rectangle[6])
         end
     end
-    branch.center[1] = (rectangle[1] + rectangle[2]) / 2
-    branch.center[2] = (rectangle[3] + rectangle[4]) / 2
-    branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+    if length(branch.n_bodies) == 1
+        branch.center[1] = (rectangle[1] + rectangle[2]) / 2 + SHRINKING_OFFSET
+        branch.center[2] = (rectangle[3] + rectangle[4]) / 2 + SHRINKING_OFFSET
+        branch.center[3] = (rectangle[5] + rectangle[6]) / 2 + SHRINKING_OFFSET
+    else
+        branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+        branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+        branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+    end
+
 
 
     if second_pass
