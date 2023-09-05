@@ -1,34 +1,3 @@
-const BRANCH_TYPE = Float64
-
-struct Branch{TF}
-    n_branches::Int8          # number of child branches
-    n_bodies::Vector{Int32}          # number of descendent bodies
-    first_branch::Int32        # index of the first branch
-    first_body::Vector{Int32}       # index of the first element
-    center::Vector{TF}              # center of the branch
-    radius::TF              # side lengths of the cube encapsulating the branch
-    multipole_expansion::Vector{Vector{Complex{TF}}} # multipole expansion coefficients
-    local_expansion::Vector{Vector{Complex{TF}}}     # local expansion coefficients
-    lock::Threads.ReentrantLock
-    child_lock::Threads.ReentrantLock
-end
-
-"""
-bodies[index_list] is the same sort operation as performed by the tree
-sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
-"""
-struct Tree{TF,VVI<:Vector{Vector{Int32}},VI<:Vector{Int32}}
-    branches::Vector{Branch{TF}}        # a vector of `Branch` objects composing the tree
-    expansion_order::Int16
-    n_per_branch::Int32    # max number of bodies in a leaf
-    index_list::VVI
-    inverse_index_list::VVI
-    leaf_index::VI
-    cumulative_count::VI # starting with 0, a cumulative accounting of how many bodies are in leaf branches
-end
-
-Tree(branches, expansion_order::Int64, n_per_branch::Int64, index_list, inverse_index_list, leaf_index, leaf_count) = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, leaf_count)
-
 """
     Tree(elements; expansion_order=2, n_per_branch=1)
 
@@ -44,18 +13,18 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(elements_tuple::Tuple, options::Options)
+function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
     # unpack options
     expansion_order = options.expansion_order
     n_per_branch = options.n_per_branch
 
     # initialize objects
-    bodies_list = [elements.bodies for elements in elements_tuple]
-    buffer_list = [similar(bodies) for bodies in bodies_list]
-    index_list = [zeros(Int32,size(bodies)[2]) for bodies in bodies_list]
-    inverse_index_list = [similar(index) for index in index_list]
-    buffer_index_list = [similar(index) for index in index_list]
-    branches = Vector{Branch{BRANCH_TYPE}}(undef,1)
+    buffer_list = Tuple(deepcopy(system) for system in systems)
+    index_list = Tuple(zeros(Int,length(system)) for system in systems)
+    inverse_index_list = Tuple(similar(index) for index in index_list)
+    buffer_index_list = Tuple(similar(index) for index in index_list)
+    n_systems = length(systems)
+    branches = Vector{Branch{TF,n_systems}}(undef,1)
 
     # update index lists
     for inverse_index in inverse_index_list
@@ -63,20 +32,20 @@ function Tree(elements_tuple::Tuple, options::Options)
     end
 
     # recursively build branches
-    i_start = ones(Int32,length(elements_tuple))
-    i_end = [Int32(size(bodies)[2]) for bodies in bodies_list]
+    i_start = SVector{n_systems,Int32}([Int32(1) for _ in systems])
+    i_end = SVector{n_systems,Int32}([Int32(length(system)) for system in systems])
     i_branch = 1
-    center, radius = center_radius(elements_tuple; scale_radius = 1.00001)
+    center, radius = center_radius(systems; scale_radius = 1.00001)
     level = 0
-    branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+    branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # invert index
-    for (i_type,inverse_index) in enumerate(inverse_index_list)
-        buffer_index = buffer_index_list[i_type]
-        for i_body in 1:length(inverse_index)
+    for (i_system,inverse_index) in enumerate(inverse_index_list)
+        buffer_index = buffer_index_list[i_system]
+        for i_body in eachindex(inverse_index)
             buffer_index[inverse_index[i_body]] = i_body
         end
-        index_list[i_type] .= inverse_index
+        index_list[i_system] .= inverse_index
         inverse_index .= buffer_index
     end
 
@@ -87,9 +56,9 @@ function Tree(elements_tuple::Tuple, options::Options)
     end
 
     # create leaf index and leaf count
-    cumulative_count = Vector{Int32}(undef,n_leaves)
+    cumulative_count = Vector{Int64}(undef,n_leaves)
     cumulative_count[1] = 0
-    leaf_index = zeros(Int32,n_leaves)
+    leaf_index = zeros(Int,n_leaves)
     i_leaf_index = 1
     for (i_branch, branch) in enumerate(branches)
         if branch.n_branches == 0
@@ -105,25 +74,25 @@ function Tree(elements_tuple::Tuple, options::Options)
     return tree
 end
 
-function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+function branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
-    n_types = length(i_start)
+    n_systems = length(systems)
     multipole_expansion = initialize_expansion(expansion_order)
     local_expansion = initialize_expansion(expansion_order)
     if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a leaf; no new branches needed
         i_child = Int32(-1)
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        branch = eltype(branches)(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
         branches[i_branch] = branch
         return nothing
     else # not a leaf; branch children
         # count elements in each octant
-        octant_attendance = zeros(Int32, 8, n_types)
-        for i_type in 1:n_types # loop over each type
-            for i_body in i_start[i_type]:i_end[i_type] # loop over each body
-                x = bodies_list[i_type][1:3,i_body]
+        octant_attendance = zeros(Int32, 8, n_systems)
+        for i_system in 1:n_systems # loop over each type
+            for i_body in i_start[i_system]:i_end[i_system] # loop over each body
+                x = systems[i_system][i_body, POSITION]
                 i_octant = get_octant(x, center)
-                octant_attendance[i_octant, i_type] += Int32(1)
+                octant_attendance[i_octant, i_system] += Int32(1)
             end
         end
 
@@ -134,11 +103,11 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
 
         # create branch
         i_child = Int32(length(branches) + 1)
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        branches[i_branch] = eltype(branches)(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
 
         # sort bodies
         ## write offsets
-        offsets = zeros(Int32,8,n_types)
+        offsets = zeros(Int32,8,n_systems)
         offsets[1,:] .= i_start
         for i=2:8
             offsets[i,:] .= offsets[i-1,:] + octant_attendance[i-1,:]
@@ -148,19 +117,21 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
         counter = deepcopy(offsets)
 
         ## sort element indices into the buffer
-        for i_type in 1:n_types
-            for i_body in i_start[i_type]:i_end[i_type]
-                x = bodies_list[i_type][1:3,i_body]
+        for i_system in 1:n_systems
+            for i_body in i_start[i_system]:i_end[i_system]
+                x = systems[i_system][i_body,POSITION]
                 i_octant = get_octant(x, center)
-                buffer_list[i_type][:,counter[i_octant,i_type]] .= bodies_list[i_type][:,i_body]
-                buffer_index_list[i_type][counter[i_octant,i_type]] = inverse_index_list[i_type][i_body]
-                counter[i_octant,i_type] += 1 
+                buffer_list[i_system][counter[i_octant,i_system]] = systems[i_system][i_body]
+                buffer_index_list[i_system][counter[i_octant,i_system]] = inverse_index_list[i_system][i_body]
+                counter[i_octant,i_system] += 1
             end
             # place sorted bodies
-            bodies_list[i_type][:,i_start[i_type]:i_end[i_type]] .= buffer_list[i_type][:,i_start[i_type]:i_end[i_type]]
+            for i in i_start[i_system]:i_end[i_system]
+                systems[i_system][i] = buffer_list[i_system][i]
+            end
             
             # update index_list
-            inverse_index_list[i_type] .= buffer_index_list[i_type]
+            inverse_index_list[i_system] .= buffer_index_list[i_system]
         end
 
         # recursively build new branches
@@ -173,11 +144,11 @@ function branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_
                 child_i_start = offsets[i_octant+Int8(1),:] # index of first member for all element types
                 child_i_end = child_i_start + octant_attendance[i_octant+Int8(1),:] .- Int32(1) # if attendence is 0, the end index will be less than the start
                 child_radius = radius / 2#(1 << (level + 1))
-                child_center = deepcopy(center)
+                child_center = MVector{3}(center)
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, bodies_list, buffer_list, inverse_index_list, buffer_index_list, child_i_start, child_i_end, i_tape + prev_branches, child_center, child_radius, level + 1, expansion_order, n_per_branch)
+                branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, SVector{n_systems}(child_i_start), SVector{n_systems}(child_i_end), i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
                 i_tape += 1
             end
         end
@@ -187,54 +158,66 @@ end
 """
 Undoes the sort operation performed by the tree.
 """
-function unsort!(elements_tuple::Tuple, tree::Tree)
-    n_types = length(elements_tuple)
-    for (i_type, elements) in enumerate(elements_tuple)
-        bodies = elements.bodies
-        potential = elements.potential
-        inverse_index = tree.inverse_index_list[i_type]
-        bodies .= bodies[:,inverse_index]
-        potential .= potential[:,inverse_index]
+function unsort!(systems::Tuple, tree::Tree)
+    for (i_system, system) in enumerate(systems)
+        buffer = deepcopy(system)
+        inverse_index = tree.inverse_index_list[i_system]
+        for i in 1:length(system)
+            buffer[i] = system[inverse_index[i]]
+        end
+        for i in 1:length(system)
+            system[i] = buffer[i]
+        end
     end
 end
 
 """
 Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
 """
-function resort!(elements_tuple::Tuple, tree::Tree)
-    n_types = length(elements_tuple)
-    for (i_type, elements) in enumerate(elements_tuple)
-        bodies = elements.bodies
-        potential = elements.potential
-        index = tree.index_list[i_type]
-        bodies .= bodies[:,index]
-        potential .= potential[:,index]
+function resort!(systems::Tuple, tree::Tree)
+    for (i_system, system) in enumerate(systems)
+        buffer = deepcopy(system)
+        index = tree.index_list[i_system]
+        for i in 1:length(system)
+            buffer[i] = system[index[i]]
+        end
+        for i in 1:length(system)
+            system[i] = buffer[i]
+        end
     end
 end
 
-function center_radius(elements_tuple::Tuple; scale_radius = 1.00001)
-    x_min = deepcopy(elements_tuple[1].bodies[i_POSITION,1])
-    x_max = deepcopy(elements_tuple[1].bodies[i_POSITION,1])
-    for elements in elements_tuple
-        for i in 1:size(elements.bodies)[2]
-            x = elements.bodies[i_POSITION,i]
-            for dim in 1:3
-                if x[dim] < x_min[dim]
-                    x_min[dim] = x[dim]
-                elseif x[dim] > x_max[dim]
-                    x_max[dim] = x[dim]
-                end
+function center_radius(systems::Tuple; scale_radius = 1.00001)
+    x_min, y_min, z_min = systems[1][1,POSITION]
+    x_max, y_max, z_max = systems[1][1,POSITION]
+    for system in systems
+        for i in 1:length(system)
+            x, y, z = system[i,POSITION]
+            if x < x_min
+                x_min = x
+            elseif x > x_max
+                x_max = x
+            end
+            if y < y_min
+                y_min = y
+            elseif y > y_max
+                y_max = y
+            end
+            if z < z_min
+                z_min = z
+            elseif z > z_max
+                z_max = z
             end
         end
     end
-    center = (x_max + x_min) ./ 2
+    center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
     # TODO: add element smoothing radius here? Note this method creates cubic cells
-    radius = max(x_max-center...) * scale_radius # get half of the longest side length of the rectangle
-    return center, radius
+    radius = max(x_max-center[1], y_max-center[2], z_max-center[3]) * scale_radius # get half of the longest side length of the rectangle
+    return SVector{3}(center), radius
 end
 
 @inline function get_octant(x, center)
-    i_octant = (UInt8((x[1] > center[1])) + UInt8(x[2] > center[2]) << 0b1 + UInt8(x[3] > center[3]) << 0b10) + 0b1
+    return (UInt8((x[1] > center[1])) + UInt8(x[2] > center[2]) << 0b1 + UInt8(x[3] > center[3]) << 0b10) + 0b1
 end
 
 function n_terms(expansion_order, dimensions)
@@ -247,36 +230,14 @@ function n_terms(expansion_order, dimensions)
 end
 
 function initialize_expansion(expansion_order)
-    return [zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4]
-end
-
-function change_expansion_order!(tree::Tree, new_order)
-    old_n = length(tree.branches[1].multipole_expansion[1])
-    new_n = n_terms(new_order, 3)
-    old_order = tree.expansion_order
-    for branch in tree.branches
-        if  old_order < new_order
-            for i in 1:new_n - old_n
-                for dim in 1:4
-                    push!(branch.multipole_expansion[dim],0.0)
-                    push!(branch.local_expansion[dim],0.0)
-                end
-            end
-        elseif old_order > new_order
-            for i in 1:new_n - old_n
-                for dim in 1:4
-                    pop!(branch.multipole_expansion[dim])
-                    pop!(branch.local_expansion[dim])
-                end
-            end
-        end
-    end
-    tree.expansion_order = new_order
+    return Tuple(zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4)
 end
 
 function reset_expansions!(tree)
     Threads.@threads for branch in tree.branches
-        branch.multipole_expansion .*= 0
-        branch.local_expansion .*= 0
+        for dim in 1:4
+            branch.multipole_expansion[dim] .*= 0
+            branch.local_expansion[dim] .*= 0
+        end
     end
 end

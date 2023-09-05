@@ -1,30 +1,28 @@
-function P2P!(tree, elements_tuple::Tuple, i_target, j_source, targets_index, sources_index)
+function P2P!(tree, systems::Tuple, i_target, j_source, targets_index, sources_index)
     target_branch = tree.branches[i_target]
     source_branch = tree.branches[j_source]
-    for (ii_source,source_elements) in enumerate(elements_tuple[sources_index])
+    for (ii_source,source_system) in enumerate(systems[sources_index])
         i_source = sources_index[ii_source]
-        for (ii_target,target_elements) in enumerate(elements_tuple[targets_index])
+        for (ii_target,target_system) in enumerate(systems[targets_index])
             i_target = targets_index[ii_target]
-            is_target = target_branch.first_body[i_target]:target_branch.first_body[i_target]+target_branch.n_bodies[i_target]-1
-            target_positions = target_elements.bodies[i_POSITION,is_target]
-            target_potential = view(target_elements.potential, :, is_target)
-            is_source = source_branch.first_body[i_source]:source_branch.first_body[i_source]+source_branch.n_bodies[i_source]-1
-            sources = source_elements.bodies[:,is_source]
-            source_elements.direct!(target_potential, target_positions, sources)
+            target_indices = target_branch.first_body[i_target]:target_branch.first_body[i_target]+target_branch.n_bodies[i_target]-1
+            source_indices = source_branch.first_body[i_source]:source_branch.first_body[i_source]+source_branch.n_bodies[i_source]-1
+            direct!(target_system, target_indices, source_system, source_indices)
         end
     end
 end
 
-function upward_pass!(tree::Tree, elements, sources_index)
-    upward_pass!(tree, elements, 1, sources_index)
+function upward_pass!(tree::Tree, systems, sources_index)
+    upward_pass!(tree, systems, 1, sources_index)
 end
 
-function upward_pass!(tree, elements, i_branch, sources_index)
+function upward_pass!(tree, systems, i_branch, sources_index)
     # recursively iterate through branches
     branch = tree.branches[i_branch]
-    # for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
     Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
-        upward_pass!(tree, elements, i_child, sources_index)
+    # for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+        # @inbounds upward_pass!(tree, systems, i_child, sources_index)
+        upward_pass!(tree, systems, i_child, sources_index)
     end
     
     contains_sources = false
@@ -34,19 +32,21 @@ function upward_pass!(tree, elements, i_branch, sources_index)
         # perform P2M (leaf level) or M2M (not leaf level) translations
         @lock branch.lock begin
             if branch.first_branch == -1 # leaf level
-                B2M!(tree, elements, i_branch, sources_index)
+                # println("B2M!")
+                B2M!(tree, systems, i_branch, sources_index)
             else
+                # println("M2M!")
                 M2M!(tree, i_branch) # not leaf level
             end
         end
     end
 end
 
-function horizontal_pass!(tree, elements::Tuple, theta, targets_index, sources_index, local_P2P=true)
-    horizontal_pass!(tree, elements, 1, 1, theta, targets_index, sources_index, local_P2P)
+function horizontal_pass!(tree, systems, theta, targets_index, sources_index, local_P2P=true)
+    horizontal_pass!(tree, systems, 1, 1, theta, targets_index, sources_index, local_P2P)
 end
 
-function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_index, sources_index, local_P2P=true)
+function horizontal_pass!(tree, systems, i_target, j_source, theta, targets_index, sources_index, local_P2P=true)
     branches = tree.branches
     source_branch = branches[j_source]
     target_branch = branches[i_target]
@@ -63,25 +63,29 @@ function horizontal_pass!(tree, elements, i_target, j_source, theta, targets_ind
             if spacing_squared >= threshold_squared # meet separation criteria
                 @lock target_branch.lock M2L!(tree, i_target, j_source)
             elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source) # both leaves
-                @lock target_branch.child_lock P2P!(tree, elements, i_target, j_source, targets_index, sources_index)
+                @lock target_branch.child_lock P2P!(tree, systems, i_target, j_source, targets_index, sources_index)
             elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
                 Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-                    horizontal_pass!(tree, elements, i_child, j_source, theta, targets_index, sources_index, local_P2P)
+                # for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+                    # @inbounds horizontal_pass!(tree, systems, i_child, j_source, theta, targets_index, sources_index, local_P2P)
+                    horizontal_pass!(tree, systems, i_child, j_source, theta, targets_index, sources_index, local_P2P)
                 end
             else
                 Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-                    horizontal_pass!(tree, elements, i_target, j_child, theta, targets_index, sources_index, local_P2P)
+                # for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+                    # @inbounds horizontal_pass!(tree, systems, i_target, j_child, theta, targets_index, sources_index, local_P2P)
+                    horizontal_pass!(tree, systems, i_target, j_child, theta, targets_index, sources_index, local_P2P)
                 end
             end
         end
     end
 end
 
-function downward_pass!(tree, elements, targets_index)
-    downward_pass!(tree, elements, 1, targets_index)
+function downward_pass!(tree, systems, targets_index)
+    downward_pass!(tree, systems, 1, targets_index)
 end
 
-function downward_pass!(tree, elements, j_source, targets_index)
+function downward_pass!(tree, systems, j_source, targets_index)
     # expose branch
     branch = tree.branches[j_source]
 
@@ -91,11 +95,13 @@ function downward_pass!(tree, elements, j_source, targets_index)
     if contains_targets
         # if a leaf, perform L2P on
         if branch.first_branch == -1 # leaf
-            L2B!(tree, elements, j_source, targets_index)
+            L2B!(tree, systems, j_source, targets_index)
         else # not a leaf, so perform L2L! and recurse
             L2L!(tree, j_source)
             Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
-                downward_pass!(tree, elements, i_child, targets_index)
+            # for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+                # @inbounds downward_pass!(tree, systems, i_child, targets_index)
+                downward_pass!(tree, systems, i_child, targets_index)
             end
         end
     end
@@ -104,11 +110,12 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, elements, options::Options, targets_index, sources_index; reset_tree=true, local_P2P=true)
-    if reset_tree; reset_expansions!(tree); end
-    upward_pass!(tree, elements, sources_index)
-    horizontal_pass!(tree, elements, options.theta, targets_index, sources_index, local_P2P)
-    downward_pass!(tree, elements, targets_index)
+function fmm!(tree::Tree, systems, options::Options, targets_index, sources_index; reset_tree=true, local_P2P=true, unsort_bodies=true)
+    reset_tree && (reset_expansions!(tree))
+    upward_pass!(tree, systems, sources_index)
+    horizontal_pass!(tree, systems, options.theta, targets_index, sources_index, local_P2P)
+    downward_pass!(tree, systems, targets_index)
+    unsort_bodies && (unsort!(systems, tree))
 end
 
 """
@@ -130,21 +137,21 @@ Note: this function merely adds to existing potential of its elements to avoid o
 
 The user must reset the potential manually.
 """
-function fmm!(elements::Tuple, options::Options; optargs...)
-    tree = Tree(elements, options)
-    full_index = collect(1:length(elements))
-    fmm!(tree, elements, options, full_index, full_index; optargs...)
+function fmm!(systems::Tuple, options::Options; optargs...)
+    tree = Tree(systems, options, Val{eltype(systems[1][1,POSITION])}())
+    full_index = collect(1:length(systems))
+    fmm!(tree, systems, options, full_index, full_index; optargs...)
     return tree
 end
 
-function fmm!(tree::Tree, elements::Tuple, options::Options; optargs...)
-    full_index = collect(1:length(elements))
-    fmm!(tree, elements, options, full_index, full_index; optargs...)
+function fmm!(tree::Tree, systems::Tuple, options::Options; optargs...)
+    full_index = collect(1:length(systems))
+    fmm!(tree, systems, options, full_index, full_index; optargs...)
     return tree
 end
 
-function fmm!(elements::Tuple, options::Options, target_index, source_index; optargs...)
-    tree = Tree(elements, options)
-    fmm!(tree, elements, options, target_index, source_index; optargs...)
+function fmm!(systems::Tuple, options::Options, target_index, source_index; optargs...)
+    tree = Tree(systems, options)
+    fmm!(tree, systems, options, target_index, source_index; optargs...)
     return tree
 end

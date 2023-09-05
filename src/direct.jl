@@ -22,18 +22,27 @@
 
 Direct calculation of induced potential (no FMM acceleration).
 """
-function direct!(elements_tuple::Tuple)
-    for source_elements in elements_tuple
-        for target_elements in elements_tuple
-            source_elements.direct!(target_elements.potential, target_elements.bodies[i_POSITION,:], source_elements.bodies)
+function direct!(systems::Tuple)
+    for source_system in systems
+        for target_system in systems
+            direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
         end
     end
 end
 
-function direct!(elements_tuple::Tuple, targets_index, sources_index)
-    for source_elements in elements_tuple[sources_index]
-        for target_elements in elements_tuple[targets_index]
-            source_elements.direct!(target_elements.potential, target_elements.bodies[i_POSITION,:], source_elements.bodies)
+function direct!(systems::Tuple, targets_index, sources_index)
+    for source_system in systems[sources_index]
+        for target_system in systems[targets_index]
+            direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
         end
     end
+end
+
+function direct!(system)
+    direct!(system, 1:length(system), system, 1:length(system))
+end
+
+function direct!(target_system, target_indices, source_system, source_indices)
+    @warn "direct! function not implemented for source type $(typeof(source_system)) and will do nothing; overload FLOWFMM.direct!"
+    return nothing
 end
