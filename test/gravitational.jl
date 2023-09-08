@@ -6,8 +6,8 @@ i_POSITION = 1:3
 i_RADIUS = 4
 i_STRENGTH = 5:8
 i_POTENTIAL = 1:4
-i_POTENTIAL_JACOBIAN = 5:16
-i_POTENTIAL_HESSIAN = 17:52
+i_VELOCITY = 5:7
+i_VELOCITY_GRADIENT = 8:16
 
 #####
 ##### gravitational kernel and mass elements
@@ -35,8 +35,8 @@ Base.getindex(g::Gravitational, i, ::fmm.Position) = g.bodies[i].position
 Base.getindex(g::Gravitational, i, ::fmm.Radius) = g.bodies[i].radius
 Base.getindex(g::Gravitational, i, ::fmm.Potential) = view(g.potential,1:4,i)
 Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = view(g.potential,1,i)
-Base.getindex(g::Gravitational, i, ::fmm.Jacobian) = reshape(view(g.potential,5:16,i),3,4)
-Base.getindex(g::Gravitational, i, ::fmm.Hessian) = reshape(view(g.potential,17:52,i),3,3,4)
+Base.getindex(g::Gravitational, i, ::fmm.Velocity) = view(g.potential,i_VELOCITY,i)
+Base.getindex(g::Gravitational, i, ::fmm.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
 Base.getindex(g::Gravitational, i) = g.bodies[i], view(g.potential,:,i)
 function Base.setindex!(g::Gravitational, val, i)
     body, potential = val
@@ -50,11 +50,11 @@ end
 function Base.setindex!(g::Gravitational, val, i, ::fmm.Potential)
     g.potential[i_POTENTIAL,i] .= val
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.Jacobian)
-    reshape(g.potential[i_POTENTIAL_JACOBIAN,i],3,4) .= val
+function Base.setindex!(g::Gravitational, val, i, ::fmm.Velocity)
+    g.potential[i_VELOCITY,i] .= val
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.Hessian)
-    reshape(g.potential[i_POTENTIAL_HESSIAN,i],3,3,4) .= val
+function Base.setindex!(g::Gravitational, val, i, ::fmm.VelocityGradient)
+    reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
 end
 Base.length(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF

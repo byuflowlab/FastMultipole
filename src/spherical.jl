@@ -66,6 +66,24 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
     return nothing
 end
 
+function flatten_derivatives!(jacobian, hessian)
+    # velocity
+    jacobian[1,1] = -jacobian[1,1] + jacobian[2,4] - jacobian[3,3]
+    jacobian[2,1] = -jacobian[2,1] + jacobian[3,2] - jacobian[1,4]
+    jacobian[3,1] = -jacobian[3,1] + jacobian[1,3] - jacobian[2,2]
+
+    # velocity gradient
+    hessian[1,1,1] = -hessian[1,1,1]+hessian[2,1,4]-hessian[3,1,3]
+    hessian[2,1,1] = -hessian[2,1,1]+hessian[3,1,2]-hessian[1,1,4]
+    hessian[3,1,1] = -hessian[3,1,1]+hessian[1,1,3]-hessian[2,1,2]
+    hessian[1,2,1] = -hessian[1,2,1]+hessian[2,2,4]-hessian[3,2,3]
+    hessian[2,2,1] = -hessian[2,2,1]+hessian[3,2,2]-hessian[1,2,4]
+    hessian[3,2,1] = -hessian[3,2,1]+hessian[1,2,3]-hessian[2,2,2]
+    hessian[1,3,1] = -hessian[1,3,1]+hessian[2,3,4]-hessian[3,3,3]
+    hessian[2,3,1] = -hessian[2,3,1]+hessian[3,3,2]-hessian[1,3,4]
+    hessian[3,3,1] = -hessian[3,3,1]+hessian[1,3,3]-hessian[2,3,2]
+end
+
 @inline odd_or_even(n::Int) = (n & 1) == 1 ? -1 : 1
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
@@ -114,9 +132,9 @@ end
 
 function regular_harmonic!(harmonics, rho, theta, phi, P)
     y,x = sincos(theta)
-    fact = 1
-    pl = 1
-    rhom = 1 # rho^l / (l+m)! * (-1)^l
+    fact = 1.0
+    pl = 1.0
+    rhom = 1.0 # rho^l / (l+m)! * (-1)^l
     ei = exp(im * phi)
     eim = 1.0 # e^(i * m * phi)
     for m=0:P # l=m up here
@@ -445,7 +463,8 @@ end
         end
     end
     spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
+    flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient
     system[i_body,POTENTIAL] += potential
-    system[i_body,JACOBIAN] += potential_jacobian
-    system[i_body,HESSIAN] += potential_hessian
+    system[i_body,VELOCITY] += potential_jacobian[:,1]
+    system[i_body,VELOCITYGRADIENT] += potential_hessian[:,:,1]
 end

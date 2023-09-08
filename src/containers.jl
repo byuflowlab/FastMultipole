@@ -7,9 +7,6 @@ const POSITION = Position()
 struct Radius end
 const RADIUS = Radius()
 
-struct Velocity end
-const VELOCITY = Velocity()
-
 struct Potential end
 const POTENTIAL = Potential()
 
@@ -19,11 +16,8 @@ const SCALAR_POTENTIAL = ScalarPotential()
 struct VectorPotential end
 const VECTOR_POTENTIAL = VectorPotential()
 
-struct Jacobian end
-const JACOBIAN = Jacobian()
-
-struct Hessian end
-const HESSIAN = Hessian()
+struct Velocity end
+const VELOCITY = Velocity()
 
 struct VelocityGradient end
 const VELOCITYGRADIENT = VelocityGradient()
