@@ -2,12 +2,12 @@ import FLOWFMM as fmm
 using WriteVTK
 import Base: getindex, setindex!
 using StaticArrays
-i_POSITION = 1:3
-i_RADIUS = 4
-i_STRENGTH = 5:8
-i_POTENTIAL = 1:4
-i_VELOCITY = 5:7
-i_VELOCITY_GRADIENT = 8:16
+const i_POSITION = 1:3
+const i_RADIUS = 4
+const i_STRENGTH = 5:8
+const i_POTENTIAL = 1:4
+const i_VELOCITY = 5:7
+const i_VELOCITY_GRADIENT = 8:16
 
 #####
 ##### gravitational kernel and mass elements

@@ -1,9 +1,9 @@
 include("../test/gravitational.jl")
 
-n_bodies = 1000
+n_bodies = 30000
 bodies = rand(8,n_bodies)
 systems = (Gravitational(bodies),)
-options = fmm.Options(6,5,10.0)
+options = fmm.Options(13,700,10.0)
 tree = fmm.Tree(systems, options)
 println("Run FMM:")
 @time fmm.fmm!(tree, systems, options; unsort_bodies=true)
