@@ -41,8 +41,3 @@ end
 function direct!(system)
     direct!(system, 1:length(system), system, 1:length(system))
 end
-
-function direct!(target_system, target_indices, source_system, source_indices)
-    @warn "direct! function not implemented for source type $(typeof(source_system)) and will do nothing; overload FLOWFMM.direct!"
-    return nothing
-end

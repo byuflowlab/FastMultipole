@@ -33,17 +33,17 @@ end
 Base.getindex(g::Gravitational, i, ::fmm.Position) = g.bodies[i].position
 # Base.getindex(g::Gravitational, i, ::fmm.Velocity) = 
 Base.getindex(g::Gravitational, i, ::fmm.Radius) = g.bodies[i].radius
-Base.getindex(g::Gravitational, i, ::fmm.Potential) = view(g.potential,1:4,i)
-Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = view(g.potential,1,i)
-Base.getindex(g::Gravitational, i, ::fmm.Velocity) = view(g.potential,i_VELOCITY,i)
-Base.getindex(g::Gravitational, i, ::fmm.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
+# Base.getindex(g::Gravitational, i, ::fmm.Potential) = view(g.potential,1:4,i)
+# Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = view(g.potential,1,i)
+# Base.getindex(g::Gravitational, i, ::fmm.Velocity) = view(g.potential,i_VELOCITY,i)
+# Base.getindex(g::Gravitational, i, ::fmm.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
 Base.getindex(g::Gravitational, i) = g.bodies[i], view(g.potential,:,i)
-function Base.setindex!(g::Gravitational, val, i)
-    body, potential = val
-    g.bodies[i] = body
-    g.potential[:,i] .= potential
-    return nothing
-end
+# function Base.setindex!(g::Gravitational, val, i)
+#     body, potential = val
+#     g.bodies[i] = body
+#     g.potential[:,i] .= potential
+#     return nothing
+# end
 function Base.setindex!(g::Gravitational, val, i, ::fmm.ScalarPotential)
     g.potential[i_POTENTIAL[1],i] .= val
 end

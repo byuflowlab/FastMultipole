@@ -6,7 +6,7 @@ using StaticArrays
 
 const ONE_OVER_4PI = 1/4/pi
 
-for file in ["containers", "options", "derivatives", "element", "tree", "direct", "spherical", "fmm"]
+for file in ["containers", "options", "derivatives", "element", "tree", "direct", "spherical", "fmm", "overload"]
     include(file*".jl")
 end
 
