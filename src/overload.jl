@@ -10,23 +10,23 @@
 # Base.getindex(sys, i, ::VelocityGradient) =
 # Base.getindex(sys, i) =
 function Base.setindex!(sys, val, i)
-    @warn "setindex! not overloaded for type $(typeof(sys))"
+    @warn "setindex! not overloaded for type $(typeof(sys)); octree will have errors"
     return nothing
 end
 function Base.setindex!(sys, val, i, ::ScalarPotential)
-    @warn "setindex! (ScalarPotential) not overloaded for type $(typeof(sys))"
+    # @warn "setindex! (ScalarPotential) not overloaded for type $(typeof(sys))"
     return nothing
 end
 function Base.setindex!(sys, val, i, ::Potential)
-    @warn "setindex! (Potential) not overloaded for type $(typeof(sys))"
+    # @warn "setindex! (Potential) not overloaded for type $(typeof(sys))"
     return nothing
 end
 function Base.setindex!(sys, val, i, ::Velocity)
-    @warn "setindex! (Velocity) not overloaded for type $(typeof(sys))"
+    # @warn "setindex! (Velocity) not overloaded for type $(typeof(sys))"
     return nothing
 end
 function Base.setindex!(sys, val, i, ::VelocityGradient)
-    @warn "setindex! (VelocityGradient) not overloaded for type $(typeof(sys))"
+    # @warn "setindex! (VelocityGradient) not overloaded for type $(typeof(sys))"
     return nothing
 end
 # Base.length(system) = 
