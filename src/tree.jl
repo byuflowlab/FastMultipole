@@ -13,18 +13,29 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
+function Tree(systems, options::Options, ::Val{TF}=Val{Float64}();
+        sort_in_place = Tuple(true for _ in systems)
+    ) where TF
     # unpack options
     expansion_order = options.expansion_order
     n_per_branch = options.n_per_branch
 
     # initialize objects
-    buffer_list = Tuple(deepcopy(system) for system in systems)
+    buffer_list = Tuple(get_buffer(system,in_place) for (system,in_place) in zip(systems,sort_in_place))
     index_list = Tuple(zeros(Int,length(system)) for system in systems)
     inverse_index_list = Tuple(similar(index) for index in index_list)
     buffer_index_list = Tuple(similar(index) for index in index_list)
     n_systems = length(systems)
     branches = Vector{Branch{TF,n_systems}}(undef,1)
+
+    # if not sorting in place
+    if false in sort_in_place
+        systems_2 = []
+        for (i,(in_place,system)) in enumerate(zip(sort_in_place,systems))
+            in_place ? push!(systems_2, system) : push!(systems_2, SortWrapper(system,index_list[i]))
+        end
+        systems = Tuple(systems_2)
+    end
 
     # update index lists
     for inverse_index in inverse_index_list
@@ -118,13 +129,8 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
 
         ## sort element indices into the buffer
         for i_system in 1:n_systems
-            for i_body in i_start[i_system]:i_end[i_system]
-                x = systems[i_system][i_body,POSITION]
-                i_octant = get_octant(x, center)
-                buffer_list[i_system][counter[i_octant,i_system]] = systems[i_system][i_body]
-                buffer_index_list[i_system][counter[i_octant,i_system]] = inverse_index_list[i_system][i_body]
-                counter[i_octant,i_system] += 1
-            end
+            buffer_loop!(buffer_list[i_system], buffer_index_list[i_system], counter, system, inverse_index_list[i_system], i_start[i_system], i_end[i_system], i_system, center)
+            place_buffer!(system, buffer, i_start[i_system], i_end[i_system])
             # place sorted bodies
             for i in i_start[i_system]:i_end[i_system]
                 systems[i_system][i] = buffer_list[i_system][i]
@@ -153,6 +159,40 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
             end
         end
     end
+end
+
+function buffer_loop!(buffer_list, buffer_index, counter, system::SortWrapper, inverse_index, i_start, i_end, i_system, center)
+    for i_body in system.index[i_start:i_end]
+        x = system[i_body,POSITION]
+        i_octant = get_octant(x, center)
+        buffer_index[counter[i_octant,i_system]] = inverse_index[i_body]
+        counter[i_octant,i_system] += 1
+    end
+end
+
+function buffer_loop!(buffer, buffer_index, counter, system, inverse_index, i_start, i_end, i_system, center)
+    for i_body in system.index[i_start:i_end]
+        x = system[i_body,POSITION]
+        i_octant = get_octant(x, center)
+        buffer[counter[i_octant,i_system]] = system[i_body]
+        buffer_index[counter[i_octant,i_system]] = inverse_index[i_body]
+        counter[i_octant,i_system] += 1
+    end
+end
+
+function place_buffer!(system::SortWrapper, buffer, i_start, i_end)
+    return nothing # no need to sort bodies
+end
+
+function place_buffer!(system, buffer, i_start, i_end)
+    # place sorted bodies
+    for i in i_start:i_end
+        system[i] = buffer[i]
+    end
+end
+
+function get_buffer(system, in_place)
+    in_place ? return deepcopy(system) : nothing
 end
 
 """

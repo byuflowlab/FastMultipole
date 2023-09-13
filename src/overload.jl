@@ -41,3 +41,13 @@ function direct!(target_system, target_index, source_system, source_index)
     @warn "direct! function not overloaded for type $(typeof(source_system)); interaction ignored"
     return nothing
 end
+
+# overload for SortWrapper
+Base.setindex!(sys::SortWrapper,val,i) = setindex!(sys.system,val,sys.index[i])
+Base.setindex!(sys::SortWrapper,val,i,parameter) = setindex!(sys.system,val,sys.index[i],parameter)
+Base.getindex(sys::SortWrapper, i) = getindex(sys.system, sys.index[i])
+Base.getindex(sys::SortWrapper, i, parameter) = getindex(sys.system, sys.index[i], parameter)
+B2M!(branch, system::SortWrapper, bodies_index, harmonics, expansion_order) =
+    B2M!(branch, system.system, system.index[bodies_index], harmonics, expansion_order)
+direct!(target_system, target_index, source_system::SortWrapper, source_index) =
+    direct!(target_system, target_index, source_system.system, source_system.index[source_index])

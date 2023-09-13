@@ -50,3 +50,8 @@ struct Tree{TF,N}
 end
 
 struct Val{T} end
+
+struct SortWrapper{TS}
+    system::TS
+    index::Vector{Int}
+end
