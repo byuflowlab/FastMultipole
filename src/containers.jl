@@ -55,3 +55,7 @@ struct SortWrapper{TS}
     system::TS
     index::Vector{Int}
 end
+
+function SortWrapper(system)
+    return SortWrapper(system,collect(1:length(system)))
+end

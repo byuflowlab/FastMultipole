@@ -43,8 +43,12 @@ function direct!(target_system, target_index, source_system, source_index)
 end
 
 # overload for SortWrapper
+Base.length(sys::SortWrapper) = length(sys.system)
 Base.setindex!(sys::SortWrapper,val,i) = setindex!(sys.system,val,sys.index[i])
-Base.setindex!(sys::SortWrapper,val,i,parameter) = setindex!(sys.system,val,sys.index[i],parameter)
+Base.setindex!(sys::SortWrapper,val,i,parameter::ScalarPotential) = setindex!(sys.system,val,sys.index[i],parameter::ScalarPotential)
+Base.setindex!(sys::SortWrapper,val,i,parameter::Potential) = setindex!(sys.system,val,sys.index[i],parameter::Potential)
+Base.setindex!(sys::SortWrapper,val,i,parameter::Velocity) = setindex!(sys.system,val,sys.index[i],parameter::Velocity)
+Base.setindex!(sys::SortWrapper,val,i,parameter::VelocityGradient) = setindex!(sys.system,val,sys.index[i],parameter::VelocityGradient)
 Base.getindex(sys::SortWrapper, i) = getindex(sys.system, sys.index[i])
 Base.getindex(sys::SortWrapper, i, parameter) = getindex(sys.system, sys.index[i], parameter)
 B2M!(branch, system::SortWrapper, bodies_index, harmonics, expansion_order) =

@@ -4,6 +4,7 @@ using BenchmarkTools
 n_bodies = 30000
 bodies = rand(8,n_bodies)
 systems = (Gravitational(bodies),)
+# systems = (fmm.SortWrapper(Gravitational(bodies)),)
 options = fmm.Options(13,700,10.0)
 old_bodies = deepcopy(systems[1].bodies)
 @time tree = fmm.Tree(systems, options)

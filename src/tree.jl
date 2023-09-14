@@ -13,34 +13,18 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(systems, options::Options, ::Val{TF}=Val{Float64}();
-        sort_in_place = Tuple(true for _ in systems)
-    ) where TF
+function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
     # unpack options
     expansion_order = options.expansion_order
     n_per_branch = options.n_per_branch
 
     # initialize objects
-    buffer_list = Tuple(get_buffer(system,in_place) for (system,in_place) in zip(systems,sort_in_place))
-    index_list = Tuple(zeros(Int,length(system)) for system in systems)
+    buffer_list = Tuple(get_buffer(system) for system in systems)
+    index_list = Tuple(collect(1:length(system)) for system in systems)
     inverse_index_list = Tuple(similar(index) for index in index_list)
     buffer_index_list = Tuple(similar(index) for index in index_list)
     n_systems = length(systems)
     branches = Vector{Branch{TF,n_systems}}(undef,1)
-
-    # if not sorting in place
-    if false in sort_in_place
-        systems_2 = []
-        for (i,(in_place,system)) in enumerate(zip(sort_in_place,systems))
-            in_place ? push!(systems_2, system) : push!(systems_2, SortWrapper(system,index_list[i]))
-        end
-        systems = Tuple(systems_2)
-    end
-
-    # update index lists
-    for inverse_index in inverse_index_list
-        inverse_index .= 1:length(inverse_index)
-    end
 
     # recursively build branches
     i_start = SVector{n_systems,Int32}([Int32(1) for _ in systems])
@@ -48,16 +32,14 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}();
     i_branch = 1
     center, radius = center_radius(systems; scale_radius = 1.00001)
     level = 0
-    branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+    branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # invert index
-    for (i_system,inverse_index) in enumerate(inverse_index_list)
-        buffer_index = buffer_index_list[i_system]
-        for i_body in eachindex(inverse_index)
-            buffer_index[inverse_index[i_body]] = i_body
+    for (i_system,index) in enumerate(index_list)
+        inverse_index = inverse_index_list[i_system]
+        for i_body in eachindex(index)
+            inverse_index[index[i_body]] = i_body
         end
-        index_list[i_system] .= inverse_index
-        inverse_index .= buffer_index
     end
 
     # count leaves
@@ -85,7 +67,7 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}();
     return tree
 end
 
-function branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+function branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
     n_systems = length(systems)
@@ -129,15 +111,11 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
 
         ## sort element indices into the buffer
         for i_system in 1:n_systems
-            buffer_loop!(buffer_list[i_system], buffer_index_list[i_system], counter, system, inverse_index_list[i_system], i_start[i_system], i_end[i_system], i_system, center)
-            place_buffer!(system, buffer, i_start[i_system], i_end[i_system])
-            # place sorted bodies
-            for i in i_start[i_system]:i_end[i_system]
-                systems[i_system][i] = buffer_list[i_system][i]
-            end
+            buffer_loop!(buffer_list[i_system], buffer_index_list[i_system], counter, systems[i_system], index_list[i_system], i_start[i_system], i_end[i_system], i_system, center)
+            place_buffer!(systems[i_system], index_list[i_system], buffer_list[i_system], buffer_index_list[i_system], i_start[i_system], i_end[i_system])
             
-            # update index_list
-            inverse_index_list[i_system] .= buffer_index_list[i_system]
+            # # update index_list
+            # index_list[i_system] .= buffer_index_list[i_system]
         end
 
         # recursively build new branches
@@ -154,45 +132,60 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, SVector{n_systems}(child_i_start), SVector{n_systems}(child_i_end), i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
+                branch!(branches, systems, buffer_list, index_list, buffer_index_list, SVector{n_systems}(child_i_start), SVector{n_systems}(child_i_end), i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
                 i_tape += 1
             end
         end
     end
 end
 
-function buffer_loop!(buffer_list, buffer_index, counter, system::SortWrapper, inverse_index, i_start, i_end, i_system, center)
-    for i_body in system.index[i_start:i_end]
+function buffer_loop!(buffer, buffer_index, counter, system::SortWrapper, index, i_start, i_end, i_system, center)
+    for i_body in i_start:i_end
         x = system[i_body,POSITION]
         i_octant = get_octant(x, center)
-        buffer_index[counter[i_octant,i_system]] = inverse_index[i_body]
+        buffer_index[counter[i_octant,i_system]] = index[i_body]
         counter[i_octant,i_system] += 1
     end
 end
 
-function buffer_loop!(buffer, buffer_index, counter, system, inverse_index, i_start, i_end, i_system, center)
-    for i_body in system.index[i_start:i_end]
+function buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_end, i_system, center)
+    for i_body in i_start:i_end
         x = system[i_body,POSITION]
         i_octant = get_octant(x, center)
         buffer[counter[i_octant,i_system]] = system[i_body]
-        buffer_index[counter[i_octant,i_system]] = inverse_index[i_body]
+        buffer_index[counter[i_octant,i_system]] = index[i_body]
         counter[i_octant,i_system] += 1
     end
 end
 
-function place_buffer!(system::SortWrapper, buffer, i_start, i_end)
+function place_buffer!(system::SortWrapper, index, buffer, buffer_index, i_start, i_end)
+    system.index[i_start:i_end] .= view(buffer_index,i_start:i_end)
+    index[i_start:i_end] .= view(buffer_index,i_start:i_end)
     return nothing # no need to sort bodies
 end
 
-function place_buffer!(system, buffer, i_start, i_end)
+function place_buffer!(system, index, buffer, buffer_index, i_start, i_end)
     # place sorted bodies
     for i in i_start:i_end
         system[i] = buffer[i]
     end
+    index[i_start:i_end] .= view(buffer_index,i_start:i_end)
 end
 
-function get_buffer(system, in_place)
-    in_place ? return deepcopy(system) : nothing
+function get_buffer(system::SortWrapper)
+    return nothing
+end
+
+function get_buffer(system)
+    return deepcopy(system)
+end
+
+function get_index(system::SortWrapper)
+    return system.index
+end
+
+function get_index(system)
+    return collect(1:length(system))
 end
 
 """
@@ -200,15 +193,22 @@ Undoes the sort operation performed by the tree.
 """
 function unsort!(systems::Tuple, tree::Tree)
     for (i_system, system) in enumerate(systems)
-        buffer = deepcopy(system)
-        inverse_index = tree.inverse_index_list[i_system]
-        for i in 1:length(system)
-            buffer[i] = system[inverse_index[i]]
-        end
-        for i in 1:length(system)
-            system[i] = buffer[i]
-        end
+        unsort!(system, tree.inverse_index_list[i_system])
     end
+end
+
+function unsort!(system, inverse_index)
+    buffer = deepcopy(system)
+    for i in 1:length(system)
+        buffer[i] = system[inverse_index[i]]
+    end
+    for i in 1:length(system)
+        system[i] = buffer[i]
+    end
+end
+
+function unsort!(system::SortWrapper, inverse_index)
+    system.index .= system.index[inverse_index]
 end
 
 """
