@@ -67,10 +67,14 @@ include(joinpath(test_dir, "gravitational.jl"))
         V_tots[i] = sum(V_ijs[i,:])
     end
 
+<<<<<<< HEAD
     bodies = vcat(x,m',zeros(3,length(m)))  #add radius here
+=======
+    bodies = vcat(x,rand(1,length(m)),m',zeros(3,length(m)))
+>>>>>>> main
     mass = Gravitational(bodies)
 
-    mass.direct!(mass)
+    fmm.direct!(mass)
     V_tots_direct = mass.potential[1,:]
 
     for i in 1:length(V_tots)
@@ -78,7 +82,7 @@ include(joinpath(test_dir, "gravitational.jl"))
     end
 end
 
-# @testset "tree" begin
+@testset "tree" begin
 
     # build list of elements to sort
     xs = [
@@ -88,8 +92,9 @@ end
         0.1 0.3 0.2;
         0.2 0.25 0.4
     ]
+    radii = zeros(Float64,size(xs)[1])
     ms = rand(size(xs)[1])
-    bodies = vcat(xs',ms',zeros(3,length(ms)))
+    bodies = vcat(xs',radii',ms',zeros(3,length(ms)))
     elements = Gravitational(bodies)
 
     # test center_radius function
@@ -125,7 +130,7 @@ end
         end
         @test isapprox(tree.branches[i_branch].radius[1], test_branches[i_branch,5]; atol=1e-7)
     end
-# end
+end
 
 @testset "cartesian to spherical" begin
     # cartesian to spherical
@@ -225,29 +230,25 @@ ms = [
     1.9
 ]
 
-bodies = zeros(7,length(ms))
+bodies = zeros(8,length(ms))
 for i in 1:length(ms)
     bodies[1:3,i] .= xs[i,1:3]
-    bodies[4,i] = ms[i]
+    bodies[4,i] = 0.0
+    bodies[5,i] = ms[i]
 end
-elements = Gravitational(bodies)
+system = Gravitational(bodies)
 
 expansion_order = 2
 n_per_branch = 1
 theta = 4.0
 options = fmm.Options(expansion_order, n_per_branch, theta)
-tree = fmm.Tree((elements,), options)
+tree = fmm.Tree((system,), options)
 
 i_mass = 1
 i_branch = 5 # use the first mass
 
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-elements.B2M!(tree.branches[i_branch], bodies[:,new_order_index[i_mass]:new_order_index[i_mass]], harmonics, tree.expansion_order)
-
-# mp_expansion = zeros(Complex{Float64}, (expansion_order+1)^2)
-# this_dx = xs[i_mass,:] - tree.branches[i_branch].center
-# fmm.cartesian_2_spherical!(this_dx)
-# fmm.regular_harmonic!(mp_expansion, this_dx..., expansion_order)
+fmm.B2M!(tree.branches[i_branch], system, new_order_index[i_mass]:new_order_index[i_mass], harmonics, tree.expansion_order)
 
 center = tree.branches[i_branch].center
 
@@ -283,6 +284,7 @@ x_target_sph = fmm.cartesian_2_spherical(x_target - center)
 u_check_man = evaluate_biot_savart(x_source_sph, x_target_sph, ms[1], expansion_order);
 @test isapprox(u_check_man, u_check; atol=1e-6)
 @test isapprox(u_check, u_fmm; atol=1e-6)
+
 end
 
 @testset "spherical M2M" begin
@@ -302,10 +304,10 @@ ms = [
     1.9
 ]
 
-bodies = zeros(7,length(ms))
+bodies = zeros(8,length(ms))
 for i in 1:length(ms)
     bodies[1:3,i] .= xs[i,1:3]
-    bodies[4,i] = ms[i]
+    bodies[5,i] = ms[i]
 end
 elements = Gravitational(bodies)
 
@@ -318,7 +320,7 @@ i_branch_4 = 6 # use the fourth mass
 # i_branch_5 = 7 # use the fifth mass
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 # using only the 4th mass: (note it has been reordered)
-elements.B2M!(tree.branches[i_branch_4], bodies[:,new_order_index[4]:new_order_index[4]], harmonics, tree.expansion_order) # evaluate multipole coefficients
+fmm.B2M!(tree.branches[i_branch_4], elements, new_order_index[4]:new_order_index[4], harmonics, tree.expansion_order) # evaluate multipole coefficients
 fmm.M2M!(tree, i_branch) # translate coefficients to the center of branch 2
 
 x_target = [8.3,1.4,-4.2]
@@ -356,10 +358,10 @@ ms = [
     1.9
 ]
 
-bodies = zeros(7,length(ms))
+bodies = zeros(8,length(ms))
 for i in 1:length(ms)
     bodies[1:3,i] .= xs[i,1:3]
-    bodies[4,i] = ms[i]
+    bodies[5,i] = ms[i]
 end
 elements = Gravitational(bodies)
 
@@ -371,8 +373,8 @@ branch_i = 2 # contains two elements; 4 and 5
 target_i = new_order_index[4]
 source_i = new_order_index[1] # just needs to be farther away than the target to ensure convergence
 
-dx_source = fmm.cartesian_2_spherical(elements.bodies[i_POSITION,source_i] - tree.branches[branch_i].center)
-dx_target = fmm.cartesian_2_spherical(elements.bodies[i_POSITION,target_i] - tree.branches[branch_i].center)
+dx_source = fmm.cartesian_2_spherical(elements[source_i,fmm.POSITION] - tree.branches[branch_i].center)
+dx_target = fmm.cartesian_2_spherical(elements[target_i,fmm.POSITION] - tree.branches[branch_i].center)
 
 local_coefficients_theta = zeros(Complex{Float64}, ((expansion_order+1)*(expansion_order+2))>>1)
 local_coefficients_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
@@ -382,14 +384,14 @@ local_coefficients_expanded .*= ms[1]
 regular_harmonics_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
 fmm.regular_harmonic!(regular_harmonics_expanded, dx_target..., expansion_order)
 
-fmm.B2L!(tree, branch_i, elements.bodies[:,source_i])
+fmm.B2L!(tree, branch_i, elements[source_i,fmm.POSITION], elements.bodies[source_i].strength)
 
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
-fmm.L2B!(view(elements.potential,:,target_i), harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, elements.bodies[:,target_i], tree, tree.branches[branch_i])
+fmm.L2B!(elements, target_i, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, tree.branches[branch_i])
 
 u_fmm = elements.potential[1,target_i]
 
@@ -421,10 +423,10 @@ ms = [
     1.9
 ]
 
-bodies = zeros(7,length(ms))
+bodies = zeros(8,length(ms))
 for i in 1:length(ms)
     bodies[1:3,i] .= xs[i,1:3]
-    bodies[4,i] = ms[i]
+    bodies[5,i] = ms[i]
 end
 elements = Gravitational(bodies)
 
@@ -433,7 +435,7 @@ options = fmm.Options(expansion_order, 1, 4.0)
 tree = fmm.Tree((elements,), options)
 
 # local coefficient at branch 2 due to mass 1
-fmm.B2L!(tree, 2, elements.bodies[:,new_order_index[1]])
+fmm.B2L!(tree, 2, elements[new_order_index[1],fmm.POSITION], elements.bodies[new_order_index[1]].strength)
 # local_2 = deepcopy(tree.branches[2].local_expansion)
 
 # check L2P now:
@@ -442,7 +444,7 @@ harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
-fmm.L2B!(view(elements.potential,:,new_order_index[5]), harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, elements.bodies[:,new_order_index[5]], tree, tree.branches[2])
+fmm.L2B!(elements, new_order_index[5], harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, tree.branches[2])
 # fmm.L2B!(elements[5], tree, tree.branches[2], harmonics, harmonics_theta, harmonics_theta_2, d_potential_cartesian, d_potential, dH_potential)
 u_fmm_no_x = elements.potential[1,new_order_index[5]]
 elements.potential[1,new_order_index[5]] *= 0
@@ -451,19 +453,19 @@ elements.potential[1,new_order_index[5]] *= 0
 fmm.L2L!(tree, tree.branches[2], tree.branches[7], harmonics)
 
 local_coefficients_check = zeros(Complex{Float64}, (expansion_order+1)^2)
-dx_check = fmm.cartesian_2_spherical(elements.bodies[i_POSITION,new_order_index[1]] - tree.branches[7].center)
-fmm.irregular_harmonic!(local_coefficients_check, dx_check..., expansion_order)
+dx_check, dy_check, dz_check = fmm.cartesian_2_spherical(elements[new_order_index[1],fmm.POSITION] - tree.branches[7].center)
+fmm.irregular_harmonic!(local_coefficients_check, dx_check, dy_check, dz_check, expansion_order)
 local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
 fmm.L2B!(tree, (elements,), 7, [1])
 u_fmm = elements.potential[1,new_order_index[5]]
 
-dx_direct = elements.bodies[i_POSITION,new_order_index[5]] - elements.bodies[i_POSITION,new_order_index[1]]
+dx_direct = elements[new_order_index[5],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
 u_check = ms[1] / sqrt(dx_direct' * dx_direct)
 
 regular_harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
-dx_target = fmm.cartesian_2_spherical(elements.bodies[i_POSITION,new_order_index[5]] - tree.branches[7].center)
+dx_target = fmm.cartesian_2_spherical(elements[new_order_index[5],fmm.POSITION] - tree.branches[7].center)
 fmm.regular_harmonic!(regular_harmonics, dx_target..., expansion_order)
 u_man = real(sum(regular_harmonics' * local_coefficients_check))
 
@@ -490,10 +492,10 @@ ms = [
     1.9
 ]
 
-bodies = zeros(7,length(ms))
+bodies = zeros(8,length(ms))
 for i in 1:length(ms)
     bodies[1:3,i] .= xs[i,1:3]
-    bodies[4,i] = ms[i]
+    bodies[5,i] = ms[i]
 end
 elements = Gravitational(bodies)
 
@@ -508,7 +510,7 @@ harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
 workspace = zeros(3,4)
 
-elements.B2M!(tree.branches[i_branch_multipole], elements.bodies[:,new_order_index[5]:new_order_index[5]], harmonics, tree.expansion_order)
+fmm.B2M!(tree.branches[i_branch_multipole], elements, new_order_index[5]:new_order_index[5], harmonics, tree.expansion_order)
 
 # # test Multipole # checks out
 # dx_mp = xs[5,:] - tree.branches[i_branch_multipole].center
@@ -526,7 +528,7 @@ elements.B2M!(tree.branches[i_branch_multipole], elements.bodies[:,new_order_ind
 fmm.M2L!(tree, i_branch_local, i_branch_multipole)
 
 spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
-fmm.L2B!(view(elements.potential,:,new_order_index[1]), harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, elements.bodies[:,new_order_index[1]], tree, tree.branches[i_branch_local])
+fmm.L2B!(elements, new_order_index[1], harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, tree.branches[i_branch_local])
 u_fmm = elements.potential[1,new_order_index[1]]
 
 local_exp = tree.branches[i_branch_local].local_expansion[1]
@@ -536,8 +538,8 @@ local_exp = tree.branches[i_branch_local].local_expansion[1]
 # fmm.regular_harmonic!(harmonics, dx_l..., expansion_order)
 # u_check_local = real(sum(harmonics' * local_exp))
 
-dx_direct = elements.bodies[i_POSITION,new_order_index[1]] - elements.bodies[i_POSITION, new_order_index[5]]
-u_direct = elements.bodies[i_STRENGTH[1],new_order_index[5]] / sqrt(dx_direct' * dx_direct)
+dx_direct = elements[new_order_index[1],fmm.POSITION] - elements[new_order_index[5], fmm.POSITION]
+u_direct = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_direct' * dx_direct)
 
 @test isapprox(u_fmm, u_direct; atol=1e-12)
 
@@ -560,10 +562,10 @@ ms = [
     1.9
 ]
 
-bodies = zeros(7,length(ms))
+bodies = zeros(8,length(ms))
 for i in 1:length(ms)
     bodies[1:3,i] .= xs[i,1:3]
-    bodies[4,i] = ms[i]
+    bodies[5,i] = ms[i]
 end
 elements = Gravitational(bodies)
 
@@ -577,7 +579,7 @@ fmm.upward_pass!(tree, (elements,), [1])
 
 # m6 = tree.branches[6].multipole_expansion
 target = [4.1,2.2,3.4]
-dx_direct_6 = target - elements.bodies[i_POSITION,new_order_index[4]]
+dx_direct_6 = target - elements[new_order_index[4],fmm.POSITION]
 u_direct_6 = ms[4] / sqrt(dx_direct_6' * dx_direct_6)
 
 mass_target_potential = zeros(4)
@@ -586,7 +588,7 @@ fmm.M2B!(mass_target_potential, mass_target, 6, tree)
 u_fmm_6 = mass_target_potential[1]
 
 # add branches 6 and 7
-dx_direct_7 = target - elements.bodies[i_POSITION,new_order_index[5]]
+dx_direct_7 = target - elements[new_order_index[5],fmm.POSITION]
 u_direct_67 = u_direct_6 + ms[5] / sqrt(dx_direct_7' * dx_direct_7)
 
 # reset target potential
@@ -610,11 +612,11 @@ fmm.P2P!(tree, (elements,), 3, 4, [1], [1])
 fmm.P2P!(tree, (elements,), 3, 5, [1], [1])
 u_fmm_123 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
-dx_12 = elements.bodies[i_POSITION,new_order_index[2]] - elements.bodies[i_POSITION,new_order_index[1]]
-u_direct_12 = elements.bodies[i_STRENGTH[1],new_order_index[1]] / sqrt(dx_12' * dx_12)
+dx_12 = elements[new_order_index[2],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
+u_direct_12 = elements.bodies[new_order_index[1]].strength[1] / sqrt(dx_12' * dx_12)
 u_direct_22 = 0.0
-dx_32 = elements.bodies[i_POSITION,new_order_index[2]] - elements.bodies[i_POSITION,new_order_index[3]]
-u_direct_32 = elements.bodies[i_STRENGTH[1],new_order_index[3]] / sqrt(dx_32' * dx_32)
+dx_32 = elements[new_order_index[2],fmm.POSITION] - elements[new_order_index[3],fmm.POSITION]
+u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx_32)
 
 u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
@@ -623,10 +625,10 @@ u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 fmm.L2B!(tree, (elements,), 3, [1])
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
-dx_42 = elements.bodies[i_POSITION,new_order_index[4]] - elements.bodies[i_POSITION,new_order_index[2]]
-u_direct_42 = elements.bodies[i_STRENGTH[1],new_order_index[4]] / sqrt(dx_42' * dx_42)
-dx_52 = elements.bodies[i_POSITION,new_order_index[5]] - elements.bodies[i_POSITION,new_order_index[2]]
-u_direct_52 = elements.bodies[i_STRENGTH[1],new_order_index[5]] / sqrt(dx_52' * dx_52)
+dx_42 = elements[new_order_index[4],fmm.POSITION] - elements[new_order_index[2],fmm.POSITION]
+u_direct_42 = elements.bodies[new_order_index[4]].strength[1] / sqrt(dx_42' * dx_42)
+dx_52 = elements[new_order_index[5],fmm.POSITION] - elements[new_order_index[2],fmm.POSITION]
+u_direct_52 = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_52' * dx_52)
 
 u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
 
@@ -646,7 +648,7 @@ fmm.direct!((elements,))
 
 u_direct = deepcopy(elements.potential[1,:])
 
-for i in 1:size(elements.bodies)[2]
+for i in 1:length(elements)
     @test isapprox(u_fmm[i], u_direct[i]; atol=1e-12)
 end
 end
