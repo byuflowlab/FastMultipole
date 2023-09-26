@@ -15,8 +15,8 @@ println("Run FMM:")
 println("done.")
 systems2 = (Gravitational(bodies),)
 println("Run direct:")
-# @btime fmm.direct!(systems2[1], 1:n_bodies, systems2[1], 1:n_bodies)
-# println("done.")
-# phi = systems[1].potential[1,:]
-# phi2 = systems2[1].potential[1,:]
-# @show maximum(abs.(phi2 - phi))
+@time fmm.direct!(systems2[1], 1:n_bodies, systems2[1], 1:n_bodies)
+println("done.")
+phi = systems[1].potential[1,:]
+phi2 = systems2[1].potential[1,:]
+@show maximum(abs.(phi2 - phi))

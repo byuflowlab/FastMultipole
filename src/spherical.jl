@@ -399,8 +399,8 @@ function L2B!(tree, systems, i_branch, targets_index)
     harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
     harmonics_theta = zeros(eltype(branch.multipole_expansion[1]), ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
     harmonics_theta_2 = zeros(eltype(branch.multipole_expansion[1]), ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
-    workspace = zeros(eltype(branch.multipole_expansion[1]),3,4)
-    spherical_potential = zeros(eltype(branch.multipole_expansion[1]),52)
+    workspace = zeros(eltype(tree),3,4)
+    spherical_potential = zeros(eltype(tree),52)
     for (i_target, system) in enumerate(systems[targets_index])
         i_type = targets_index[i_target]
         for i_body in branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1

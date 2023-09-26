@@ -67,6 +67,8 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
     return tree
 end
 
+Base.eltype(tree::Tree{TF,<:Any}) where TF = TF
+
 function branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
