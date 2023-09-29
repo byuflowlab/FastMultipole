@@ -67,11 +67,7 @@ include(joinpath(test_dir, "gravitational.jl"))
         V_tots[i] = sum(V_ijs[i,:])
     end
 
-<<<<<<< HEAD
-    bodies = vcat(x,m',zeros(3,length(m)))  #add radius here
-=======
     bodies = vcat(x,rand(1,length(m)),m',zeros(3,length(m)))
->>>>>>> main
     mass = Gravitational(bodies)
 
     fmm.direct!(mass)

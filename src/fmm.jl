@@ -138,9 +138,8 @@ Note: this function merely adds to existing potential of its elements to avoid o
 The user must reset the potential manually.
 """
 function fmm!(systems::Tuple, options::Options; optargs...)
-    tree = Tree(systems, options, Val{eltype(systems[1][1,POSITION])}())
     full_index = collect(1:length(systems))
-    fmm!(tree, systems, options, full_index, full_index; optargs...)
+    fmm!(systems, options, full_index, full_index; optargs...)
     return tree
 end
 
@@ -150,8 +149,17 @@ function fmm!(tree::Tree, systems::Tuple, options::Options; optargs...)
     return tree
 end
 
-function fmm!(systems::Tuple, options::Options, target_index, source_index; optargs...)
-    tree = Tree(systems, options)
+function fmm!(systems::Tuple, options::Options, target_index, source_index; sort_in_place = Tuple(true for _ in systems), optargs...)
+    # if not sorting in place, wrap systems in SortWrapper (default behavior does nothing)
+    if false in sort_in_place
+        systems_2 = []
+        for (i,(in_place,system)) in enumerate(zip(sort_in_place,systems))
+            in_place ? push!(systems_2, system) : push!(systems_2, SortWrapper(system,index_list[i]))
+        end
+        systems = Tuple(systems_2)
+    end
+
+    tree = Tree(systems, options, Val{eltype(systems[1][1,POSITION])}())
     fmm!(tree, systems, options, target_index, source_index; optargs...)
     return tree
 end

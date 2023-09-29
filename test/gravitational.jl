@@ -1,13 +1,5 @@
 import FLOWFMM as fmm
 using WriteVTK
-<<<<<<< HEAD
-i_POSITION = fmm.i_POSITION
-i_RADIUS = 4
-i_STRENGTH = 5:8
-i_POTENTIAL = fmm.i_POTENTIAL
-i_POTENTIAL_JACOBIAN = fmm.i_POTENTIAL_JACOBIAN
-i_POTENTIAL_HESSIAN = fmm.i_POTENTIAL_HESSIAN
-=======
 import Base: getindex, setindex!
 using StaticArrays
 i_POSITION = 1:3
@@ -16,7 +8,6 @@ i_STRENGTH = 5:8
 i_POTENTIAL = 1:4
 i_VELOCITY = 5:7
 i_VELOCITY_GRADIENT = 8:16
->>>>>>> main
 
 #####
 ##### gravitational kernel and mass elements

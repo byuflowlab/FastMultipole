@@ -91,9 +91,9 @@ end
 function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi, P)
     y,x = sincos(theta)
     invY = y == 0 ? 0 : 1 / y
-    fact = 1
-    pl = 1
-    rhom = 1
+    fact = 1.0
+    pl = 1.0
+    rhom = 1.0
     ei = exp(im * phi)
     eim = 1.0
     for m=0:P
@@ -198,10 +198,6 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
         fact += 2
         eim *= ei
     end
-end
-
-function B2M!(branch, system, bodies_index, harmonics, expansion_order)
-    @warn "B2M! not implemented for type $(typeof(system)); overload FLOWFMM.B2M!"
 end
 
 function B2M!(tree, systems, i_branch, sources_index)

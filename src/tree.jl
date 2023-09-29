@@ -22,17 +22,12 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
     n_per_branch = options.n_per_branch
 
     # initialize objects
-    buffer_list = Tuple(deepcopy(system) for system in systems)
-    index_list = Tuple(zeros(Int,length(system)) for system in systems)
+    buffer_list = Tuple(get_buffer(system) for system in systems)
+    index_list = Tuple(collect(1:length(system)) for system in systems)
     inverse_index_list = Tuple(similar(index) for index in index_list)
     buffer_index_list = Tuple(similar(index) for index in index_list)
     n_systems = length(systems)
     branches = Vector{Branch{TF,n_systems}}(undef,1)
-
-    # update index lists
-    for inverse_index in inverse_index_list
-        inverse_index .= 1:length(inverse_index)
-    end
 
     # recursively build branches
     i_start = SVector{n_systems,Int32}([Int32(1) for _ in systems])
@@ -40,16 +35,14 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
     i_branch = 1
     center, radius = center_radius(systems; scale_radius = 1.00001)
     level = 0
-    branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+    branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
 
     # invert index
-    for (i_system,inverse_index) in enumerate(inverse_index_list)
-        buffer_index = buffer_index_list[i_system]
-        for i_body in eachindex(inverse_index)
-            buffer_index[inverse_index[i_body]] = i_body
+    for (i_system,index) in enumerate(index_list)
+        inverse_index = inverse_index_list[i_system]
+        for i_body in eachindex(index)
+            inverse_index[index[i_body]] = i_body
         end
-        index_list[i_system] .= inverse_index
-        inverse_index .= buffer_index
     end
 
     # count leaves
@@ -75,13 +68,13 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
     tree = Tree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count)
 
     if options.shrinking
-        update_radius(elements_tuple,branches,1; options.second_pass)
+        update_radius(systems,branches,1; options.second_pass)
     end
 
     return tree
 end
 
-function branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
+function branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = Int8(0)
     n_bodies = i_end - i_start .+ Int32(1)
     n_systems = length(systems)
@@ -125,20 +118,11 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
 
         ## sort element indices into the buffer
         for i_system in 1:n_systems
-            for i_body in i_start[i_system]:i_end[i_system]
-                x = systems[i_system][i_body,POSITION]
-                i_octant = get_octant(x, center)
-                buffer_list[i_system][counter[i_octant,i_system]] = systems[i_system][i_body]
-                buffer_index_list[i_system][counter[i_octant,i_system]] = inverse_index_list[i_system][i_body]
-                counter[i_octant,i_system] += 1
-            end
-            # place sorted bodies
-            for i in i_start[i_system]:i_end[i_system]
-                systems[i_system][i] = buffer_list[i_system][i]
-            end
+            buffer_loop!(buffer_list[i_system], buffer_index_list[i_system], counter, systems[i_system], index_list[i_system], i_start[i_system], i_end[i_system], i_system, center)
+            place_buffer!(systems[i_system], index_list[i_system], buffer_list[i_system], buffer_index_list[i_system], i_start[i_system], i_end[i_system])
             
-            # update index_list
-            inverse_index_list[i_system] .= buffer_index_list[i_system]
+            # # update index_list
+            # index_list[i_system] .= buffer_index_list[i_system]
         end
 
         # recursively build new branches
@@ -155,7 +139,7 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
-                branch!(branches, systems, buffer_list, inverse_index_list, buffer_index_list, SVector{n_systems}(child_i_start), SVector{n_systems}(child_i_end), i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
+                branch!(branches, systems, buffer_list, index_list, buffer_index_list, SVector{n_systems}(child_i_start), SVector{n_systems}(child_i_end), i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
                 i_tape += 1
             end
         end
@@ -163,20 +147,20 @@ function branch!(branches, systems, buffer_list, inverse_index_list, buffer_inde
 end
 
 #TODO: update radius and center
-function update_radius(elements_tuple::Tuple, branches, branch_index; second_pass=true)
+function update_radius(systems::Tuple, branches, branch_index; second_pass=true)
     branch = branches[branch_index]
     if branch.n_branches != 0
         for b = 0:branch.n_branches - 1
-            update_radius(elements_tuple, branches, branch.first_branch + b; second_pass)
+            update_radius(systems, branches, branch.first_branch + b; second_pass)
         end
-        step_through_branches(elements_tuple, branches, branch_index; second_pass)
+        step_through_branches(branches, branch_index; second_pass)
     else
-        step_through_bodies(elements_tuple, branches, branch_index; second_pass)
+        step_through_bodies(systems, branches, branch_index; second_pass)
     end
     return nothing
 end
 
-function step_through_branches(elements_tuple::Tuple, branches, branch_index; second_pass=true)
+function step_through_branches(branches, branch_index; second_pass=true)
     branch = branches[branch_index]
 
     first_child_index = branch.first_branch
@@ -197,79 +181,142 @@ function step_through_branches(elements_tuple::Tuple, branches, branch_index; se
         rectangle[6] = min(child.center[3]-child.radius[1], rectangle[6])
     end
 
-    if branch.n_branches == 1
-        branch.center[1] = (rectangle[1] + rectangle[2]) / 2
-        branch.center[2] = (rectangle[3] + rectangle[4]) / 2
-        branch.center[3] = (rectangle[5] + rectangle[6]) / 2
-    else
-        branch.center[1] = (rectangle[1] + rectangle[2]) / 2
-        branch.center[2] = (rectangle[3] + rectangle[4]) / 2
-        branch.center[3] = (rectangle[5] + rectangle[6]) / 2
-    end
+    new_center = typeof(branch.center)(
+        (rectangle[1] + rectangle[2]) / 2,
+        (rectangle[3] + rectangle[4]) / 2,
+        (rectangle[5] + rectangle[6]) / 2
+    )
+    # if branch.n_branches == 1
+    #     branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+    #     branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+    #     branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+    # else
+    #     branch.center[1] = (rectangle[1] + rectangle[2]) / 2
+    #     branch.center[2] = (rectangle[3] + rectangle[4]) / 2
+    #     branch.center[3] = (rectangle[5] + rectangle[6]) / 2
+    # end
 
-
+    new_radius = zero(branch.radius)
     if second_pass
-        branch.radius[1] = 0.0
         for index = 0:branch.n_branches - 1
             child = branches[first_child_index + index]
             distance = sqrt((child.center[1] - branch.center[1])^2 + (child.center[2] - branch.center[2])^2 + (child.center[3] - branch.center[3])^2) + child.radius[1]
-            branch.radius[1] = max(branch.radius[1], distance)
+            new_radius = max(branch.radius[1], distance)
         end
     else 
-        branch.radius[1] = sqrt(
+        new_radius = sqrt(
             (rectangle[1] - branch.center[1])^2 + 
             (rectangle[3] - branch.center[2])^2 + 
             (rectangle[5] - branch.center[3])^2
             )
     end
 
+    (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
+    new_branch = Branch(n_branches, n_bodies, first_branch, first_body, new_center, new_radius, multipole_expansion, local_expansion, lock, child_lock)
+    branches[branch_index] = new_branch
     return nothing
 end
 
-function step_through_bodies(elements_tuple::Tuple, branches, branch_index; second_pass=true)
+function step_through_bodies(systems::Tuple, branches, branch_index; second_pass=true)
     branch = branches[branch_index]
     
     rectangle = MVector{6, Float64}(
-        elements_tuple[1].bodies[1, branch.first_body[1]], elements_tuple[1].bodies[1, branch.first_body[1]],
-        elements_tuple[1].bodies[2, branch.first_body[1]], elements_tuple[1].bodies[2, branch.first_body[1]],
-        elements_tuple[1].bodies[3, branch.first_body[1]], elements_tuple[1].bodies[3, branch.first_body[1]],
+        systems[1][1, POSITION][1], systems[1][1, POSITION][1],
+        systems[1][1, POSITION][2], systems[1][1, POSITION][2],
+        systems[1][1, POSITION][3], systems[1][1, POSITION][3]
         )
-    for (i_element, element) in enumerate(elements_tuple)
-        for i_body in branch.first_body[i_element]:(branch.first_body[i_element]+branch.n_bodies[i_element]-1)
-            body = element.bodies[:,i_body]
-            rectangle[1] = max(body[1]+body[4], rectangle[1])
-            rectangle[3] = max(body[2]+body[4], rectangle[3])
-            rectangle[5] = max(body[3]+body[4], rectangle[5])
-            rectangle[2] = min(body[1]-body[4], rectangle[2])
-            rectangle[4] = min(body[2]-body[4], rectangle[4])
-            rectangle[6] = min(body[3]-body[4], rectangle[6])
+    for (i_system, system) in enumerate(systems)
+        for i_body in branch.first_body[i_system]:(branch.first_body[i_system]+branch.n_bodies[i_system]-1)
+            body = system[i_body,POSITION]
+            body_r = system[i_body,RADIUS]
+            rectangle[1] = max(body[1]+body_r, rectangle[1])
+            rectangle[3] = max(body[2]+body_r, rectangle[3])
+            rectangle[5] = max(body[3]+body_r, rectangle[5])
+            rectangle[2] = min(body[1]-body_r, rectangle[2])
+            rectangle[4] = min(body[2]-body_r, rectangle[4])
+            rectangle[6] = min(body[3]-body_r, rectangle[6])
         end
     end
-    if length(branch.n_bodies) == 1
-        branch.center[1] = (rectangle[1] + rectangle[2]) / 2 + SHRINKING_OFFSET
-        branch.center[2] = (rectangle[3] + rectangle[4]) / 2 + SHRINKING_OFFSET
-        branch.center[3] = (rectangle[5] + rectangle[6]) / 2 + SHRINKING_OFFSET
-    else
-        branch.center[1] = (rectangle[1] + rectangle[2]) / 2
-        branch.center[2] = (rectangle[3] + rectangle[4]) / 2
-        branch.center[3] = (rectangle[5] + rectangle[6]) / 2
-    end
 
 
+    new_center = (length(branch.n_bodies) == 1) ? typeof(branch.center)(
+        (rectangle[1] + rectangle[2]) / 2 + SHRINKING_OFFSET,
+        (rectangle[3] + rectangle[4]) / 2 + SHRINKING_OFFSET,
+        (rectangle[5] + rectangle[6]) / 2 + SHRINKING_OFFSET
+        ) : typeof(branch.center)(
+            (rectangle[1] + rectangle[2]) / 2,
+            (rectangle[3] + rectangle[4]) / 2,
+            (rectangle[5] + rectangle[6]) / 2
+            )
+
+    (; n_branches, n_bodies, first_branch, first_body, center, radius, multipole_expansion, local_expansion, lock, child_lock) = branch
 
     if second_pass
-        branch.radius[1] = 0
-        for (i_element, element) in enumerate(elements_tuple)
-            for i_body in branch.first_body[i_element]:(branch.first_body[i_element]+branch.n_bodies[i_element]-1)
-                body = element.bodies[:,i_body]
-                distance = sqrt((body[1] - branch.center[1])^2 + (body[2]- branch.center[2])^2 + (body[3] - branch.center[3])^2) + body[4]
-                branch.radius[1] = max(branch.radius[1], distance)
+        new_radius = zero(branch.radius)
+        for (i_system, system) in enumerate(systems)
+            for i_body in branch.first_body[i_system]:(branch.first_body[i_system]+branch.n_bodies[i_system]-1)
+                body = system[i_body,POSITION]
+                body_r = system[i_body,RADIUS]
+                distance = sqrt((body[1] - branch.center[1])^2 + (body[2]- branch.center[2])^2 + (body[3] - branch.center[3])^2) + body_r
+                new_radius = max(new_radius, distance)
+            end
         end
+    else
+        (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
+        new_radius = sqrt((rectangle[1] - branch.center[1])^2 + (rectangle[3] - branch.center[2])^2 + (rectangle[5] - branch.center[3])^2)
     end
-    else 
-        branch.radius[1] = sqrt((rectangle[1] - branch.center[1])^2 + (rectangle[3] - branch.center[2])^2 + (rectangle[5] - branch.center[3])^2)
-    end
+    new_branch = Branch(n_branches, n_bodies, first_branch, first_body, new_center, new_radius, multipole_expansion, local_expansion, lock, child_lock)
+    branches[branch_index] = new_branch
     return nothing
+
+end
+function buffer_loop!(buffer, buffer_index, counter, system::SortWrapper, index, i_start, i_end, i_system, center)
+    for i_body in i_start:i_end
+        x = system[i_body,POSITION]
+        i_octant = get_octant(x, center)
+        buffer_index[counter[i_octant,i_system]] = index[i_body]
+        counter[i_octant,i_system] += 1
+    end
+end
+
+function buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_end, i_system, center)
+    for i_body in i_start:i_end
+        x = system[i_body,POSITION]
+        i_octant = get_octant(x, center)
+        buffer[counter[i_octant,i_system]] = system[i_body]
+        buffer_index[counter[i_octant,i_system]] = index[i_body]
+        counter[i_octant,i_system] += 1
+    end
+end
+
+function place_buffer!(system::SortWrapper, index, buffer, buffer_index, i_start, i_end)
+    system.index[i_start:i_end] .= view(buffer_index,i_start:i_end)
+    index[i_start:i_end] .= view(buffer_index,i_start:i_end)
+    return nothing # no need to sort bodies
+end
+
+function place_buffer!(system, index, buffer, buffer_index, i_start, i_end)
+    # place sorted bodies
+    for i in i_start:i_end
+        system[i] = buffer[i]
+    end
+    index[i_start:i_end] .= view(buffer_index,i_start:i_end)
+end
+
+function get_buffer(system::SortWrapper)
+    return nothing
+end
+
+function get_buffer(system)
+    return deepcopy(system)
+end
+
+function get_index(system::SortWrapper)
+    return system.index
+end
+
+function get_index(system)
+    return collect(1:length(system))
 end
 
 """
@@ -277,15 +324,22 @@ Undoes the sort operation performed by the tree.
 """
 function unsort!(systems::Tuple, tree::Tree)
     for (i_system, system) in enumerate(systems)
-        buffer = deepcopy(system)
-        inverse_index = tree.inverse_index_list[i_system]
-        for i in 1:length(system)
-            buffer[i] = system[inverse_index[i]]
-        end
-        for i in 1:length(system)
-            system[i] = buffer[i]
-        end
+        unsort!(system, tree.inverse_index_list[i_system])
     end
+end
+
+function unsort!(system, inverse_index)
+    buffer = deepcopy(system)
+    for i in 1:length(system)
+        buffer[i] = system[inverse_index[i]]
+    end
+    for i in 1:length(system)
+        system[i] = buffer[i]
+    end
+end
+
+function unsort!(system::SortWrapper, inverse_index)
+    system.index .= system.index[inverse_index]
 end
 
 """
