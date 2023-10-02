@@ -1,3 +1,6 @@
+#####
+##### dispatch for common interface for external packages
+#####
 struct Body end
 const BODY = Body()
 
@@ -6,9 +9,6 @@ const POSITION = Position()
 
 struct Radius end
 const RADIUS = Radius()
-
-struct Potential end
-const POTENTIAL = Potential()
 
 struct ScalarPotential end
 const SCALAR_POTENTIAL = ScalarPotential()
@@ -20,8 +20,46 @@ struct Velocity end
 const VELOCITY = Velocity()
 
 struct VelocityGradient end
-const VELOCITYGRADIENT = VelocityGradient()
+const VELOCITY_GRADIENT = VelocityGradient()
 
+struct Vertex1 end
+const VERTEX1 = Vertex1()
+
+struct Vertex2 end
+const VERTEX2 = Vertex2()
+
+struct Vertex3 end
+const VERTEX3 = Vertex3()
+
+struct Vertex4 end
+const VERTEX4 = Vertex4()
+
+struct ScalarStrength end
+const SCALAR_STRENGTH = ScalarStrength()
+
+struct VectorStrength end
+const VECTOR_STRENGTH = VectorStrength()
+
+##### 
+##### dispatch convenience functions for multipole creation definition 
+#####
+abstract type AbstractKernel end
+
+struct VortexPoint <: AbstractKernel end
+
+struct VortexLine <: AbstractKernel end # not yet derived
+
+struct VortexPanel <: AbstractKernel end # not yet derived
+
+struct SourcePoint <: AbstractKernel end
+
+struct SourcePanel <: AbstractKernel end # not yet implemented
+
+struct DipolePanel <: AbstractKernel end # not yet implemented
+
+#####
+##### octree creation
+#####
 struct Branch{TF,N}
     n_branches::Int8        # number of child branches
     n_bodies::SVector{N,Int32}         # number of descendent bodies
@@ -51,6 +89,9 @@ end
 
 struct Val{T} end
 
+#####
+##### allow input systems to take any form when desired
+#####
 struct SortWrapper{TS}
     system::TS
     index::Vector{Int}

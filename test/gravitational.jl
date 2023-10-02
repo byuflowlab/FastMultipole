@@ -31,12 +31,12 @@ function Gravitational(bodies::Matrix)
 end
 
 Base.getindex(g::Gravitational, i, ::fmm.Position) = g.bodies[i].position
-# Base.getindex(g::Gravitational, i, ::fmm.Velocity) = 
 Base.getindex(g::Gravitational, i, ::fmm.Radius) = g.bodies[i].radius
-Base.getindex(g::Gravitational, i, ::fmm.Potential) = view(g.potential,1:4,i)
-Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = view(g.potential,1,i)
+Base.getindex(g::Gravitational, i, ::fmm.VectorPotential) = view(g.potential,2:4,i)
+Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = g.potential[1,i]
 Base.getindex(g::Gravitational, i, ::fmm.Velocity) = view(g.potential,i_VELOCITY,i)
 Base.getindex(g::Gravitational, i, ::fmm.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
+Base.getindex(g::Gravitational, i, ::fmm.ScalarStrength) = g.bodies[i].strength[1]
 Base.getindex(g::Gravitational, i) = g.bodies[i], view(g.potential,:,i)
 function Base.setindex!(g::Gravitational, val, i)
     body, potential = val
@@ -45,10 +45,10 @@ function Base.setindex!(g::Gravitational, val, i)
     return nothing
 end
 function Base.setindex!(g::Gravitational, val, i, ::fmm.ScalarPotential)
-    g.potential[i_POTENTIAL[1],i] .= val
+    g.potential[i_POTENTIAL[1],i] = val
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.Potential)
-    g.potential[i_POTENTIAL,i] .= val
+function Base.setindex!(g::Gravitational, val, i, ::fmm.VectorPotential)
+    g.potential[i_POTENTIAL[2:4],i] .= val
 end
 function Base.setindex!(g::Gravitational, val, i, ::fmm.Velocity)
     g.potential[i_VELOCITY,i] .= val
@@ -59,26 +59,7 @@ end
 Base.length(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF
 
-function fmm.B2M!(branch, system::Gravitational, bodies_index, harmonics, expansion_order)
-    c_x, c_y, c_z = branch.center
-    for i_body in bodies_index
-        b_x, b_y, b_z = system[i_body,fmm.POSITION]
-        x = b_x - c_x
-        z = b_z - c_z
-        y = b_y - c_y
-        q = system.bodies[i_body].strength[1]
-        r, theta, phi = fmm.cartesian_2_spherical(x,y,z)
-        fmm.regular_harmonic!(harmonics, r, theta, -phi, expansion_order) # Ylm^* -> -dx[3]
-        # update values
-        for l in 0:expansion_order
-            for m in 0:l
-                i_solid_harmonic = l*l + l + m + 1
-                i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[1][i_compressed] += harmonics[i_solid_harmonic] * q
-            end
-        end
-    end
-end
+fmm.B2M!(system::Gravitational, args...) = fmm.B2M!_sourcepoint(system, args...)
 
 function fmm.direct!(target_system, target_index, source_system::Gravitational, source_index)
     for i_source in source_index
@@ -92,7 +73,7 @@ function fmm.direct!(target_system, target_index, source_system::Gravitational, 
             r = sqrt(dx*dx + dy*dy + dz*dz)
             if r > 0
                 dV = source_strength / r
-                target_system[j_target,fmm.SCALAR_POTENTIAL] .+= dV
+                target_system[j_target,fmm.SCALAR_POTENTIAL] += dV
             end
         end
     end

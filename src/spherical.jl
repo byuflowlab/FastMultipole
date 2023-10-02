@@ -208,7 +208,7 @@ function B2M!(tree, systems, i_branch, sources_index)
     for (i_iter, system) in enumerate(systems[sources_index])
         i_type = sources_index[i_iter]
         bodies_index = branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1
-        B2M!(branch, system, bodies_index, harmonics, tree.expansion_order)
+        B2M!(system, branch, bodies_index, harmonics, tree.expansion_order)
     end
 end
 
@@ -411,7 +411,8 @@ function L2B!(tree, systems, i_branch, targets_index)
 end
 
 @inline function L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, branch)
-    potential = view(spherical_potential,1:4)
+    scalar_potential = view(spherical_potential,1)
+    vector_potential = view(spherical_potential,2:4)
     potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
     potential_hessian = reshape(view(spherical_potential, 17:52),3,3,4)
     body_position = system[i_body,POSITION]
@@ -421,8 +422,11 @@ end
     for n in 0:tree.expansion_order
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
+        scalar_potential[] += real(branch.local_expansion[1][nms] * harmonics[nms])
+        vector_potential[1] += real(branch.local_expansion[2][nms] * harmonics[nms])
+        vector_potential[2] += real(branch.local_expansion[3][nms] * harmonics[nms])
+        vector_potential[3] += real(branch.local_expansion[4][nms] * harmonics[nms])
         for ind in 1:4
-            potential[ind] += real(branch.local_expansion[ind][nms] * harmonics[nms])
             # store derivatives of the potential in spherical coordinates here
             potential_jacobian[1,ind] += n/r * real(branch.local_expansion[ind][nms] * harmonics[nms]) # dPsi/dr
             potential_jacobian[2,ind] += real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # dPsi/dtheta
@@ -440,8 +444,11 @@ end
         for m in 1:n # m > 0
             # nm = n * n + n + m + 1
             nms = (n * (n + 1)) >> 1 + m + 1
+            scalar_potential[] += 2 * real(branch.local_expansion[1][nms] * harmonics[nms])
+            vector_potential[1] += 2 * real(branch.local_expansion[2][nms] * harmonics[nms])
+            vector_potential[2] += 2 * real(branch.local_expansion[3][nms] * harmonics[nms])
+            vector_potential[3] += 2 * real(branch.local_expansion[4][nms] * harmonics[nms])
             for ind in 1:4
-                potential[ind] += 2 * real(branch.local_expansion[ind][nms] * harmonics[nms])
                 # store derivatives of the potential in spherical harmonics here
                 potential_jacobian[1,ind] += 2 * n/r * real(branch.local_expansion[ind][nms] * harmonics[nms]) # dPsi/dr
                 potential_jacobian[2,ind] += 2 * real(branch.local_expansion[ind][nms] * harmonics_theta[nms]) # dPsi/dtheta
@@ -460,7 +467,8 @@ end
     end
     spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
     flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient
-    system[i_body,POTENTIAL] += potential
+    system[i_body,SCALAR_POTENTIAL] += scalar_potential[]
+    system[i_body,VECTOR_POTENTIAL] += vector_potential
     system[i_body,VELOCITY] += potential_jacobian[:,1]
-    system[i_body,VELOCITYGRADIENT] += potential_hessian[:,:,1]
+    system[i_body,VELOCITY_GRADIENT] += potential_hessian[:,:,1]
 end

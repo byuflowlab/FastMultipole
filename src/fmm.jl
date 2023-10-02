@@ -42,11 +42,11 @@ function upward_pass!(tree, systems, i_branch, sources_index)
     end
 end
 
-function horizontal_pass!(tree, systems, theta, targets_index, sources_index, local_P2P=true)
-    horizontal_pass!(tree, systems, 1, 1, theta, targets_index, sources_index, local_P2P)
+function horizontal_pass!(tree, systems, theta, targets_index, sources_index, farfield, nearfield)
+    horizontal_pass!(tree, systems, 1, 1, theta, targets_index, sources_index, farfield, nearfield)
 end
 
-function horizontal_pass!(tree, systems, i_target, j_source, theta, targets_index, sources_index, local_P2P=true)
+function horizontal_pass!(tree, systems, i_target, j_source, theta, targets_index, sources_index, farfield, nearfield)
     branches = tree.branches
     source_branch = branches[j_source]
     target_branch = branches[i_target]
@@ -59,22 +59,22 @@ function horizontal_pass!(tree, systems, i_target, j_source, theta, targets_inde
         if contains_sources
             spacing = source_branch.center - target_branch.center
             spacing_squared = spacing' * spacing
-            threshold_squared = (target_branch.radius + source_branch.radius)^2 * theta # theta is the number of radii squared
-            if spacing_squared >= threshold_squared # meet separation criteria
+            threshold_squared = (target_branch.radius + source_branch.radius)^2 
+            if farfield && spacing_squared * theta * theta >= threshold_squared # meet separation criteria; theta is the spacing parameter
                 @lock target_branch.lock M2L!(tree, i_target, j_source)
-            elseif source_branch.first_branch == target_branch.first_branch == -1 && (local_P2P || i_target != j_source) # both leaves
+            elseif source_branch.first_branch == target_branch.first_branch == -1 && (nearfield || i_target != j_source) # both leaves
                 @lock target_branch.child_lock P2P!(tree, systems, i_target, j_source, targets_index, sources_index)
             elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
                 Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
                 # for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-                    # @inbounds horizontal_pass!(tree, systems, i_child, j_source, theta, targets_index, sources_index, local_P2P)
-                    horizontal_pass!(tree, systems, i_child, j_source, theta, targets_index, sources_index, local_P2P)
+                    # @inbounds horizontal_pass!(tree, systems, i_child, j_source, theta, targets_index, sources_index, nearfield)
+                    horizontal_pass!(tree, systems, i_child, j_source, theta, targets_index, sources_index, farfield, nearfield)
                 end
             else
                 Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
                 # for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-                    # @inbounds horizontal_pass!(tree, systems, i_target, j_child, theta, targets_index, sources_index, local_P2P)
-                    horizontal_pass!(tree, systems, i_target, j_child, theta, targets_index, sources_index, local_P2P)
+                    # @inbounds horizontal_pass!(tree, systems, i_target, j_child, theta, targets_index, sources_index, nearfield)
+                    horizontal_pass!(tree, systems, i_target, j_child, theta, targets_index, sources_index, farfield, nearfield)
                 end
             end
         end
@@ -110,11 +110,11 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, systems, options::Options, targets_index, sources_index; reset_tree=true, local_P2P=true, unsort_bodies=true)
+function fmm!(tree::Tree, systems, options::Options, targets_index, sources_index; reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     reset_tree && (reset_expansions!(tree))
-    upward_pass!(tree, systems, sources_index)
-    horizontal_pass!(tree, systems, options.theta, targets_index, sources_index, local_P2P)
-    downward_pass!(tree, systems, targets_index)
+    farfield && (upward_pass!(tree, systems, sources_index))
+    horizontal_pass!(tree, systems, options.theta, targets_index, sources_index, farfield, nearfield)
+    farfield && (downward_pass!(tree, systems, targets_index))
     unsort_bodies && (unsort!(systems, tree))
 end
 
@@ -139,7 +139,7 @@ The user must reset the potential manually.
 """
 function fmm!(systems::Tuple, options::Options; optargs...)
     full_index = collect(1:length(systems))
-    fmm!(systems, options, full_index, full_index; optargs...)
+    tree = fmm!(systems, options, full_index, full_index; optargs...)
     return tree
 end
 

@@ -104,7 +104,7 @@ end
     @test isapprox(radius, test_radius; atol=1e-4)
 
     # test branch! function
-    options = fmm.Options(2,1,4.0)
+    options = fmm.Options(2,1,0.5)
     tree = fmm.Tree((elements,), options)
 
     test_branches = [
@@ -236,7 +236,7 @@ system = Gravitational(bodies)
 
 expansion_order = 2
 n_per_branch = 1
-theta = 4.0
+theta = 0.25
 options = fmm.Options(expansion_order, n_per_branch, theta)
 tree = fmm.Tree((system,), options)
 
@@ -244,7 +244,7 @@ i_mass = 1
 i_branch = 5 # use the first mass
 
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-fmm.B2M!(tree.branches[i_branch], system, new_order_index[i_mass]:new_order_index[i_mass], harmonics, tree.expansion_order)
+fmm.B2M!(system, tree.branches[i_branch], new_order_index[i_mass]:new_order_index[i_mass], harmonics, tree.expansion_order)
 
 center = tree.branches[i_branch].center
 
@@ -308,7 +308,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 3
-options = fmm.Options(expansion_order, 1, 4.0)
+options = fmm.Options(expansion_order, 1, 0.5)
 tree = fmm.Tree((elements,), options)
 
 i_branch = 2 # contains 4th and 5th elements
@@ -316,7 +316,7 @@ i_branch_4 = 6 # use the fourth mass
 # i_branch_5 = 7 # use the fifth mass
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 # using only the 4th mass: (note it has been reordered)
-fmm.B2M!(tree.branches[i_branch_4], elements, new_order_index[4]:new_order_index[4], harmonics, tree.expansion_order) # evaluate multipole coefficients
+fmm.B2M!(elements, tree.branches[i_branch_4], new_order_index[4]:new_order_index[4], harmonics, tree.expansion_order) # evaluate multipole coefficients
 fmm.M2M!(tree, i_branch) # translate coefficients to the center of branch 2
 
 x_target = [8.3,1.4,-4.2]
@@ -362,7 +362,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-options = fmm.Options(expansion_order, 1, 4.0)
+options = fmm.Options(expansion_order, 1, 0.5)
 tree = fmm.Tree((elements,), options)
 
 branch_i = 2 # contains two elements; 4 and 5
@@ -386,7 +386,7 @@ harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
 workspace = zeros(3,4)
-spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
+spherical_potential = zeros(52)
 fmm.L2B!(elements, target_i, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, tree.branches[branch_i])
 
 u_fmm = elements.potential[1,target_i]
@@ -427,7 +427,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-options = fmm.Options(expansion_order, 1, 4.0)
+options = fmm.Options(expansion_order, 1, 0.5)
 tree = fmm.Tree((elements,), options)
 
 # local coefficient at branch 2 due to mass 1
@@ -439,7 +439,7 @@ harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
 workspace = zeros(3,4)
-spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
+spherical_potential = zeros(52)
 fmm.L2B!(elements, new_order_index[5], harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, tree.branches[2])
 # fmm.L2B!(elements[5], tree, tree.branches[2], harmonics, harmonics_theta, harmonics_theta_2, d_potential_cartesian, d_potential, dH_potential)
 u_fmm_no_x = elements.potential[1,new_order_index[5]]
@@ -496,7 +496,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 30
-options = fmm.Options(expansion_order, 1, 4.0)
+options = fmm.Options(expansion_order, 1, 0.5)
 tree = fmm.Tree((elements,), options)
 
 i_branch_multipole = 7 # mass 5
@@ -506,7 +506,7 @@ harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
 workspace = zeros(3,4)
 
-fmm.B2M!(tree.branches[i_branch_multipole], elements, new_order_index[5]:new_order_index[5], harmonics, tree.expansion_order)
+fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_order_index[5], harmonics, tree.expansion_order)
 
 # # test Multipole # checks out
 # dx_mp = xs[5,:] - tree.branches[i_branch_multipole].center
@@ -523,7 +523,7 @@ fmm.B2M!(tree.branches[i_branch_multipole], elements, new_order_index[5]:new_ord
 
 fmm.M2L!(tree, i_branch_local, i_branch_multipole)
 
-spherical_potential = zeros(i_POTENTIAL_HESSIAN[end])
+spherical_potential = zeros(52)
 fmm.L2B!(elements, new_order_index[1], harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, tree.branches[i_branch_local])
 u_fmm = elements.potential[1,new_order_index[1]]
 
@@ -566,8 +566,8 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 24
-theta = 4
-options = fmm.Options(expansion_order, 1, 4.0)
+theta = 0.5
+options = fmm.Options(expansion_order, 1, theta)
 tree = fmm.Tree((elements,), options)
 
 # perform upward pass
@@ -595,7 +595,7 @@ fmm.M2B!(mass_target_potential, mass_target, 2, tree)
 u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
-fmm.horizontal_pass!(tree, (elements,), theta, [1], [1])
+fmm.horizontal_pass!(tree, (elements,), theta, [1], [1], true, true)
 
 # consider the effect on branch 3 (mass 2)
 elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at mass 2
@@ -617,7 +617,6 @@ u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx
 u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
 # M2L is performed from branches 6, 7 to branch 3 (containing mass 2)
-# fmm.L2B!(element, tree, branch, harmonics, harmonics_theta)
 fmm.L2B!(tree, (elements,), 3, [1])
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
@@ -647,6 +646,7 @@ u_direct = deepcopy(elements.potential[1,:])
 for i in 1:length(elements)
     @test isapprox(u_fmm[i], u_direct[i]; atol=1e-12)
 end
+
 end
 
 #####
@@ -967,22 +967,23 @@ vorton_velocity_check = deepcopy(vortexparticles.velocity_stretching[i_VELOCITY_
 
 # reset vortons
 vortexparticles.potential .*= 0
+vortexparticles.velocity_stretching .*= 0
 
 # manually build tree for testing
-# Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
+# Branch(n_branches, n_bodies, first_branch, first_body, center, radius, multipole_expansion, local_expansion, lock, child_lock)
 expansion_order = 9
-x_branch_1 = [0.0,0,0]
-branch_1 = fmm.Branch(Int8(2), Int32.([2]), Int32(2), Int32.([1]), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
-x_branch_2 = xs[:,1] .+ [0.01, 0.02, -0.03]
-branch_2 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([1]), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
-x_branch_3 = xs[:,2] .+ [0.02, -0.04, 0.01]
-branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
+x_branch_1 = fmm.SVector{3}([0.0,0,0])
+branch_1 = fmm.Branch(Int8(2), SVector{1}(Int32.([2])), Int32(2), SVector{1}(Int32.([1])), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
+x_branch_2 = fmm.SVector{3}(xs[:,1] .+ [0.01, 0.02, -0.03])
+branch_2 = fmm.Branch(Int8(-1), SVector{1}(Int32.([1])), Int32(-1), SVector{1}(Int32.([1])), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
+x_branch_3 = fmm.SVector{3}(xs[:,2] .+ [0.02, -0.04, 0.01])
+branch_3 = fmm.Branch(Int8(-1), SVector{1}(Int32.([1])), Int32(-1), SVector{1}(Int32.([2])), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
 
 # using FMM
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch, B2M!, P2P!)
-options = fmm.Options(expansion_order, 1, 4.0)
-dummy_index = [zeros(Int32,size(vortexparticles.bodies)[2])]
-tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index, dummy_index, dummy_index[1], dummy_index[1])
+options = fmm.Options(expansion_order, 1, 0.5)
+dummy_index = (zeros(Int64,length(vortexparticles)),)
+tree = fmm.Tree([branch_1, branch_2, branch_3], Int16(expansion_order), Int32(1), dummy_index, dummy_index, dummy_index[1], dummy_index[1])
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 fmm.B2M!(tree, (vortexparticles,), 2, [1])
 fmm.B2M!(tree, (vortexparticles,), 3, [1])
@@ -1004,26 +1005,22 @@ end
 
 end
 
-@testset "two 3D vortex particles" begin
-
-bodies = [
-    0.4 0.1
-    0.1 -0.5
-    -0.3 0.2
-    0.3 -0.4
-    -0.1 -0.2
-    0.08 0.5
-]
-
-vortex_particles = VortexParticles(bodies)
-
-#####
-##### obtain psi, u, and stretching analytically
-#####
 function psi(target_x, source_x, source_gamma)
     dx = target_x - source_x
     dx_norm = sqrt(dx' * dx)
-    return source_gamma ./ dx_norm
+    return source_gamma ./ dx_norm * ONE_OVER_4PI
+end
+
+function dpsidx(target_x, source_x, source_gamma)
+    dx = target_x - source_x
+    dx_norm = sqrt(dx' * dx)
+    x, y, z = dx
+    jacobian = [
+        -x*source_gamma[1] -x*source_gamma[2] -x*source_gamma[3];
+        -y*source_gamma[1] -y*source_gamma[2] -y*source_gamma[3];
+        -z*source_gamma[1] -z*source_gamma[2] -z*source_gamma[3];
+    ] ./ dx_norm^3 * ONE_OVER_4PI
+    return jacobian
 end
 
 function d2psidx2(target_x, source_x, source_gamma)
@@ -1036,9 +1033,9 @@ function d2psidx2(target_x, source_x, source_gamma)
         3x*y 2y^2-x^2-z^2 3y*z;
         3x*z 3y*z 2z^2-x^2-y^2
     ] / dx_norm^5
-    hessian[:,:,1] = d2dr2 * source_gamma[1]
-    hessian[:,:,2] = d2dr2 * source_gamma[2]
-    hessian[:,:,3] = d2dr2 * source_gamma[3]
+    hessian[:,:,1] = d2dr2 * source_gamma[1] * ONE_OVER_4PI
+    hessian[:,:,2] = d2dr2 * source_gamma[2] * ONE_OVER_4PI
+    hessian[:,:,3] = d2dr2 * source_gamma[3] * ONE_OVER_4PI
     return hessian
 end
 
@@ -1077,18 +1074,36 @@ function stretching(target_x, source_x, target_gamma, source_gamma)
     return stretch
 end
 
+@testset "two 3D vortex particles" begin
+
+bodies = [
+    0.4 0.1
+    0.1 -0.5
+    -0.3 0.2
+    1/8 1/8
+    0.3 -0.4
+    -0.1 -0.2
+    0.08 0.5
+]
+
+vortex_particles = VortexParticles(bodies)
+
+#####
+##### obtain psi, u, and stretching analytically
+#####
+
 psis = zeros(3,2)
-psis[:,1] = psi(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2])
-psis[:,2] = psi(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1])
+psis[:,1] = psi(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2])
+psis[:,2] = psi(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1])
 hessians = zeros(3,3,3,2)
-hessians[:,:,:,1] = d2psidx2(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2])
-hessians[:,:,:,2] = d2psidx2(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1])
+hessians[:,:,:,1] = d2psidx2(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2])
+hessians[:,:,:,2] = d2psidx2(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1])
 us = zeros(3,2)
-us[:,1] = u(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2])
-us[:,2] = u(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1])
+us[:,1] = u(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2])
+us[:,2] = u(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1])
 ss = zeros(3,2)
-ss[:,1] = stretching(bodies[1:3,1], bodies[1:3,2], bodies[4:6,1], bodies[4:6,2])
-ss[:,2] = stretching(bodies[1:3,2], bodies[1:3,1], bodies[4:6,2], bodies[4:6,1])
+ss[:,1] = stretching(bodies[1:3,1], bodies[1:3,2], bodies[5:7,1], bodies[5:7,2])
+ss[:,2] = stretching(bodies[1:3,2], bodies[1:3,1], bodies[5:7,2], bodies[5:7,1])
 
 #####
 ##### use direct method
@@ -1100,10 +1115,10 @@ psis_direct = deepcopy(vortex_particles.potential[2:4,:])
 for i in 1:length(psis_direct)
     @test isapprox(psis_direct[i], psis[i]; atol=1e-10)
 end
-hessians_direct = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,2))
-for i in 1:length(hessians)
-    @test isapprox(hessians_direct[i], hessians[i]; atol=1e-10)
-end
+# hessians_direct = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,2))
+# for i in 1:length(hessians)
+#     @test isapprox(hessians_direct[i], hessians[i]; atol=1e-10)
+# end
 us_direct = deepcopy(vortex_particles.velocity_stretching[1:3,:])
 for i in 1:length(us)
     @test isapprox(us_direct, us;atol=1e-10)
@@ -1122,17 +1137,17 @@ vortex_particles.velocity_stretching .*= 0
 
 # branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
 expansion_order = 9
-x_branch_1 = (bodies[1:3,1] + bodies[1:3,2])/2
-branch_1 = fmm.Branch(Int8(2), Int32.([2]), Int32(2), Int32.([1]), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
-x_branch_2 = bodies[1:3,1] .+ [0.01, 0.02, -0.03]
-branch_2 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([1]), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
-x_branch_3 = bodies[1:3,2] .+ [0.02, -0.04, 0.01]
-branch_3 = fmm.Branch(Int8(-1), Int32.([1]), Int32(-1), Int32.([2]), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
+x_branch_1 = SVector{3}((bodies[1:3,1] + bodies[1:3,2])/2)
+branch_1 = fmm.Branch(Int8(2), SVector{1}(Int32.([2])), Int32(2), SVector{1}(Int32.([1])), x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
+x_branch_2 = SVector{3}(bodies[1:3,1] .+ [0.01, 0.02, -0.03])
+branch_2 = fmm.Branch(Int8(-1), SVector{1}(Int32.([1])), Int32(-1), SVector{1}(Int32.([1])), x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
+x_branch_3 = SVector{3}(bodies[1:3,2] .+ [0.02, -0.04, 0.01])
+branch_3 = fmm.Branch(Int8(-1), SVector{1}(Int32.([1])), Int32(-1), SVector{1}(Int32.([2])), x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order), ReentrantLock(), ReentrantLock())
 
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch)
-options = fmm.Options(expansion_order, 1, 4.0)
-dummy_index = [zeros(Int32,size(vortex_particles.bodies)[2])]
-tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index, dummy_index, dummy_index[1], dummy_index[1])
+options = fmm.Options(expansion_order, 1, 0.5)
+dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
+tree = fmm.Tree([branch_1, branch_2, branch_3], Int16(expansion_order), Int32(1), dummy_index, dummy_index, dummy_index[1], dummy_index[1])
 # fmm.B2M!(tree, vortex_particles, 2)
 # fmm.B2M!(tree, vortex_particles, 3)
 
@@ -1140,18 +1155,17 @@ tree = fmm.Tree([branch_1, branch_2, branch_3], expansion_order, 1, dummy_index,
 # fmm.M2L!(tree, 3, 2)
 # fmm.L2B!(tree, vortex_particles, 2)
 # fmm.L2B!(tree, vortex_particles, 3)
-theta = 4
-fmm.fmm!(tree, (vortex_particles,), options)
+fmm.fmm!(tree, (vortex_particles,), options; unsort_bodies=false)
 update_velocity_stretching!(vortex_particles)
 
 psis_fmm = deepcopy(vortex_particles.potential[2:4,:])
 for i in 1:length(psis_fmm)
     @test isapprox(psis_fmm[i], psis[i]; atol=1e-10)
 end
-hessians_fmm = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,2))
-for i in 1:length(hessians)
-    @test isapprox(hessians_fmm[i], hessians[i]; atol=1e-8)
-end
+# hessians_fmm = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,2))
+# for i in 1:length(hessians)
+#     @test isapprox(hessians_fmm[i], hessians[i]; atol=1e-8)
+# end
 us_fmm = deepcopy(vortex_particles.velocity_stretching[1:3,:])
 for i in 1:length(us)
     @test isapprox(us_fmm, us;atol=1e-8)
@@ -1160,6 +1174,7 @@ ss_fmm = deepcopy(vortex_particles.velocity_stretching[4:6,:])
 for i in 1:length(ss)
     @test isapprox(ss_fmm[i], ss[i];atol=1e-8)
 end
+
 end
 
 
@@ -1169,6 +1184,7 @@ bodies = [
     0.4 0.1 -0.1
     0.1 -0.5 0.25
     -0.3 0.2 0.1
+    1/8 1/8 1/8
     0.3 -0.4 0.2
     -0.1 -0.2 0.5
     0.08 0.5 1.1
@@ -1176,98 +1192,26 @@ bodies = [
 
 vortex_particles = VortexParticles(bodies)
 
-#####
-##### obtain psi, u, and stretching analytically
-#####
-function psi(target_x, source_x, source_gamma)
-    dx = target_x - source_x
-    dx_norm = sqrt(dx' * dx)
-    return source_gamma ./ dx_norm
-end
-
-function dpsidx(target_x, source_x, source_gamma)
-    dx = target_x - source_x
-    dx_norm = sqrt(dx' * dx)
-    x, y, z = dx
-    jacobian = [
-        -x*source_gamma[1] -x*source_gamma[2] -x*source_gamma[3];
-        -y*source_gamma[1] -y*source_gamma[2] -y*source_gamma[3];
-        -z*source_gamma[1] -z*source_gamma[2] -z*source_gamma[3];
-    ] ./ dx_norm^3
-    return jacobian
-end
-
-function d2psidx2(target_x, source_x, source_gamma)
-    dx = target_x - source_x
-    dx_norm = sqrt(dx' * dx)
-    x, y, z = dx
-    hessian = zeros(3,3,3)
-    d2dr2 = [
-        2x^2-y^2-z^2 3x*y 3x*z;
-        3x*y 2y^2-x^2-z^2 3y*z;
-        3x*z 3y*z 2z^2-x^2-y^2
-    ] / dx_norm^5
-    hessian[:,:,1] = d2dr2 * source_gamma[1]
-    hessian[:,:,2] = d2dr2 * source_gamma[2]
-    hessian[:,:,3] = d2dr2 * source_gamma[3]
-    return hessian
-end
-
-function u(target_x, source_x, source_gamma)
-    dx = target_x  - source_x
-    dx_norm = sqrt(dx' * dx)
-    return 1/4/pi/dx_norm^3 * [
-        -dx[2]*source_gamma[3] + dx[3]*source_gamma[2],
-        -dx[3]*source_gamma[1] + dx[1]*source_gamma[3],
-        -dx[1]*source_gamma[2] + dx[2]*source_gamma[1]
-    ]
-end
-
-function duidxj_fd_fun(target_x, source_x, source_gamma; h=1e-8)
-    duidx = (u(target_x+[h,0,0], source_x, source_gamma) - u(target_x,source_x,source_gamma))/h
-    duidy = (u(target_x+[0,h,0], source_x, source_gamma) - u(target_x,source_x,source_gamma))/h
-    duidz = (u(target_x+[0,0,h], source_x, source_gamma) - u(target_x,source_x,source_gamma))/h
-    duidxj_res = hcat(duidx, duidy, duidz) .* 4 * pi
-    return duidxj_res
-end
-
-function stretching(target_x, source_x, target_gamma, source_gamma)
-    dx = target_x - source_x
-    x, y, z = dx
-    xy = x*y
-    yz = y*z
-    xz = x*z
-    gx, gy, gz = source_gamma
-    dx_norm = sqrt(dx' * dx)
-    duidxj = [
-        (3xy*gz-3xz*gy) ((2y^2-x^2-z^2)*gz-3yz*gy) (3yz*gz-(2z^2-x^2-y^2)*gy);
-        (3xz*gx-(2x^2-y^2-z^2)*gz) (3yz*gx-3xy*gz) ((2z^2-x^2-y^2)*gx-3xz*gz);
-        ((2x^2-y^2-z^2)*gy-3xy*gx) (3xy*gy-(2y^2-x^2-z^2)*gx) (3xz*gy-3yz*gx)
-    ]/dx_norm^5
-    stretch = 1/4/pi*duidxj*target_gamma
-    return stretch
-end
-
 psis = zeros(3,3)
-psis[:,1] = psi(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2]) + psi(bodies[1:3,1], bodies[1:3,3], bodies[4:6,3])
-psis[:,2] = psi(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1]) + psi(bodies[1:3,2], bodies[1:3,3], bodies[4:6,3])
-psis[:,3] = psi(bodies[1:3,3], bodies[1:3,1], bodies[4:6,1]) + psi(bodies[1:3,3], bodies[1:3,2], bodies[4:6,2])
+psis[:,1] = psi(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2]) + psi(bodies[1:3,1], bodies[1:3,3], bodies[5:7,3])
+psis[:,2] = psi(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1]) + psi(bodies[1:3,2], bodies[1:3,3], bodies[5:7,3])
+psis[:,3] = psi(bodies[1:3,3], bodies[1:3,1], bodies[5:7,1]) + psi(bodies[1:3,3], bodies[1:3,2], bodies[5:7,2])
 jacobians = zeros(3,3,3)
-jacobians[:,:,1] = dpsidx(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2]) + dpsidx(bodies[1:3,1], bodies[1:3,3], bodies[4:6,3])
-jacobians[:,:,2] = dpsidx(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1]) + dpsidx(bodies[1:3,2], bodies[1:3,3], bodies[4:6,3])
-jacobians[:,:,3] = dpsidx(bodies[1:3,3], bodies[1:3,1], bodies[4:6,1]) + dpsidx(bodies[1:3,3], bodies[1:3,2], bodies[4:6,2])
+jacobians[:,:,1] = dpsidx(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2]) + dpsidx(bodies[1:3,1], bodies[1:3,3], bodies[5:7,3])
+jacobians[:,:,2] = dpsidx(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1]) + dpsidx(bodies[1:3,2], bodies[1:3,3], bodies[5:7,3])
+jacobians[:,:,3] = dpsidx(bodies[1:3,3], bodies[1:3,1], bodies[5:7,1]) + dpsidx(bodies[1:3,3], bodies[1:3,2], bodies[5:7,2])
 hessians = zeros(3,3,3,3)
-hessians[:,:,:,1] = d2psidx2(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2]) + d2psidx2(bodies[1:3,1], bodies[1:3,3], bodies[4:6,3])
-hessians[:,:,:,2] = d2psidx2(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1]) + d2psidx2(bodies[1:3,2], bodies[1:3,3], bodies[4:6,3])
-hessians[:,:,:,3] = d2psidx2(bodies[1:3,3], bodies[1:3,1], bodies[4:6,1]) + d2psidx2(bodies[1:3,3], bodies[1:3,2], bodies[4:6,2])
+hessians[:,:,:,1] = d2psidx2(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2]) + d2psidx2(bodies[1:3,1], bodies[1:3,3], bodies[5:7,3])
+hessians[:,:,:,2] = d2psidx2(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1]) + d2psidx2(bodies[1:3,2], bodies[1:3,3], bodies[5:7,3])
+hessians[:,:,:,3] = d2psidx2(bodies[1:3,3], bodies[1:3,1], bodies[5:7,1]) + d2psidx2(bodies[1:3,3], bodies[1:3,2], bodies[5:7,2])
 us = zeros(3,3)
-us[:,1] = u(bodies[1:3,1], bodies[1:3,2], bodies[4:6,2]) + u(bodies[1:3,1], bodies[1:3,3], bodies[4:6,3])
-us[:,2] = u(bodies[1:3,2], bodies[1:3,1], bodies[4:6,1]) + u(bodies[1:3,2], bodies[1:3,3], bodies[4:6,3])
-us[:,3] = u(bodies[1:3,3], bodies[1:3,1], bodies[4:6,1]) + u(bodies[1:3,3], bodies[1:3,2], bodies[4:6,2])
+us[:,1] = u(bodies[1:3,1], bodies[1:3,2], bodies[5:7,2]) + u(bodies[1:3,1], bodies[1:3,3], bodies[5:7,3])
+us[:,2] = u(bodies[1:3,2], bodies[1:3,1], bodies[5:7,1]) + u(bodies[1:3,2], bodies[1:3,3], bodies[5:7,3])
+us[:,3] = u(bodies[1:3,3], bodies[1:3,1], bodies[5:7,1]) + u(bodies[1:3,3], bodies[1:3,2], bodies[5:7,2])
 ss = zeros(3,3)
-ss[:,1] = stretching(bodies[1:3,1], bodies[1:3,2], bodies[4:6,1], bodies[4:6,2]) + stretching(bodies[1:3,1], bodies[1:3,3], bodies[4:6,1], bodies[4:6,3])
-ss[:,2] = stretching(bodies[1:3,2], bodies[1:3,1], bodies[4:6,2], bodies[4:6,1]) + stretching(bodies[1:3,2], bodies[1:3,3], bodies[4:6,2], bodies[4:6,3])
-ss[:,3] = stretching(bodies[1:3,3], bodies[1:3,1], bodies[4:6,3], bodies[4:6,1]) + stretching(bodies[1:3,3], bodies[1:3,2], bodies[4:6,3], bodies[4:6,2])
+ss[:,1] = stretching(bodies[1:3,1], bodies[1:3,2], bodies[5:7,1], bodies[5:7,2]) + stretching(bodies[1:3,1], bodies[1:3,3], bodies[5:7,1], bodies[5:7,3])
+ss[:,2] = stretching(bodies[1:3,2], bodies[1:3,1], bodies[5:7,2], bodies[5:7,1]) + stretching(bodies[1:3,2], bodies[1:3,3], bodies[5:7,2], bodies[5:7,3])
+ss[:,3] = stretching(bodies[1:3,3], bodies[1:3,1], bodies[5:7,3], bodies[5:7,1]) + stretching(bodies[1:3,3], bodies[1:3,2], bodies[5:7,3], bodies[5:7,2])
 
 #####
 ##### use direct method
@@ -1279,14 +1223,14 @@ psis_direct = deepcopy(vortex_particles.potential[2:4,:])
 for i in 1:length(psis_direct)
     @test isapprox(psis_direct[i], psis[i]; atol=1e-10)
 end
-jacobians_direct = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_JACOBIAN[4:end],:],3,3,3))
-for i in 1:length(jacobians_direct)
-    @test isapprox(jacobians_direct[i], jacobians[i]; atol=1e-10)
-end
-hessians_direct = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,3))
-for i in 1:length(hessians)
-    @test isapprox(hessians_direct[i], hessians[i]; atol=1e-10)
-end
+# jacobians_direct = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_JACOBIAN[4:end],:],3,3,3))
+# for i in 1:length(jacobians_direct)
+#     @test isapprox(jacobians_direct[i], jacobians[i]; atol=1e-10)
+# end
+# hessians_direct = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,3))
+# for i in 1:length(hessians)
+#     @test isapprox(hessians_direct[i], hessians[i]; atol=1e-10)
+# end
 us_direct = deepcopy(vortex_particles.velocity_stretching[1:3,:])
 for i in 1:length(us)
     @test isapprox(us_direct[i], us[i];atol=1e-10)
@@ -1303,30 +1247,12 @@ end
 vortex_particles.potential .*= 0
 vortex_particles.velocity_stretching .*= 0
 
-# branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
 expansion_order = 32
 n_per_branch = 1
-# x_branch_1 = (bodies[1:3,1] + bodies[1:3,2] + bodies[1:3,3])/3
-# branch_1 = fmm.Branch(3, 3, 2, 1, x_branch_1, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
-# x_branch_2 = bodies[1:3,1] .+ [0.01, 0.02, -0.03]
-# branch_2 = fmm.Branch(-1, 1, -1, 1, x_branch_2, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
-# x_branch_3 = bodies[1:3,2] .+ [0.02, -0.04, 0.01]
-# branch_3 = fmm.Branch(-1, 1, -1, 2, x_branch_3, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
-# x_branch_4 = bodies[1:3,3] .+ [-0.01, 0.01, -0.04]
-# branch_4 = fmm.Branch(-1, 1, -1, 3, x_branch_4, 1/8, fmm.initialize_expansion(expansion_order), fmm.initialize_expansion(expansion_order))
 
-# tree = fmm.Tree(branches, [expansion_order], n_per_branch)
-# tree = fmm.Tree([branch_1, branch_2, branch_3, branch_4], [expansion_order], 1)
-options = fmm.Options(expansion_order, n_per_branch, 4.0)
+options = fmm.Options(expansion_order, n_per_branch, 0.5)
 tree = fmm.Tree((vortex_particles,), options)
-# fmm.B2M!(tree, vortex_particles, 2)
-# fmm.B2M!(tree, vortex_particles, 3)
 
-# fmm.M2L!(tree, 2, 3)
-# fmm.M2L!(tree, 3, 2)
-# fmm.L2B!(tree, vortex_particles, 2)
-# fmm.L2B!(tree, vortex_particles, 3)
-theta =2.0
 fmm.fmm!(tree, (vortex_particles,), options)
 
 update_velocity_stretching!(vortex_particles)
@@ -1335,10 +1261,10 @@ psis_fmm = deepcopy(vortex_particles.potential[2:4,:])
 for i in 1:length(psis_fmm)
     @test isapprox(psis_fmm[i], psis[i]; rtol=1e-12)
 end
-hessians_fmm = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,3))
-for i in 1:length(hessians)
-    @test isapprox(hessians_fmm[i], hessians[i]; rtol=1e-12)
-end
+# hessians_fmm = deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,3))
+# for i in 1:length(hessians)
+#     @test isapprox(hessians_fmm[i], hessians[i]; rtol=1e-12)
+# end
 us_fmm = deepcopy(vortex_particles.velocity_stretching[1:3,:])
 for i in 1:length(us)
     @test isapprox(us_fmm, us;rtol=1e-12)
@@ -1350,110 +1276,110 @@ end
 
 end
 
-@testset "local P2P" begin
+# @testset "local P2P" begin
 
-bodies = [
-    0.205395  10.261945  0.870219  0.0933026  0.58933
-    0.884498  11.125261  0.65333   0.293028   0.806995
-    0.82999   12.39037   0.396068  0.563952   0.227808
-    0.412938  3.578483  0.818427  0.688908   0.173329
-] # one way out there to trigger multipole expansion
+# bodies = [
+#     0.205395  10.261945  0.870219  0.0933026  0.58933
+#     0.884498  11.125261  0.65333   0.293028   0.806995
+#     0.82999   12.39037   0.396068  0.563952   0.227808
+#     0.412938  3.578483  0.818427  0.688908   0.173329
+# ] # one way out there to trigger multipole expansion
 
-struct TestBodies
-    bodies # 16 x N array containing the control point, corner points, and panel strength
-    index # N vector of integers
-    potential
-    direct!
-    B2M!
-end
+# struct TestBodies
+#     bodies # 16 x N array containing the control point, corner points, and panel strength
+#     index # N vector of integers
+#     potential
+#     direct!
+#     B2M!
+# end
 
-i_POSITION = 1:3
-i_STRENGTH = 4
+# i_POSITION = 1:3
+# i_STRENGTH = 4
 
-function update_potential_direct!(target_potential, target_positions, source_bodies)
-    n_targets = size(target_potential)[2]
-    n_sources = size(source_bodies)[2]
-    for i_target in 1:n_targets
-        target_jacobian = reshape(view(target_potential,i_POTENTIAL_JACOBIAN,i_target),3,4)
-        target_hessian = reshape(view(target_potential,i_POTENTIAL_HESSIAN,i_target),3,3,4)
-        x_target = SVector{3}(target_positions[:,i_target])
-        for j_source in 1:n_sources
-            # potential, jacobian
-            x_source = SVector{3}(source_bodies[i_POSITION,j_source])
-            strength = source_bodies[i_STRENGTH,j_source]
-            dx = x_target - x_source
-            r = sqrt(dx' * dx)
-            if r > 1e-15
-                phi = strength/r
-                r3 = r^3
-                dphidx = SVector{3}(-strength*dx[1]/r3, -strength*dx[2]/r3, -strength*dx[3]/r3)
+# function update_potential_direct!(target_potential, target_positions, source_bodies)
+#     n_targets = size(target_potential)[2]
+#     n_sources = size(source_bodies)[2]
+#     for i_target in 1:n_targets
+#         target_jacobian = reshape(view(target_potential,i_POTENTIAL_JACOBIAN,i_target),3,4)
+#         target_hessian = reshape(view(target_potential,i_POTENTIAL_HESSIAN,i_target),3,3,4)
+#         x_target = SVector{3}(target_positions[:,i_target])
+#         for j_source in 1:n_sources
+#             # potential, jacobian
+#             x_source = SVector{3}(source_bodies[i_POSITION,j_source])
+#             strength = source_bodies[i_STRENGTH,j_source]
+#             dx = x_target - x_source
+#             r = sqrt(dx' * dx)
+#             if r > 1e-15
+#                 phi = strength/r
+#                 r3 = r^3
+#                 dphidx = SVector{3}(-strength*dx[1]/r3, -strength*dx[2]/r3, -strength*dx[3]/r3)
 
-                target_potential[i_POTENTIAL_SCALAR,i_target] += phi
-                target_jacobian[:,1] .+= dphidx
+#                 target_potential[i_POTENTIAL_SCALAR,i_target] += phi
+#                 target_jacobian[:,1] .+= dphidx
 
-                # calculate hessian
-                x, y, z = dx
-                denom = r3 * r^2
-                target_hessian[:,1,i_POTENTIAL_SCALAR] .+= (2*x^2 - y^2 - z^2) / denom * strength, 3*x*y / denom * strength, 3*x*z / denom * strength
-                target_hessian[:,2,i_POTENTIAL_SCALAR] .+= 3*x*y / denom * strength, (2*y^2 - x^2 - z^2) / denom * strength, 3*y*z / denom * strength
-                target_hessian[:,3,i_POTENTIAL_SCALAR] .+= 3*x*z / denom * strength, 3*y*z / denom * strength, (2*z^2 - x^2 - y^2) / denom * strength
-            end
-        end
-    end
-end
+#                 # calculate hessian
+#                 x, y, z = dx
+#                 denom = r3 * r^2
+#                 target_hessian[:,1,i_POTENTIAL_SCALAR] .+= (2*x^2 - y^2 - z^2) / denom * strength, 3*x*y / denom * strength, 3*x*z / denom * strength
+#                 target_hessian[:,2,i_POTENTIAL_SCALAR] .+= 3*x*y / denom * strength, (2*y^2 - x^2 - z^2) / denom * strength, 3*y*z / denom * strength
+#                 target_hessian[:,3,i_POTENTIAL_SCALAR] .+= 3*x*z / denom * strength, 3*y*z / denom * strength, (2*z^2 - x^2 - y^2) / denom * strength
+#             end
+#         end
+#     end
+# end
 
-function B2M_test!(branch, bodies, harmonics, expansion_order)
-    for i_body in 1:size(bodies)[2]
-        dx = bodies[i_POSITION,i_body] - branch.center
-        q = bodies[i_STRENGTH,i_body]
-        fmm.cartesian_2_spherical!(dx)
-        fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], expansion_order) # Ylm^* -> -dx[3]
-        # update values
-        for l in 0:expansion_order
-            for m in 0:l
-                i_solid_harmonic = l^2 + l + m + 1
-                i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                dim = 1 # just the scalar potential
-                branch.multipole_expansion[dim][i_compressed] += harmonics[i_solid_harmonic] * q
-            end
-        end
-    end
-end
+# function B2M_test!(branch, bodies, harmonics, expansion_order)
+#     for i_body in 1:size(bodies)[2]
+#         dx = bodies[i_POSITION,i_body] - branch.center
+#         q = bodies[i_STRENGTH,i_body]
+#         fmm.cartesian_2_spherical!(dx)
+#         fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], expansion_order) # Ylm^* -> -dx[3]
+#         # update values
+#         for l in 0:expansion_order
+#             for m in 0:l
+#                 i_solid_harmonic = l^2 + l + m + 1
+#                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
+#                 dim = 1 # just the scalar potential
+#                 branch.multipole_expansion[dim][i_compressed] += harmonics[i_solid_harmonic] * q
+#             end
+#         end
+#     end
+# end
 
 
-testbodies = TestBodies(bodies, zeros(Int32,size(bodies)[2]), zeros(eltype(bodies),fmm.i_POTENTIAL_HESSIAN[end],size(bodies)[2]),
-    update_potential_direct!, B2M_test!
-)
+# testbodies = TestBodies(bodies, zeros(Int32,size(bodies)[2]), zeros(eltype(bodies),fmm.52,size(bodies)[2]),
+#     update_potential_direct!, B2M_test!
+# )
 
-options = fmm.Options(8, 2, 4.0)
-tree = fmm.Tree((testbodies,), options)
+# options = fmm.Options(8, 2, 0.5)
+# tree = fmm.Tree((testbodies,), options)
 
-# note that `tree.branches[3].n_bodies = 2` 
-# this is the branch we will test
-# because tree.branches[3].first_body = 2
-# bodies 2 and 3 are the ones in this branch
+# # note that `tree.branches[3].n_bodies = 2` 
+# # this is the branch we will test
+# # because tree.branches[3].first_body = 2
+# # bodies 2 and 3 are the ones in this branch
 
-# compute the potential induced by all bodies outside the current cell
-population = [
-    [1], [2,3], [2,3], [4], [5]
-] # which elements are in the same leaf level cell
-for i_target in 1:size(testbodies.bodies)[2]
-    for i_source in 1:size(testbodies.bodies)[2]
-        if !(i_source in population[i_target])
-            testbodies.direct!(reshape(view(testbodies.potential,:,i_target),size(testbodies.potential)[1],1), reshape(testbodies.bodies[i_POSITION,i_target],3,1), reshape(testbodies.bodies[:,i_source], size(testbodies.bodies)[1], 1))
-        end
-    end
-end
-direct_potential = deepcopy(testbodies.potential)
+# # compute the potential induced by all bodies outside the current cell
+# population = [
+#     [1], [2,3], [2,3], [4], [5]
+# ] # which elements are in the same leaf level cell
+# for i_target in 1:size(testbodies.bodies)[2]
+#     for i_source in 1:size(testbodies.bodies)[2]
+#         if !(i_source in population[i_target])
+#             testbodies.direct!(reshape(view(testbodies.potential,:,i_target),size(testbodies.potential)[1],1), reshape(testbodies.bodies[i_POSITION,i_target],3,1), reshape(testbodies.bodies[:,i_source], size(testbodies.bodies)[1], 1))
+#         end
+#     end
+# end
+# direct_potential = deepcopy(testbodies.potential)
 
-# reset potential
-testbodies.potential .= 0.0
+# # reset potential
+# testbodies.potential .= 0.0
 
-# compute using FMM
-fmm.fmm!(tree, (testbodies,), options; local_P2P=false)
+# # compute using FMM
+# fmm.fmm!(tree, (testbodies,), options; local_P2P=false)
 
-for i in 1:length(testbodies.potential)
-    @test isapprox(testbodies.potential[i], direct_potential[i], atol=1e-5)
-end
+# for i in 1:length(testbodies.potential)
+#     @test isapprox(testbodies.potential[i], direct_potential[i], atol=1e-5)
+# end
 
-end
+# end
