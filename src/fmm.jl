@@ -30,7 +30,7 @@ function upward_pass!(tree, systems, i_branch, sources_index)
 
     if contains_sources # contains sources
         # perform P2M (leaf level) or M2M (not leaf level) translations
-        @lock branch.lock begin
+        Threads.lock(branch.lock)
             if branch.first_branch == -1 # leaf level
                 # println("B2M!")
                 B2M!(tree, systems, i_branch, sources_index)
@@ -38,7 +38,7 @@ function upward_pass!(tree, systems, i_branch, sources_index)
                 # println("M2M!")
                 M2M!(tree, i_branch) # not leaf level
             end
-        end
+        Threads.unlock(branch.lock)
     end
 end
 
@@ -61,9 +61,13 @@ function horizontal_pass!(tree, systems, i_target, j_source, theta, targets_inde
             spacing_squared = spacing' * spacing
             threshold_squared = (target_branch.radius + source_branch.radius)^2 
             if farfield && spacing_squared * theta * theta >= threshold_squared # meet separation criteria; theta is the spacing parameter
-                @lock target_branch.lock M2L!(tree, i_target, j_source)
+                Threads.lock(target_branch.lock)
+                    M2L!(tree, i_target, j_source)
+                Threads.unlock(target_branch.lock)
             elseif source_branch.first_branch == target_branch.first_branch == -1 && (nearfield || i_target != j_source) # both leaves
-                @lock target_branch.child_lock P2P!(tree, systems, i_target, j_source, targets_index, sources_index)
+                Threads.lock(target_branch.child_lock)
+                    P2P!(tree, systems, i_target, j_source, targets_index, sources_index)
+                Threads.unlock(target_branch.child_lock)
             elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
                 Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
                 # for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
