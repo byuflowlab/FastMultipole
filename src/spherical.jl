@@ -212,6 +212,24 @@ function B2M!(tree, systems, i_branch, sources_index)
     end
 end
 
+function B2M!(branch::SingleBranch, system, expansion_order)
+    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (expansion_order+1)*(expansion_order+1)) # this is faster than MVector
+
+    # iterate over elements
+    bodies_index = branch.first_body:branch.first_body + branch.n_bodies - 1
+    B2M!(system, branch, bodies_index, harmonics, expansion_order)
+end
+
+function B2M!(branch::MultiBranch, systems, expansion_order)
+    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (expansion_order+1)*(expansion_order+1)) # this is faster than MVector
+
+    # iterate over elements
+    for (i,system) in enumerate(systems)
+        bodies_index = branch.first_body[i]:branch.first_body[i] + branch.n_bodies[i] - 1
+        B2M!(system, branch, bodies_index, harmonics, expansion_order)
+    end
+end
+
 function M2B!(target_potential, target, i_branch, tree)
     branch = tree.branches[i_branch]
     irregular_harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (tree.expansion_order+1)^2)
@@ -232,14 +250,14 @@ function M2B!(target_potential, target, i_branch, tree)
     end
 end
 
-function M2M!(tree, branch, child, harmonics)
+function M2M!(branch, child, harmonics, expansion_order)
     # get distance vector
     dx, dy, dz = branch.center - child.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, r, theta, phi, tree.expansion_order)
+    regular_harmonic!(harmonics, r, theta, phi, expansion_order)
 
     M = zeros(eltype(branch.multipole_expansion[1]), 4)
-    for j in 0:tree.expansion_order # iterate over new Multipole coefficients B_j^k
+    for j in 0:expansion_order # iterate over new Multipole coefficients B_j^k
         for k in 0:j
             i_jk = ((j * (j+1)) >> 1) + k + 1 # current index
             M .*= 0.0
@@ -269,17 +287,17 @@ function M2M!(tree, branch, child, harmonics)
     end
 end
 
-function M2M!(tree, i_branch)
+function M2M!(branches, i_branch, expansion_order)
     # expose objects
-    branch = tree.branches[i_branch]
-
-    #initialize memory TODO: do this beforehand?
-    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (tree.expansion_order+1)^2)
+    branch = branches[i_branch]
+    
+    # initialize memory
+    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (expansion_order+1)^2)
 
     # iterate over children
     for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
-        child = tree.branches[i_child]
-        M2M!(tree, branch, child, harmonics)
+        child = branches[i_child]
+        M2M!(branch, child, harmonics, expansion_order)
     end
 end
 
@@ -315,17 +333,14 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
     end
 end
 
-function M2L!(tree, i_local, j_multipole)
-    local_branch = tree.branches[i_local]
-    multipole_branch = tree.branches[j_multipole]
-    # preallocate
-    harmonics = Vector{eltype(local_branch.multipole_expansion[1])}(undef, (2*tree.expansion_order + 1)^2)
-    # get separation vector
-    dx, dy, dz = local_branch.center - multipole_branch.center
+function M2L!(target_branch, source_branch, expansion_order)
+    twice_expansion_order = expansion_order << 1
+    harmonics = Vector{eltype(target_branch.multipole_expansion[1])}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
+    dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(harmonics, r, theta, phi, 2*tree.expansion_order)
-    L = zeros(eltype(local_branch.local_expansion[1]), 4)
-    M2L_loop!(local_branch.local_expansion, L, multipole_branch.multipole_expansion, harmonics, tree.expansion_order)
+    irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
+    L = zeros(eltype(target_branch.local_expansion[1]), 4)
+    M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
 function B2L!(tree, i_branch, source_position, source_strength)
@@ -393,24 +408,49 @@ function L2L!(tree, j_source)
     end
 end
 
-"Calculates the potential at all child elements of a branch."
-function L2B!(tree, systems, i_branch, targets_index)
-    branch = tree.branches[i_branch]
-    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
-    harmonics_theta = zeros(eltype(branch.multipole_expansion[1]), ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
-    harmonics_theta_2 = zeros(eltype(branch.multipole_expansion[1]), ((tree.expansion_order+1) * (tree.expansion_order+2)) >> 1)
-    workspace = zeros(eltype(tree),3,4)
-    spherical_potential = zeros(eltype(tree),52)
-    for (i_target, system) in enumerate(systems[targets_index])
-        i_type = targets_index[i_target]
-        for i_body in branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1
-            L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, branch)
+# "Calculates the potential at all child elements of a branch."
+# function L2B!(systems, branch, expansion_order)
+#     harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, ((expansion_order+1) * (expansion_order+2)) >> 1)
+#     harmonics_theta = zeros(eltype(branch.multipole_expansion[1]), ((expansion_order+1) * (expansion_order+2)) >> 1)
+#     harmonics_theta_2 = zeros(eltype(branch.multipole_expansion[1]), ((expansion_order+1) * (expansion_order+2)) >> 1)
+#     workspace = zeros(eltype(branch),3,4)
+#     spherical_potential = zeros(eltype(branch),52)
+#     for (i_target, system) in enumerate(systems[targets_index])
+#         i_type = targets_index[i_target]
+#         for i_body in branch.first_body[i_type]:branch.first_body[i_type] + branch.n_bodies[i_type] - 1
+#             L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
+#             spherical_potential .*= 0
+#         end
+#     end
+# end
+
+function L2B!(systems::Tuple, branch, expansion_order)
+    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    harmonics_theta = zeros(eltype(branch.multipole_expansion[1]), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    harmonics_theta_2 = zeros(eltype(branch.multipole_expansion[1]), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    workspace = zeros(eltype(branch),3,4)
+    spherical_potential = zeros(eltype(branch),52)
+    for (i_system, system) in enumerate(systems)
+        for i_body in branch.first_body[i_system]:branch.first_body[i_system] + branch.n_bodies[i_system] - 1
+            L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
             spherical_potential .*= 0
         end
     end
 end
 
-@inline function L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree, branch)
+function L2B!(system, branch, expansion_order)
+    harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    harmonics_theta = zeros(eltype(branch.multipole_expansion[1]), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    harmonics_theta_2 = zeros(eltype(branch.multipole_expansion[1]), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    workspace = zeros(eltype(branch),3,4)
+    spherical_potential = zeros(eltype(branch),52)
+    for i_body in branch.first_body:branch.first_body + branch.n_bodies - 1
+        L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
+        spherical_potential .*= 0
+    end
+end
+
+@inline function L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
     scalar_potential = view(spherical_potential,1)
     vector_potential = view(spherical_potential,2:4)
     potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
@@ -418,8 +458,8 @@ end
     body_position = system[i_body,POSITION]
     dx, dy, dz = body_position - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, tree.expansion_order)
-    for n in 0:tree.expansion_order
+    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, expansion_order)
+    for n in 0:expansion_order
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
         scalar_potential[] += real(branch.local_expansion[1][nms] * harmonics[nms])
