@@ -167,18 +167,19 @@ function step_through_branches(branches, branch_index; second_pass=true)
     first_child = branches[first_child_index]
 
     rectangle = MVector{6, Float64}(
-        first_child.center[1]+first_child.radius[1], first_child.center[1]-first_child.radius[1],
-        first_child.center[2]+first_child.radius[1], first_child.center[2]-first_child.radius[1],
-        first_child.center[3]+first_child.radius[1], first_child.center[3]-first_child.radius[1]
+        first_child.center[1]+first_child.radius, first_child.center[1]-first_child.radius,
+        first_child.center[2]+first_child.radius, first_child.center[2]-first_child.radius,
+        first_child.center[3]+first_child.radius, first_child.center[3]-first_child.radius
         )
+
     for index = 0:branch.n_branches - 1
         child = branches[first_child_index + index]
-        rectangle[1] = max(child.center[1]+child.radius[1], rectangle[1])
-        rectangle[3] = max(child.center[2]+child.radius[1], rectangle[3])
-        rectangle[5] = max(child.center[3]+child.radius[1], rectangle[5])
-        rectangle[2] = min(child.center[1]-child.radius[1], rectangle[2])
-        rectangle[4] = min(child.center[2]-child.radius[1], rectangle[4])
-        rectangle[6] = min(child.center[3]-child.radius[1], rectangle[6])
+        rectangle[1] = max(child.center[1]+child.radius, rectangle[1])
+        rectangle[3] = max(child.center[2]+child.radius, rectangle[3])
+        rectangle[5] = max(child.center[3]+child.radius, rectangle[5])
+        rectangle[2] = min(child.center[1]-child.radius, rectangle[2])
+        rectangle[4] = min(child.center[2]-child.radius, rectangle[4])
+        rectangle[6] = min(child.center[3]-child.radius, rectangle[6])
     end
 
     new_center = typeof(branch.center)(
@@ -186,6 +187,8 @@ function step_through_branches(branches, branch_index; second_pass=true)
         (rectangle[3] + rectangle[4]) / 2,
         (rectangle[5] + rectangle[6]) / 2
     )
+
+
     # if branch.n_branches == 1
     #     branch.center[1] = (rectangle[1] + rectangle[2]) / 2
     #     branch.center[2] = (rectangle[3] + rectangle[4]) / 2
@@ -200,14 +203,14 @@ function step_through_branches(branches, branch_index; second_pass=true)
     if second_pass
         for index = 0:branch.n_branches - 1
             child = branches[first_child_index + index]
-            distance = sqrt((child.center[1] - branch.center[1])^2 + (child.center[2] - branch.center[2])^2 + (child.center[3] - branch.center[3])^2) + child.radius[1]
-            new_radius = max(branch.radius[1], distance)
+            distance = sqrt((child.center[1] - new_center[1])^2 + (child.center[2] - new_center[2])^2 + (child.center[3] - new_center[3])^2) + child.radius
+            new_radius = max(new_radius, distance)
         end
     else 
         new_radius = sqrt(
-            (rectangle[1] - branch.center[1])^2 + 
-            (rectangle[3] - branch.center[2])^2 + 
-            (rectangle[5] - branch.center[3])^2
+            (rectangle[1] - new_center[1])^2 + 
+            (rectangle[3] - new_center[2])^2 + 
+            (rectangle[5] - new_center[3])^2
             )
     end
 
@@ -220,10 +223,11 @@ end
 function step_through_bodies(systems::Tuple, branches, branch_index; second_pass=true)
     branch = branches[branch_index]
     
+    first_index = branch.first_body[1]
     rectangle = MVector{6, Float64}(
-        systems[1][1, POSITION][1], systems[1][1, POSITION][1],
-        systems[1][1, POSITION][2], systems[1][1, POSITION][2],
-        systems[1][1, POSITION][3], systems[1][1, POSITION][3]
+        systems[1][first_index, POSITION][1], systems[1][first_index, POSITION][1],
+        systems[1][first_index, POSITION][2], systems[1][first_index, POSITION][2],
+        systems[1][first_index, POSITION][3], systems[1][first_index, POSITION][3]
         )
     for (i_system, system) in enumerate(systems)
         for i_body in branch.first_body[i_system]:(branch.first_body[i_system]+branch.n_bodies[i_system]-1)
@@ -235,11 +239,11 @@ function step_through_bodies(systems::Tuple, branches, branch_index; second_pass
             rectangle[2] = min(body[1]-body_r, rectangle[2])
             rectangle[4] = min(body[2]-body_r, rectangle[4])
             rectangle[6] = min(body[3]-body_r, rectangle[6])
+
         end
     end
 
-
-    new_center = (length(branch.n_bodies) == 1) ? typeof(branch.center)(
+    new_center = (branch.n_bodies == 1) ? typeof(branch.center)(
         (rectangle[1] + rectangle[2]) / 2 + SHRINKING_OFFSET,
         (rectangle[3] + rectangle[4]) / 2 + SHRINKING_OFFSET,
         (rectangle[5] + rectangle[6]) / 2 + SHRINKING_OFFSET
@@ -257,14 +261,15 @@ function step_through_bodies(systems::Tuple, branches, branch_index; second_pass
             for i_body in branch.first_body[i_system]:(branch.first_body[i_system]+branch.n_bodies[i_system]-1)
                 body = system[i_body,POSITION]
                 body_r = system[i_body,RADIUS]
-                distance = sqrt((body[1] - branch.center[1])^2 + (body[2]- branch.center[2])^2 + (body[3] - branch.center[3])^2) + body_r
+                distance = sqrt((body[1] - new_center[1])^2 + (body[2]- new_center[2])^2 + (body[3] - new_center[3])^2) + body_r
                 new_radius = max(new_radius, distance)
             end
         end
     else
         (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
-        new_radius = sqrt((rectangle[1] - branch.center[1])^2 + (rectangle[3] - branch.center[2])^2 + (rectangle[5] - branch.center[3])^2)
+        new_radius = sqrt((rectangle[1] - new_center[1])^2 + (rectangle[3] - new_center[2])^2 + (rectangle[5] - new_center[3])^2)
     end
+
     new_branch = Branch(n_branches, n_bodies, first_branch, first_body, new_center, new_radius, multipole_expansion, local_expansion, lock, child_lock)
     branches[branch_index] = new_branch
     return nothing

@@ -71,8 +71,13 @@ include(joinpath(test_dir, "gravitational.jl"))
     # Test step_through_bodies for correct values
     for j = 1:length(correct_bodies[:,1])
         for i = 1:3
+            # println(string(round(tree.branches[j].center[i],digits=5)) * "    " * string(round(correct_bodies[j,i],digits=5)))
             @test round(tree.branches[j].center[i],digits=5) == round(correct_bodies[j,i],digits=5)
+            # @show round(tree.branches[j].center[i],digits=5) round(correct_bodies[j,i],digits=5)
         end
+        # println(string(round(tree.branches[j].radius,digits=5)) * "     " * string(round(correct_bodies[j,4],digits=5)))
+        # println()
+
         @test round(tree.branches[j].radius[1],digits=5) == round(correct_bodies[j,4],digits=5)
     end
 end
