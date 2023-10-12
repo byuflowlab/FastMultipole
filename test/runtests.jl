@@ -124,7 +124,7 @@ end
         for i in 1:3
             @test isapprox(tree.branches[i_branch].center[i], test_branches[i_branch,1+i]; atol=1e-7)
         end
-        @test isapprox(tree.branches[i_branch].radius, test_branches[i_branch,5]; atol=1e-7)
+        @test isapprox(tree.branches[i_branch].radius[1], test_branches[i_branch,5]; atol=1e-7)
     end
 end
 
