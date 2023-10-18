@@ -13,8 +13,9 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
+function Tree(systems, options::Options)
     # unpack options
+    TF = eltype(systems[1])
     expansion_order = options.expansion_order
     n_per_branch = options.n_per_branch
 
@@ -66,6 +67,8 @@ function Tree(systems, options::Options, ::Val{TF}=Val{Float64}()) where TF
 
     return tree
 end
+
+Base.eltype(tree::Tree{TF,<:Any}) where TF = TF
 
 function branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
     n_branches = Int8(0)
@@ -128,7 +131,7 @@ function branch!(branches, systems, buffer_list, index_list, buffer_index_list, 
                 child_i_start = offsets[i_octant+Int8(1),:] # index of first member for all element types
                 child_i_end = child_i_start + octant_attendance[i_octant+Int8(1),:] .- Int32(1) # if attendence is 0, the end index will be less than the start
                 child_radius = radius / 2#(1 << (level + 1))
-                child_center = MVector{3}(center)
+                child_center = Vector(center)
                 for d in Int8(0):Int8(2)
                     child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
                 end
@@ -270,7 +273,8 @@ function n_terms(expansion_order, dimensions)
 end
 
 function initialize_expansion(expansion_order)
-    return Tuple(zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4)
+    #return Tuple(zeros(Float64, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4) # Complex{Float64} -> Float64
+    return Tuple(zeros(Float64, ((expansion_order+1) * (expansion_order+2)) >> 1,2) for _ in 1:4)
 end
 
 function reset_expansions!(tree)

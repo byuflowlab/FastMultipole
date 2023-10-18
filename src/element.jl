@@ -38,7 +38,6 @@ struct Uniform <: Distribution end
 struct Linear <: Distribution end
 
 
-
 #####
 ##### code architecture
 #####
