@@ -74,6 +74,9 @@ function fmm.direct!(target_system, target_index, source_system::Gravitational, 
             if r > 0
                 dV = source_strength / r
                 target_system[j_target,fmm.SCALAR_POTENTIAL] += dV
+                # if j_target == 22
+                #     @show r source_strength
+                # end
             end
         end
     end

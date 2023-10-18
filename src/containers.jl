@@ -67,8 +67,8 @@ struct MultiBranch{TF,N}
     first_body::SVector{N,Int32}       # index of the first element
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
-    multipole_expansion::NTuple{4,Vector{Complex{TF}}} # multipole expansion coefficients
-    local_expansion::NTuple{4,Vector{Complex{TF}}}     # local expansion coefficients
+    multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
+    local_expansion::Array{Complex{TF},2}     # local expansion coefficients
     lock::ReentrantLock
     child_lock::ReentrantLock
 end
@@ -80,8 +80,8 @@ struct SingleBranch{TF}
     first_body::Int32       # index of the first element
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
-    multipole_expansion::NTuple{4,Vector{Complex{TF}}} # multipole expansion coefficients
-    local_expansion::NTuple{4,Vector{Complex{TF}}}     # local expansion coefficients
+    multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
+    local_expansion::Array{Complex{TF},2}     # local expansion coefficients
     lock::ReentrantLock
     child_lock::ReentrantLock
 end

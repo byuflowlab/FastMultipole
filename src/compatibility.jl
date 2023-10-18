@@ -9,6 +9,8 @@
 # Base.getindex(sys, i, ::Velocity) =
 # Base.getindex(sys, i, ::VelocityGradient) =
 # Base.getindex(sys, i) =
+Base.getindex(sys, i, ::ScalarStrength) = 0.0
+Base.getindex(sys, i, ::VectorStrength) = SVector{3}(0.0,0.0,0.0)
 function Base.setindex!(sys, val, i)
     @warn "setindex! not overloaded for type $(typeof(sys)); octree will have errors"
     return nothing
@@ -60,9 +62,9 @@ end
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[2][i_compressed] += harmonics[i_solid_harmonic] * qx * ONE_OVER_4PI
-                branch.multipole_expansion[3][i_compressed] += harmonics[i_solid_harmonic] * qy * ONE_OVER_4PI
-                branch.multipole_expansion[4][i_compressed] += harmonics[i_solid_harmonic] * qz * ONE_OVER_4PI
+                branch.multipole_expansion[2,i_compressed] += harmonics[i_solid_harmonic] * qx * ONE_OVER_4PI
+                branch.multipole_expansion[3,i_compressed] += harmonics[i_solid_harmonic] * qy * ONE_OVER_4PI
+                branch.multipole_expansion[4,i_compressed] += harmonics[i_solid_harmonic] * qz * ONE_OVER_4PI
             end
         end
     end
@@ -83,7 +85,7 @@ end
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[1][i_compressed] += harmonics[i_solid_harmonic] * q
+                branch.multipole_expansion[1,i_compressed] += harmonics[i_solid_harmonic] * q
             end
         end
     end

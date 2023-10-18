@@ -82,4 +82,8 @@ include("gravitational.jl")
     end
 end
 
-
+n_bodies = 10
+bodies = rand(8,n_bodies)
+elements = Gravitational(bodies)
+expansion_order = 5
+tree = fmm.Tree(elements, expansion_order, 1)

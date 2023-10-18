@@ -74,7 +74,7 @@ function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true)
     return tree
 end
 
-function Tree(system, expansion_order, n_per_branch)
+function Tree(system, expansion_order, n_per_branch; shrinking=true)
     # initialize objects
     buffer = get_buffer(system)
     index = collect(1:length(system))
@@ -296,6 +296,25 @@ function buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_e
     end
 end
 
+function buffer_loop!(buffer, buffer_index, counter, system::SortWrapper, index, i_start, i_end, center)
+    for i_body in i_start:i_end
+        x = system[i_body,POSITION]
+        i_octant = get_octant(x, center)
+        buffer_index[counter[i_octant]] = index[i_body]
+        counter[i_octant] += 1
+    end
+end
+
+function buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_end, center)
+    for i_body in i_start:i_end
+        x = system[i_body,POSITION]
+        i_octant = get_octant(x, center)
+        buffer[counter[i_octant]] = system[i_body]
+        buffer_index[counter[i_octant]] = index[i_body]
+        counter[i_octant] += 1
+    end
+end
+
 function place_buffer!(system::SortWrapper, index, buffer, buffer_index, i_start, i_end)
     system.index[i_start:i_end] .= view(buffer_index,i_start:i_end)
     index[i_start:i_end] .= view(buffer_index,i_start:i_end)
@@ -433,7 +452,7 @@ function step_through_bodies(system, branches::Vector{<:SingleBranch}, branch_in
     first_index = branch.first_body[1]
     
     # create enclosing rectangle around all bodies
-    lx, ly, lz, ux, uy, uz = create_rectangle(systems[1][first_index, POSITION], systems[1][first_index, RADIUS])
+    lx, ly, lz, ux, uy, uz = create_rectangle(system[first_index, POSITION], system[first_index, RADIUS])
     for i_body in branch.first_body:(branch.first_body+branch.n_bodies-1)
         lx, ly, lz, ux, uy, uz = update_rectangle(lx, ly, lz, ux, uy, uz, system[i_body,POSITION], system[i_body,RADIUS])
     end
@@ -547,8 +566,9 @@ function center_radius(systems::Tuple; scale_radius = 1.00001)
         end
     end
     center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
-    # TODO: add element smoothing radius here? Note this method creates cubic cells
+    # TODO: add element smoothing radius here?
     radius = max(x_max-center[1], y_max-center[2], z_max-center[3]) * scale_radius # get half of the longest side length of the rectangle
+    # radius = sqrt((x_max-center[1])*(x_max-center[1]) + (y_max-center[2])*(y_max-center[2]) + (z_max-center[3])*(z_max-center[3])) * scale_radius # get half of the longest side length of the rectangle
     return SVector{3}(center), radius
 end
 
@@ -596,14 +616,13 @@ function n_terms(expansion_order, dimensions)
 end
 
 function initialize_expansion(expansion_order)
-    return Tuple(zeros(Complex{Float64}, ((expansion_order+1) * (expansion_order+2)) >> 1) for _ in 1:4)
+    return zeros(Complex{Float64}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function reset_expansions!(tree)
+    T = eltype(tree.branches[1].multipole_expansion)
     Threads.@threads for branch in tree.branches
-        for dim in 1:4
-            branch.multipole_expansion[dim] .*= 0
-            branch.local_expansion[dim] .*= 0
-        end
+        branch.multipole_expansion .= zero(T)
+        branch.local_expansion .= zero(T)
     end
 end

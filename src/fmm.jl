@@ -72,10 +72,14 @@ function horizontal_pass!(branches, system, i_target, j_source, theta, farfield,
     target_branch = branches[i_target]
 
     spacing = source_branch.center - target_branch.center
-    spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
-    threshold_squared = target_branch.radius + source_branch.radius
-    threshold_squared *= threshold_squared
-    if farfield && spacing_squared * theta * theta >= threshold_squared
+    center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
+    summed_radii_squared = target_branch.radius + source_branch.radius
+    summed_radii_squared *= summed_radii_squared
+    if farfield && center_spacing_squared * theta * theta >= summed_radii_squared
+        # println("M2L")
+        # @show i_target j_source
+        # println()
+        # @show center_spacing_squared theta^2 threshold_squared
         Threads.lock(target_branch.lock) do
             M2L!(target_branch, source_branch, expansion_order)
         end
@@ -106,7 +110,7 @@ function horizontal_pass!(target_branches, target_systems, source_branches, sour
     spacing = source_branch.center - target_branch.center
     spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
     threshold_squared = (target_branch.radius + source_branch.radius)
-    threshold_squared *= threshold_squared 
+    threshold_squared *= threshold_squared
     if farfield && spacing_squared * theta * theta >= threshold_squared # meet separation criteria; theta is the spacing parameter
         Threads.lock(target_branch.lock) do
             M2L!(target_branch, source_branch, expansion_order)
@@ -134,6 +138,7 @@ function downward_pass!(branches, systems, j_source, expansion_order)
     branch = branches[j_source]
 
     if branch.first_branch == -1 # branch is a leaf
+        # println("L2B! j_source = $j_source")
         L2B!(systems, branch, expansion_order)
     else # recurse to child branches until we hit a leaf
         Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
@@ -146,19 +151,31 @@ end
 ##### running FMM
 #####
 function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
+    # reset multipole/local expansions
     reset_tree && (reset_expansions!(tree))
+    
+    # run FMM
     farfield && (upward_pass!(tree, systems))
     horizontal_pass!(tree, systems, theta, farfield, nearfield)
     farfield && (downward_pass!(tree, systems))
+    
+    # unsort bodies
     unsort_bodies && (unsort!(systems, tree))
 end
 
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    # reset multipole/local expansions
     reset_target_tree && (reset_expansion!(source_tree))
     reset_source_tree && (reset_expansion!(source_tree))
+
+    # run FMM
     farfield && (upward_pass!(source_tree, source_systems))
     horizontal_pass!(target_tree, target_systems, source_tree, source_systems, theta, farfield, nearfield)
     farfield && (downward_pass!(target_tree, target_systems))
+
+    # unsort bodies
+    unsort_source_bodies && (unsort!(source_systems, source_tree))
+    unsort_target_bodies && (unsort!(target_systems, target_tree))
 end
 
 # function fmm!(tree::Tree, systems, options::Options, targets_index, sources_index; reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
@@ -188,15 +205,15 @@ Note: this function merely adds to existing potential of its elements to avoid o
 
 The user must reset the potential manually.
 """
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true)
-    tree = Tree(systems, expansion_order, n_per_branch)
+function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true, shrinking=true)
+    tree = Tree(systems, expansion_order, n_per_branch, shrinking=shrinking)
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
     return tree
 end
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-    source_tree = Tree(source_systems, expansion_order, n_per_branch_source)
-    target_tree = Tree(target_systems, expansion_order, n_per_branch_target)
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrinking=true, target_shrinking=true)
+    source_tree = Tree(source_systems, expansion_order, n_per_branch_source; shrinking=source_shrinking)
+    target_tree = Tree(target_systems, expansion_order, n_per_branch_target; shrinking=target_shrinking)
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
     return source_tree, target_tree
 end

@@ -105,7 +105,7 @@ end
 
     # test branch! function
     expansion_order, n_per_branch, theta = 2, 1, 0.5
-    tree = fmm.Tree((elements,), expansion_order, n_per_branch)
+    tree = fmm.Tree((elements,), expansion_order, n_per_branch; shrinking=false)
 
     test_branches = [
         5 0.65 0.65 0.55 0.5500055;
@@ -237,7 +237,7 @@ system = Gravitational(bodies)
 expansion_order = 2
 n_per_branch = 1
 theta = 0.25
-tree = fmm.Tree((system,), expansion_order, n_per_branch)
+tree = fmm.Tree((system,), expansion_order, n_per_branch; shrinking=false)
 
 i_mass = 1
 i_branch = 5 # use the first mass
@@ -307,7 +307,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 3
-tree = fmm.Tree((elements,), expansion_order, 1)
+tree = fmm.Tree((elements,), expansion_order, 1; shrinking=false)
 
 i_branch = 2 # contains 4th and 5th elements
 i_branch_4 = 6 # use the fourth mass
@@ -360,7 +360,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-tree = fmm.Tree((elements,), expansion_order, 1)
+tree = fmm.Tree((elements,), expansion_order, 1; shrinking=false)
 
 branch_i = 2 # contains two elements; 4 and 5
 target_i = new_order_index[4]
@@ -423,7 +423,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-tree = fmm.Tree((elements,), expansion_order, 1)
+tree = fmm.Tree((elements,), expansion_order, 1; shrinking=false)
 
 # local coefficient at branch 2 due to mass 1
 fmm.B2L!(tree, 2, elements[new_order_index[1],fmm.POSITION], elements.bodies[new_order_index[1]].strength)
@@ -492,7 +492,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 30
-tree = fmm.Tree((elements,), expansion_order, 1)
+tree = fmm.Tree((elements,), expansion_order, 1; shrinking=false)
 
 i_branch_multipole = 7 # mass 5
 i_branch_local = 5 # mass 1
@@ -562,7 +562,7 @@ elements = Gravitational(bodies)
 
 expansion_order = 24
 theta = 0.5
-tree = fmm.Tree((elements,), expansion_order, 1)
+tree = fmm.Tree((elements,), expansion_order, 1; shrinking=false)
 
 # perform upward pass
 fmm.upward_pass!(tree, (elements,))
@@ -1241,7 +1241,7 @@ vortex_particles.velocity_stretching .*= 0
 expansion_order = 32
 n_per_branch = 1
 
-tree = fmm.Tree((vortex_particles,), expansion_order, n_per_branch)
+tree = fmm.Tree((vortex_particles,), expansion_order, n_per_branch; shrinking=false)
 
 fmm.fmm!(tree, (vortex_particles,); theta=0.5)
 
