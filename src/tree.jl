@@ -19,7 +19,7 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true, theta=0.4, farfield=true, nearfield=true)
+function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true)
     # initialize objects
     buffer_list = Tuple(get_buffer(system) for system in systems)
     index_list = Tuple(collect(1:length(system)) for system in systems)
@@ -67,17 +67,14 @@ function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true, the
     if shrinking
         update_radius(systems, branches, 1)
     end
-        
-    # build interaction lists
-    m2l_list, direct_list = build_interaction_lists(branches, theta, farfield, nearfield)
 
     # assemble tree
-    tree = MultiTree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count, m2l_list, direct_list)
+    tree = MultiTree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count)
 
     return tree
 end
 
-function Tree(system, expansion_order, n_per_branch; shrinking=true, theta=0.4, farfield=true, nearfield=true)
+function Tree(system, expansion_order, n_per_branch; shrinking=true)
     # initialize objects
     buffer = get_buffer(system)
     index = collect(1:length(system))
@@ -122,11 +119,8 @@ function Tree(system, expansion_order, n_per_branch; shrinking=true, theta=0.4, 
         update_radius(system, branches, 1)
     end
     
-    # build interaction lists
-    m2l_list, direct_list = build_interaction_lists(branches, theta, farfield, nearfield)
-
     # assemble tree
-    tree = SingleTree(branches, Int16(expansion_order), Int32(n_per_branch), index, inverse_index, leaf_index, cumulative_count, m2l_list, direct_list)
+    tree = SingleTree(branches, Int16(expansion_order), Int32(n_per_branch), index, inverse_index, leaf_index, cumulative_count)
 
     return tree
 end
@@ -486,42 +480,6 @@ function step_through_bodies(system, branches::Vector{<:SingleBranch}, branch_in
     branches[branch_index] = new_branch
     return nothing
 end
-
-#####
-##### create interaction lists
-#####
-function build_interaction_lists(branches, theta, farfield, nearfield)
-    m2l_list = Vector{SVector{2,Int32}}(undef,0)
-    direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), branches, theta, farfield, nearfield)
-    
-    return m2l_list, direct_list
-end
-
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, branches, theta, farfield, nearfield)
-    source_branch = branches[j_source]
-    target_branch = branches[i_target]
-
-    spacing = source_branch.center - target_branch.center
-    center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
-    summed_radii_squared = target_branch.radius + source_branch.radius
-    summed_radii_squared *= summed_radii_squared
-    if farfield && center_spacing_squared * theta * theta >= summed_radii_squared # meet M2L criteria
-        push!(m2l_list, SVector{2,Int32}(i_target, j_source))
-    elseif source_branch.first_branch == target_branch.first_branch == -1 && nearfield # both leaves
-        push!(direct_list, SVector{2,Int32}(i_target, j_source))
-    elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, branches, theta, farfield, nearfield)
-        end
-    else
-        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-            # Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, branches, theta, farfield, nearfield)
-        end
-    end
-end
-
 
 #####
 ##### undo/redo the sort operation used to create the octree
