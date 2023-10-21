@@ -52,7 +52,8 @@ end
 
 function upward_pass!(branches, system, i_branch, expansion_order)
     branch = branches[i_branch]
-    Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+    # Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+    for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
         upward_pass!(branches, system, i_child, expansion_order)
     end
 
@@ -63,6 +64,21 @@ function upward_pass!(branches, system, i_branch, expansion_order)
     end
 end
 
+function nearfield!(system, branches, direct_list)
+    for (i_target, j_source) in direct_list
+        P2P!(system, branches[i_target], branches[j_source])
+    end
+end
+
+function horizontal_pass!(branches, m2l_list, expansion_order)
+    for (i_target, j_source) in m2l_list
+        M2L!(branches[i_target], branches[j_source], expansion_order)
+    end
+end
+
+#####
+#### vvv old horizontal pass vvv
+####
 function horizontal_pass!(tree, system, theta, farfield, nearfield)
     horizontal_pass!(tree.branches, system, 1, 1, theta, farfield, nearfield, tree.expansion_order)
 end
@@ -84,11 +100,13 @@ function horizontal_pass!(branches, system, i_target, j_source, theta, farfield,
             P2P!(system, target_branch, source_branch)
         end
     elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-        Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+        # Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
             horizontal_pass!(branches, system, i_child, j_source, theta, farfield, nearfield, expansion_order)
         end
     else
-        Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+        # Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
             horizontal_pass!(branches, system, i_target, j_child, theta, farfield, nearfield, expansion_order)
         end
     end
@@ -117,11 +135,13 @@ function horizontal_pass!(target_branches, target_systems, source_branches, sour
             P2P!(target_systems, target_branch, source_systems, source_branch)
         end
     elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-        Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+        # Threads.@threads for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
             horizontal_pass!(target_branches, target_systems, source_branches, source_systems, i_child, j_source, theta, farfield, nearfield, expansion_order)
         end
     else
-        Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+        # Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
             horizontal_pass!(target_branches, target_systems, source_branches, source_systems, i_target, j_child, theta, farfield, nearfield, expansion_order)
         end
     end
@@ -137,9 +157,9 @@ function downward_pass!(branches, systems, j_source, expansion_order)
     if branch.first_branch == -1 # branch is a leaf
         L2B!(systems, branch, expansion_order)
     else # recurse to child branches until we hit a leaf
-        println("L2L!")
         L2L!(branches, j_source, expansion_order)
-        Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+        for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+        # Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
             downward_pass!(branches, systems, i_child, expansion_order)
         end
     end
@@ -153,9 +173,12 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     reset_tree && (reset_expansions!(tree))
     
     # run FMM
-    farfield && (upward_pass!(tree, systems))
-    horizontal_pass!(tree, systems, theta, farfield, nearfield)
-    farfield && (downward_pass!(tree, systems))
+    nearfield && (nearfield!(systems, tree.branches, tree.direct_list))
+    if farfield
+        upward_pass!(tree, systems)
+        horizontal_pass!(tree.branches, tree.m2l_list, tree.expansion_order)
+        downward_pass!(tree, systems)
+    end
     
     # unsort bodies
     unsort_bodies && (unsort!(systems, tree))
@@ -204,8 +227,11 @@ Note: this function merely adds to existing potential of its elements to avoid o
 The user must reset the potential manually.
 """
 function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true, shrinking=true)
+    println("create tree:")
     tree = Tree(systems, expansion_order, n_per_branch, shrinking=shrinking)
+    println("run fmm:")
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
+    println("done.")
     return tree
 end
 

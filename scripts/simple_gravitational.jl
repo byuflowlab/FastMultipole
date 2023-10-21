@@ -31,7 +31,7 @@ end
 
 function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)
     system = generate_gravitational(123, n_bodies)
-    tree = fmm.Tree(system, expansion_order, n_per_branch; shrinking=shrinking)
+    tree = fmm.Tree(system, expansion_order, n_per_branch; shrinking=shrinking, theta=theta, nearfield=true, farfield=true)
     fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     println("BEGIN DIRECT")
     system2 = generate_gravitational(123, n_bodies)
@@ -113,15 +113,15 @@ end
 # @time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
 println("Calculating accuracy:")
-expansion_order, n_per_branch, theta = 13, 1, 0.4
+expansion_order, n_per_branch, theta = 10, 300, 0.3
 n_bodies = 5000
 shrinking = false
 accuracy, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)
 println("accuracy: $accuracy")
 
 # visualize tree
-visualize_tree("test_fmm", system, tree; probe_indices=[11])
-visualize_tree("test_direct", system2, tree)
+# visualize_tree("test_fmm", system, tree; probe_indices=[11])
+# visualize_tree("test_direct", system2, tree)
 
 # run some tests
 # system3 = Gravitational(bodies)
