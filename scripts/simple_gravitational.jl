@@ -6,6 +6,8 @@ using WriteVTK
 function generate_gravitational(seed, n_bodies; radius_factor=0.1)
     Random.seed!(123)
     bodies = rand(8,n_bodies)
+    # bodies[1:3,3] .=  0.811770914672987, 0.15526131946379113, 0.30656077208169424
+    # bodies[1:3,3] .=   0.7427186184997012, 0.2351893322824516, 0.3380666354208596
     bodies[4,:] ./= (n_bodies^(1/3)*2)
     bodies[4,:] .*= radius_factor
     system = Gravitational(bodies)
@@ -111,8 +113,10 @@ end
 # @time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
 println("Calculating accuracy:")
-expansion_order, n_per_branch, theta = 20, 1, 0.2
-accuracy, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, 25, false)
+expansion_order, n_per_branch, theta = 13, 1, 0.4
+n_bodies = 5000
+shrinking = false
+accuracy, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)
 println("accuracy: $accuracy")
 
 # visualize tree
