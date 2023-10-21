@@ -19,7 +19,7 @@ Constructs an octree of the provided element objects.
     * `direct!::Function`- function calculates the direct influence of the body at the specified location
     * `B2M!::Function`- function converts the body's influence into a multipole expansion
 """
-function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true)
+function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true, theta=0.4, farfield=true, nearfield=true)
     # initialize objects
     buffer_list = Tuple(get_buffer(system) for system in systems)
     index_list = Tuple(collect(1:length(system)) for system in systems)
@@ -64,12 +64,15 @@ function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true)
         end
     end
 
-    # assemble tree
-    tree = MultiTree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count)
-
     if shrinking
         update_radius(systems, branches, 1)
     end
+        
+    # build interaction lists
+    m2l_list, direct_list = build_interaction_lists(branches, theta, farfield, nearfield)
+
+    # assemble tree
+    tree = MultiTree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count, m2l_list, direct_list)
 
     return tree
 end

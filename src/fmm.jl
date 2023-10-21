@@ -46,6 +46,9 @@ function P2P!(target_systems, target_branch::MultiBranch, source_systems, source
     end
 end
 
+#####
+##### upward pass
+#####
 function upward_pass!(tree, system)
     upward_pass!(tree.branches, system, 1, tree.expansion_order)
 end
@@ -64,6 +67,9 @@ function upward_pass!(branches, system, i_branch, expansion_order)
     end
 end
 
+#####
+##### horizontal pass
+#####
 function nearfield!(system, branches, direct_list)
     for (i_target, j_source) in direct_list
         P2P!(system, branches[i_target], branches[j_source])
@@ -77,8 +83,8 @@ function horizontal_pass!(branches, m2l_list, expansion_order)
 end
 
 #####
-#### vvv old horizontal pass vvv
-####
+##### replaced horizontal pass
+#####
 function horizontal_pass!(tree, system, theta, farfield, nearfield)
     horizontal_pass!(tree.branches, system, 1, 1, theta, farfield, nearfield, tree.expansion_order)
 end
@@ -112,6 +118,9 @@ function horizontal_pass!(branches, system, i_target, j_source, theta, farfield,
     end
 end
 
+#####
+##### unchanged horizontal pass
+#####
 function horizontal_pass!(target_tree, target_systems, source_tree, source_systems, theta, farfield, nearfield)
     @assert target_tree.expansion_order == source_tree.expansion_order "source and target trees must use the same expansion order"
     horizontal_pass!(target_tree.branches, target_systems, source_tree.branches, source_systems, 1, 1, theta, farfield, nearfield, target_tree.expansion_order)
@@ -173,11 +182,16 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     reset_tree && (reset_expansions!(tree))
     
     # run FMM
-    nearfield && (nearfield!(systems, tree.branches, tree.direct_list))
+    println("Nearfield")
+    @time nearfield && (nearfield!(systems, tree.branches, tree.direct_list))
     if farfield
-        upward_pass!(tree, systems)
-        horizontal_pass!(tree.branches, tree.m2l_list, tree.expansion_order)
-        downward_pass!(tree, systems)
+        println("Upward Pass")
+        @time upward_pass!(tree, systems)
+        println("Horizontal Pass")
+        @time horizontal_pass!(tree.branches, tree.m2l_list, tree.expansion_order)
+        println("Downward Pass")
+        @time downward_pass!(tree, systems)
+        println()
     end
     
     # unsort bodies
@@ -228,7 +242,7 @@ The user must reset the potential manually.
 """
 function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true, shrinking=true)
     println("create tree:")
-    tree = Tree(systems, expansion_order, n_per_branch, shrinking=shrinking)
+    @time tree = Tree(systems, expansion_order, n_per_branch, shrinking=shrinking)
     println("run fmm:")
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
     println("done.")

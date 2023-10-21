@@ -30,13 +30,14 @@ function bm_direct()
 end
 
 function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)
-    system = generate_gravitational(123, n_bodies)
-    tree = fmm.Tree(system, expansion_order, n_per_branch; shrinking=shrinking, theta=theta, nearfield=true, farfield=true)
+    system = (generate_gravitational(123, n_bodies),)
+    println("Create tree")
+    @time tree = fmm.Tree(system, expansion_order, n_per_branch; shrinking=shrinking, theta=theta, nearfield=true, farfield=true)
     fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     println("BEGIN DIRECT")
     system2 = generate_gravitational(123, n_bodies)
     fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
-    phi = system.potential[1,:]
+    phi = system[1].potential[1,:]
     phi2 = system2.potential[1,:]
     return maximum(abs.(phi2 - phi)), system, tree, system2
 end
@@ -113,7 +114,7 @@ end
 # @time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
 println("Calculating accuracy:")
-expansion_order, n_per_branch, theta = 10, 300, 0.3
+expansion_order, n_per_branch, theta = 10, 200, 0.3
 n_bodies = 5000
 shrinking = false
 accuracy, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)

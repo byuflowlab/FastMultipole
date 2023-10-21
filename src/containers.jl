@@ -100,6 +100,8 @@ struct MultiTree{TF,N} <: Tree
     inverse_index_list::NTuple{N,Vector{Int}}
     leaf_index::Vector{Int}
     cumulative_count::Vector{Int} # starting with 0, a cumulative accounting of how many bodies are in leaf branches
+    m2l_list::Vector{SVector{2,Int32}}
+    direct_list::Vector{SVector{2,Int32}}
 end
 
 struct SingleTree{TF} <: Tree
