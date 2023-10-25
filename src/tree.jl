@@ -541,9 +541,20 @@ function resort!(systems::Tuple, tree::MultiTree)
     end
 end
 
+function get_sorted_body(vanilla_system, tree::SingleTree, i_sorted)
+    return vanilla_system[tree.index[i_sorted]]
+end
+
+function get_sorted_body(vanilla_system, tree::MultiTree, i_system, i_sorted)
+    return vanilla_system[tree.index[i_system][i_sorted]]
+end
+
 #####
 ##### find the center and radius of a (group of) system(s)
 #####
+@inline get_radius(dx,dy,dz,scale_radius) = max(dx,dy,dz) * scale_radius
+# @inline get_radius(dx,dy,dz,scale_radius) = sqrt(dx*dx + dy*dy + dz*dz) * scale_radius
+
 function center_radius(systems::Tuple; scale_radius = 1.00001)
     x_min, y_min, z_min = systems[1][1,POSITION]
     x_max, y_max, z_max = systems[1][1,POSITION]
@@ -569,8 +580,7 @@ function center_radius(systems::Tuple; scale_radius = 1.00001)
     end
     center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
     # TODO: add element smoothing radius here?
-    radius = max(x_max-center[1], y_max-center[2], z_max-center[3]) * scale_radius # get half of the longest side length of the rectangle
-    # radius = sqrt((x_max-center[1])*(x_max-center[1]) + (y_max-center[2])*(y_max-center[2]) + (z_max-center[3])*(z_max-center[3])) * scale_radius # get half of the longest side length of the rectangle
+    radius = get_radius(x_max-center[1], y_max-center[2], z_max-center[3], scale_radius) # get half of the longest side length of the rectangle
     return SVector{3}(center), radius
 end
 

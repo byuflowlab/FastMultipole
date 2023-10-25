@@ -76,10 +76,6 @@ function horizontal_pass!(branches, system, i_target, j_source, theta, farfield,
     summed_radii_squared = target_branch.radius + source_branch.radius
     summed_radii_squared *= summed_radii_squared
     if farfield && center_spacing_squared * theta * theta >= summed_radii_squared
-        # println("M2L")
-        # @show i_target j_source
-        # println()
-        # @show center_spacing_squared theta^2 threshold_squared
         Threads.lock(target_branch.lock) do
             M2L!(target_branch, source_branch, expansion_order)
         end
@@ -106,7 +102,8 @@ end
 function horizontal_pass!(target_branches, target_systems, source_branches, source_systems, i_target, j_source, theta, farfield, nearfield, expansion_order)
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
-    # check if target branch contains targets AND source branch contains sources
+
+    # determine whether to perform M2L
     spacing = source_branch.center - target_branch.center
     spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
     threshold_squared = (target_branch.radius + source_branch.radius)
@@ -138,9 +135,10 @@ function downward_pass!(branches, systems, j_source, expansion_order)
     branch = branches[j_source]
 
     if branch.first_branch == -1 # branch is a leaf
-        # println("L2B! j_source = $j_source")
         L2B!(systems, branch, expansion_order)
     else # recurse to child branches until we hit a leaf
+        println("L2L!")
+        L2L!(branches, j_source, expansion_order)
         Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
             downward_pass!(branches, systems, i_child, expansion_order)
         end

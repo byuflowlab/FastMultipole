@@ -441,7 +441,7 @@ u_fmm_no_x = elements.potential[1,new_order_index[5]]
 elements.potential[1,new_order_index[5]] *= 0
 
 # translate local expansion to branch 7 (mass 5)
-fmm.L2L!(tree, tree.branches[2], tree.branches[7], harmonics)
+fmm.L2L!(tree.branches[2], tree.branches[7], harmonics, tree.expansion_order)
 
 local_coefficients_check = zeros(Complex{Float64}, (expansion_order+1)^2)
 dx_check, dy_check, dz_check = fmm.cartesian_2_spherical(elements[new_order_index[1],fmm.POSITION] - tree.branches[7].center)
@@ -646,6 +646,7 @@ end
 #####
 ##### vector potential
 #####
+
 include("vortex.jl")
 
 @testset "derivatives" begin
@@ -1169,6 +1170,7 @@ end
 end
 
 
+
 @testset "three 3D vortex particles" begin
 
 bodies = [
@@ -1265,6 +1267,7 @@ for i in 1:length(ss)
 end
 
 end
+
 
 # @testset "local P2P" begin
 
