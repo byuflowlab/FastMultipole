@@ -1,46 +1,42 @@
 function P2P!(system, target_branch::SingleBranch, source_branch::SingleBranch)
-    target_indices = target_branch.first_body:target_branch.first_body+target_branch.n_bodies-1
-    source_indices = source_branch.first_body:source_branch.first_body+source_branch.n_bodies-1
-    direct!(system, target_indices, system, source_indices)
+    direct!(system, target_branch.bodies_index, system, source_branch.bodies_index)
 end
 
 function P2P!(systems, target_branch::MultiBranch, source_branch::MultiBranch)
     for (i,source_system) in enumerate(systems)
-        source_indices = source_branch.first_body[i]:source_branch.first_body[i]+source_branch.n_bodies[i]-1
+        source_indices = source_branch.bodies_index[i]
         for (j,target_system) in enumerate(systems)
-            target_indices = target_branch.first_body[j]:target_branch.first_body[j]+target_branch.n_bodies[j]-1
+            target_indices = target_branch.bodies_index[j]
             direct!(target_system, target_indices, source_system, source_indices)
         end
     end
 end
 
 function P2P!(target_system, target_branch::SingleBranch, source_system, source_branch::SingleBranch)
-    source_indices = source_branch.first_body:source_branch.first_body+source_branch.n_bodies-1
-    target_indices = target_branch.first_body:target_branch.first_body+target_branch.n_bodies-1
-    direct!(target_system, target_indices, source_system, source_indices)
+    direct!(target_system, target_branch.bodies_index, source_system, source_branch.bodies_index)
 end
 
 function P2P!(target_system, target_branch::SingleBranch, source_systems, source_branch::MultiBranch)
-    target_indices = target_branch.first_body[j]:target_branch.first_body[j]+target_branch.n_bodies[j]-1
+    target_indices = target_branch.bodies_index
     for (i,source_system) in enumerate(source_systems)
-        source_indices = source_branch.first_body[i]:source_branch.first_body[i]+source_branch.n_bodies[i]-1
+        source_indices = source_branch.bodies_index[i]
         direct!(target_system, target_indices, source_system, source_indices)
     end
 end
 
 function P2P!(target_systems, target_branch::MultiBranch, source_system, source_branch::SingleBranch)
-    source_indices = source_branch.first_body:source_branch.first_body+source_branch.n_bodies-1
+    source_indices = source_branch.bodies_index
     for (j,target_system) in enumerate(target_systems)
-        target_indices = target_branch.first_body[j]:target_branch.first_body[j]+target_branch.n_bodies[j]-1
+        target_indices = target_branch.bodies_index[j]
         direct!(target_system, target_indices, source_system, source_indices)
     end
 end
 
 function P2P!(target_systems, target_branch::MultiBranch, source_systems, source_branch::MultiBranch)
     for (i,source_system) in enumerate(source_systems)
-        source_indices = source_branch.first_body[i]:source_branch.first_body[i]+source_branch.n_bodies[i]-1
+        source_indices = source_branch.bodies_index[i]
         for (j,target_system) in enumerate(target_systems)
-            target_indices = target_branch.first_body[j]:target_branch.first_body[j]+target_branch.n_bodies[j]-1
+            target_indices = target_branch.bodies_index[j]
             direct!(target_system, target_indices, source_system, source_indices)
         end
     end
@@ -55,12 +51,11 @@ end
 
 function upward_pass!(branches, system, i_branch, expansion_order)
     branch = branches[i_branch]
-    # Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
-    for i_child in branch.first_branch:branch.first_branch + branch.n_branches-1
+    for i_child in branch.branch_index
         upward_pass!(branches, system, i_child, expansion_order)
     end
 
-    if branch.first_branch == -1
+    if branch.n_branches == 0
         B2M!(branch, system, expansion_order)
     else
         M2M!(branches, i_branch, expansion_order) # no locks needed, since nothing else will be modifying this branch
@@ -104,12 +99,11 @@ end
 function downward_pass!(branches, systems, j_source, expansion_order)
     branch = branches[j_source]
 
-    if branch.first_branch == -1 # branch is a leaf
+    if branch.n_branches == 0 # branch is a leaf
         L2B!(systems, branch, expansion_order)
     else # recurse to child branches until we hit a leaf
         L2L!(branches, j_source, expansion_order)
-        for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
-        # Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
+        for i_child in branch.branch_index
             downward_pass!(branches, systems, i_child, expansion_order)
         end
     end
@@ -121,7 +115,7 @@ end
 function build_interaction_lists(branches, theta, farfield, nearfield)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), branches, theta, farfield, nearfield)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, branches, theta, farfield, nearfield)
     
     return m2l_list, direct_list
 end
@@ -135,16 +129,15 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, bra
     summed_radii_squared = target_branch.radius + source_branch.radius
     summed_radii_squared *= summed_radii_squared
     if center_spacing_squared * theta * theta >= summed_radii_squared && farfield# meet M2L criteria
-        push!(m2l_list, SVector{2,Int32}(i_target, j_source))
-    elseif source_branch.first_branch == target_branch.first_branch == -1 && nearfield # both leaves
-        push!(direct_list, SVector{2,Int32}(i_target, j_source))
-    elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+        push!(m2l_list, SVector{2}(i_target, j_source))
+    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield # both leaves
+        push!(direct_list, SVector{2}(i_target, j_source))
+    elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
+        for i_child in target_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_child, j_source, branches, theta, farfield, nearfield)
         end
     else
-        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-            # Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+        for j_child in source_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_target, j_child, branches, theta, farfield, nearfield)
         end
     end
@@ -153,7 +146,7 @@ end
 function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, theta, farfield, nearfield)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield)
     
     return m2l_list, direct_list
 end
@@ -167,16 +160,15 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     summed_radii_squared = target_branch.radius + source_branch.radius
     summed_radii_squared *= summed_radii_squared
     if center_spacing_squared * theta * theta >= summed_radii_squared && farfield# meet M2L criteria
-        push!(m2l_list, SVector{2,Int32}(i_target, j_source))
-    elseif source_branch.first_branch == target_branch.first_branch == -1 && nearfield # both leaves
-        push!(direct_list, SVector{2,Int32}(i_target, j_source))
-    elseif source_branch.first_branch == -1 || (target_branch.radius >= source_branch.radius && target_branch.first_branch != -1)
-        for i_child in target_branch.first_branch:target_branch.first_branch + target_branch.n_branches - 1
+        push!(m2l_list, SVector{2}(i_target, j_source))
+    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield # both leaves
+        push!(direct_list, SVector{2}(i_target, j_source))
+    elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
+        for i_child in target_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield)
         end
     else
-        for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
-            # Threads.@threads for j_child in source_branch.first_branch:source_branch.first_branch + source_branch.n_branches - 1
+        for j_child in source_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield)
         end
     end
@@ -193,15 +185,20 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
     
     # run FMM
-    nearfield && (nearfield!(systems, tree.branches, direct_list))
+    println("nearfield")
+    @time nearfield && (nearfield!(systems, tree.branches, direct_list))
     if farfield
-        upward_pass!(tree, systems)
-        horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
-        downward_pass!(tree, systems)
+        println("upward pass")
+        @time upward_pass!(tree, systems)
+        println("horizontal pass")
+        @time horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
+        println("downward pass")
+        @time downward_pass!(tree, systems)
     end
     
     # unsort bodies
-    unsort_bodies && (unsort!(systems, tree))
+    println("unsort")
+    @time unsort_bodies && (unsort!(systems, tree))
 end
 
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
@@ -244,15 +241,15 @@ Note: this function merely adds to existing potential of its elements to avoid o
 
 The user must reset the potential manually.
 """
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true, shrinking=true)
-    tree = Tree(systems, expansion_order, n_per_branch, shrinking=shrinking)
+function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true)
+    tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
     return tree
 end
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrinking=true, target_shrinking=true)
-    source_tree = Tree(source_systems, expansion_order, n_per_branch_source; shrinking=source_shrinking)
-    target_tree = Tree(target_systems, expansion_order, n_per_branch_target; shrinking=target_shrinking)
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true)
+    source_tree = Tree(source_systems; expansion_order, n_per_branch_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order, n_per_branch_target, shrink_recenter=target_shrink_recenter)
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
     return source_tree, target_tree
 end

@@ -60,31 +60,33 @@ struct DipolePanel <: AbstractKernel end # not yet implemented
 #####
 ##### octree creation
 #####
-struct MultiBranch{TF,N}
-    n_branches::Int8        # number of child branches
-    n_bodies::SVector{N,Int32}         # number of descendent bodies
-    first_branch::Int32     # index of the first branch
-    first_body::SVector{N,Int32}       # index of the first element
+abstract type Branch end
+
+struct MultiBranch{TF,N} <: Branch
+    bodies_index::SVector{N,UnitRange{Int64}}
+    n_branches::Int64
+    branch_index::UnitRange{Int64}
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
     local_expansion::Array{Complex{TF},2}     # local expansion coefficients
     lock::ReentrantLock
-    child_lock::ReentrantLock
 end
 
-struct SingleBranch{TF}
-    n_branches::Int8        # number of child branches
-    n_bodies::Int32         # number of descendent bodies
-    first_branch::Int32     # index of the first branch
-    first_body::Int32       # index of the first element
+Base.eltype(::MultiBranch{TF}) where TF = TF
+
+struct SingleBranch{TF} <: Branch
+    bodies_index::UnitRange{Int64}
+    n_branches::Int64
+    branch_index::UnitRange{Int64}
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
     local_expansion::Array{Complex{TF},2}     # local expansion coefficients
     lock::ReentrantLock
-    child_lock::ReentrantLock
 end
+
+Base.eltype(::SingleBranch{TF}) where TF = TF
 
 abstract type Tree end
 
@@ -92,24 +94,24 @@ abstract type Tree end
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N} <: Tree
+struct MultiTree{TF,N,TB} <: Tree
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
-    expansion_order::Int16
-    n_per_branch::Int32    # max number of bodies in a leaf
-    index_list::NTuple{N,Vector{Int}}
-    inverse_index_list::NTuple{N,Vector{Int}}
-    leaf_index::Vector{Int}
-    cumulative_count::Vector{Int} # starting with 0, a cumulative accounting of how many bodies are in leaf branches
+    levels_index::Vector{UnitRange{Int64}}
+    sort_index_list::NTuple{N,Vector{Int}}
+    inverse_sort_index_list::NTuple{N,Vector{Int}}
+    buffers::TB
+    expansion_order::Int64
+    n_per_branch::Int64    # max number of bodies in a leaf
 end
 
-struct SingleTree{TF} <: Tree
+struct SingleTree{TF,TB} <: Tree
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
-    expansion_order::Int16
-    n_per_branch::Int32    # max number of bodies in a leaf
-    index::Vector{Int}
-    inverse_index::Vector{Int}
-    leaf_index::Vector{Int}
-    cumulative_count::Vector{Int} # starting with 0, a cumulative accounting of how many bodies are in leaf branches
+    levels_index::Vector{UnitRange{Int64}}
+    sort_index::Vector{Int64}
+    inverse_sort_index::Vector{Int64}
+    buffer::TB
+    expansion_order::Int64
+    n_per_branch::Int64    # max number of bodies in a leaf
 end
 
 #####

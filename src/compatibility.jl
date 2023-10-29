@@ -31,8 +31,32 @@ function Base.setindex!(sys, val, i, ::VelocityGradient)
     # @warn "setindex! (VelocityGradient) not overloaded for type $(typeof(sys))"
     return nothing
 end
-# Base.length(system) = 
+function Base.length(sys)
+    @error "Base.length() not overloaded for type $(typeof(sys))"
+end
 # Base.eltype(::SystemType) = 
+
+function buffer_element(system)
+    this_buffer = deepcopy(system[1])
+    view_free = true
+    view_free = buffer_element(this_buffer, view_free)
+    !view_free && (error("`buffer_element` overloaded to return a `view` for system type $(typeof(system)); errors will occur in the `unsort!` function\n\tTo fix this error, overload `buffer_element(system::$(typeof(system)))` to contain arrays rather than views"))
+    return this_buffer
+end
+
+function buffer_element(member, view_free)
+    try
+        for submember in member
+            view_free *= buffer_element(submember, view_free)
+        end
+    finally
+        return view_free
+    end
+end
+
+function buffer_element(member::SubArray, view_free)
+    return false
+end
 
 function B2M!(system, branch, bodies_index, harmonics, expansion_order)
     @warn "B2M! function not overloaded for type $(typeof(system)); interaction ignored"

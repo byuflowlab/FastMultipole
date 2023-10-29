@@ -2,483 +2,344 @@ const BRANCH_TYPE = Float64
 global SHRINKING_OFFSET = .000001
 
 #####
-##### tree constructors
+##### tree constructor
 #####
-"""
-    Tree(elements; expansion_order=2, n_per_branch=1)
-
-Constructs an octree of the provided element objects.
-
-# Inputs
-
-- `elements`- a struct containing the following members:
-
-    * `bodies::Array{Float64,2}`- 3+4+mxN array containing element positions, strengths, and m other values that must be sorted into the octree
-    * `potential::Array{Float64,2}`- 4+12+36xN array of the potential, Jacobian, and Hessian that are reset every iteration (and don't require sorting)
-    * `velocity::Array{Float64,2}`- 3xN array of the velocity vectors at each element, reset every iteration, and calculated in post-processing
-    * `direct!::Function`- function calculates the direct influence of the body at the specified location
-    * `B2M!::Function`- function converts the body's influence into a multipole expansion
-"""
-function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true)
-    # initialize objects
-    buffer_list = Tuple(get_buffer(system) for system in systems)
-    index_list = Tuple(collect(1:length(system)) for system in systems)
-    inverse_index_list = Tuple(similar(index) for index in index_list)
-    buffer_index_list = Tuple(similar(index) for index in index_list)
-    n_systems = length(systems)
-    TF = eltype(systems[1])
-    branches = Vector{MultiBranch{TF,n_systems}}(undef,1)
-
-    # recursively build branches
-    i_start = SVector{n_systems,Int32}([Int32(1) for _ in systems])
-    i_end = SVector{n_systems,Int32}([Int32(length(system)) for system in systems])
-    i_branch = 1
-    center, radius = center_radius(systems; scale_radius = 1.00001)
-    level = 0
-    multi_branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
-
-    # invert index
-    for (i_system,index) in enumerate(index_list)
-        inverse_index = inverse_index_list[i_system]
-        for i_body in eachindex(index)
-            inverse_index[index[i_body]] = i_body
-        end
-    end
-
-    # count leaves
-    n_leaves = 0
-    for branch in branches
-        branch.n_branches == 0 && (n_leaves += 1)
-    end
-
-    # create leaf index and leaf count
-    cumulative_count = Vector{Int64}(undef,n_leaves)
-    cumulative_count[1] = 0
-    leaf_index = zeros(Int,n_leaves)
-    i_leaf_index = 1
-    for (i_branch, branch) in enumerate(branches)
-        if branch.n_branches == 0
-            leaf_index[i_leaf_index] = Int32(i_branch)
-            i_leaf_index < n_leaves && (cumulative_count[i_leaf_index+1] = cumulative_count[i_leaf_index] + sum(branch.n_bodies))
-            i_leaf_index += 1
-        end
-    end
-
-    if shrinking
-        update_radius(systems, branches, 1)
-    end
-
-    # assemble tree
-    tree = MultiTree(branches, Int16(expansion_order), Int32(n_per_branch), index_list, inverse_index_list, leaf_index, cumulative_count)
-
-    return tree
-end
-
-function Tree(system, expansion_order, n_per_branch; shrinking=true)
-    # initialize objects
+function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=5, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0)
+    # initialize variables
+    octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
+    cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
+    bodies_index = get_bodies_index(system)
+    center, radius = center_radius(system; scale_radius=scale_radius)
+    i_first_branch = 2
     buffer = get_buffer(system)
-    index = collect(1:length(system))
-    inverse_index = similar(index)
-    buffer_index = similar(index)
-    TF = eltype(system[1,POSITION])
-    branches = Vector{SingleBranch{TF}}(undef,1)
+    sort_index = get_sort_index(system)
+    sort_index_buffer = get_sort_index_buffer(system)
+    
+    # grow root branch
+    root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, n_per_branch, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+    branches = [root_branch] # this first branch will already have its child branches encoded
+    # estimated_n_branches = estimate_n_branches(system, n_per_branch, allocation_safety_factor)
+    # sizehint!(branches, estimated_n_branches)
+    parents_index = 1:1
 
-    # recursively build branches
-    i_start::Int32 = 1
-    i_end::Int32 = length(system)
-    i_branch = 1
-    center, radius = center_radius(system; scale_radius = 1.00001)
-    level = 0
-    single_branch!(branches, system, buffer, index, buffer_index, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
-
-    # invert index
-    for i_body in eachindex(index)
-        inverse_index[index[i_body]] = i_body
-    end
-
-    # count leaves
-    n_leaves = 0
-    for branch in branches
-        branch.n_branches == 0 && (n_leaves += 1)
-    end
-
-    # create leaf index and leaf count
-    cumulative_count = Vector{Int64}(undef,n_leaves)
-    cumulative_count[1] = 0
-    leaf_index = zeros(Int,n_leaves)
-    i_leaf_index = 1
-    for (i_branch, branch) in enumerate(branches)
-        if branch.n_branches == 0
-            leaf_index[i_leaf_index] = i_branch
-            i_leaf_index < n_leaves && (cumulative_count[i_leaf_index+1] = cumulative_count[i_leaf_index] + sum(branch.n_bodies))
-            i_leaf_index += 1
+    # grow branches
+    levels_index = [parents_index] # store branches at each level
+    for i_divide in 1:ndivisions
+        if n_children > 0
+            parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+            push!(levels_index, parents_index)
         end
     end
-    
-    if shrinking
-        update_radius(system, branches, 1)
+
+    # check depth
+    if n_children > 0
+        println("n_per_branch not reached; n_children = $n_children")
     end
-    
+
+    # invert index
+    invert_index!(sort_index_buffer, sort_index)
+    inverse_sort_index = sort_index_buffer # reuse the buffer as the inverse index
+
+    # shrink and recenter branches to account for bodies of nonzero radius
+    if shrink_recenter
+        shrink_recenter!(branches, levels_index, system)
+    end
+
+    # # count leaves
+    # n_leaves = 0
+    # for branch in branches
+    #     branch.n_branches == 0 && (n_leaves += 1)
+    # end
+
+    # # create leaf index and leaf count
+    # cumulative_count = Vector{Int64}(undef,n_leaves)
+    # cumulative_count[1] = 0
+    # leaf_index = zeros(Int,n_leaves)
+    # i_leaf_index = 1
+    # for (i_branch, branch) in enumerate(branches)
+    #     if branch.n_branches == 0
+    #         leaf_index[i_leaf_index] = Int32(i_branch)
+    #         i_leaf_index < n_leaves && (cumulative_count[i_leaf_index+1] = cumulative_count[i_leaf_index] + sum(branch.n_bodies))
+    #         i_leaf_index += 1
+    #     end
+    # end
+
     # assemble tree
-    tree = SingleTree(branches, Int16(expansion_order), Int32(n_per_branch), index, inverse_index, leaf_index, cumulative_count)
+    tree = Tree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
 
     return tree
 end
 
-#####
-##### branch constructors
-#####
-Branch(n_branches, n_bodies::SVector, i_child, i_start::SVector, center, radius, multipole_expansion, local_expansion, lock1, lock2) = 
-    MultiBranch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, lock1, lock2)
+Tree(branches::Vector{<:SingleBranch}, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+    SingleTree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
 
-Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, lock1, lock2) = 
-    SingleBranch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, lock1, lock2)
+Tree(branches::Vector{<:MultiBranch}, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+    MultiTree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
 
-# Base.eltype(tree::Tree{TF,<:Any}) where TF = TF
-Base.eltype(tree::SingleTree{TF}) where TF = TF
+@inline total_n_bodies(system) = length(system)
 
-function multi_branch!(branches, systems, buffer_list, index_list, buffer_index_list, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
-    n_branches = Int8(0)
-    n_bodies = i_end - i_start .+ Int32(1)
-    n_systems = length(systems)
-    multipole_expansion = initialize_expansion(expansion_order)
-    local_expansion = initialize_expansion(expansion_order)
-    if prod(n_bodies .<= n_per_branch) # checks for all element structs => branch is a step_through_bodies; no new branches needed
-        i_child = Int32(-1)
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
-        branches[i_branch] = branch
-        return nothing
-    else # not a step_through_bodies; branch children
-        # count elements in each octant
-        octant_attendance = zeros(Int32, 8, n_systems)
-        for i_system in 1:n_systems # loop over each type
-            for i_body in i_start[i_system]:i_end[i_system] # loop over each body
-                x = systems[i_system][i_body, POSITION]
-                i_octant = get_octant(x, center)
-                octant_attendance[i_octant, i_system] += Int32(1)
-            end
-        end
+@inline function total_n_bodies(systems::Tuple)
+    n_bodies = 0
+    for system in systems
+        n_bodies += total_n_bodies(system)
+    end
+    return n_bodies
+end
 
-        # determine number of children
-        for i_octant in 1:8
-            n_branches += true in (octant_attendance[i_octant,:] .> 0) # check for elements of any type
-        end
+function estimate_n_branches(system, n_per_branch, allocation_safety_factor)
+    n_bodies = total_n_bodies(system)
+    estimated_n_divisions = Int(ceil(log(8,n_bodies/n_per_branch)))
+    estimated_n_branches = div(8^(estimated_n_divisions+1) - 1,7)
+    return Int(ceil(estimated_n_branches * allocation_safety_factor))
+end
 
-        # create branch
-        i_child = Int32(length(branches) + 1)
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+    i_first_branch = parents_index[end] + n_children + 1
+    for parent_branch in branches[parents_index]
+        if parent_branch.n_branches > 0
+            # radius of the child branches
+            child_radius = parent_branch.radius / 2.0
 
-        # sort bodies
-        ## write offsets
-        offsets = zeros(Int32,8,n_systems)
-        offsets[1,:] .= i_start
-        for i=2:8
-            offsets[i,:] .= offsets[i-1,:] + octant_attendance[i-1,:]
-        end
-
-        ## create counter
-        counter = deepcopy(offsets)
-
-        ## sort element indices into the buffer
-        for i_system in 1:n_systems
-            buffer_loop!(buffer_list[i_system], buffer_index_list[i_system], counter, systems[i_system], index_list[i_system], i_start[i_system], i_end[i_system], i_system, center)
-            place_buffer!(systems[i_system], index_list[i_system], buffer_list[i_system], buffer_index_list[i_system], i_start[i_system], i_end[i_system])
+            # count bodies per octant
+            census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
+            update_octant_accumulator!(cumulative_octant_census)
             
-            # # update index_list
-            # index_list[i_system] .= buffer_index_list[i_system]
-        end
-
-        # recursively build new branches
-        prev_branches = length(branches)
-        resize!(branches, prev_branches + n_branches)
-
-        i_tape = 1
-        for i_octant in Int8(0):Int8(7) # check each octant for members
-            if true in (octant_attendance[i_octant+Int8(1),:] .> 0) # if octant is populated
-                child_i_start = offsets[i_octant+Int8(1),:] # index of first member for all element types
-                child_i_end = child_i_start + octant_attendance[i_octant+Int8(1),:] .- Int32(1) # if attendence is 0, the end index will be less than the start
-                child_radius = radius / 2#(1 << (level + 1))
-                child_center = MVector{3}(center)
-                for d in Int8(0):Int8(2)
-                    child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
+            # number of child branches
+            if get_population(cumulative_octant_census) > n_per_branch
+                for i_octant in 1:8
+                    if get_population(cumulative_octant_census, i_octant) > 0  
+                        bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
+                        child_center = get_child_center(parent_branch.center, parent_branch.radius, i_octant)
+                        child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, n_per_branch, expansion_order)
+                        i_first_branch += n_grandchildren
+                        push!(branches, child_branch)
+                    end
                 end
-                multi_branch!(branches, systems, buffer_list, index_list, buffer_index_list, SVector{n_systems}(child_i_start), SVector{n_systems}(child_i_end), i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
-                i_tape += 1
             end
         end
     end
+    n_children = i_first_branch - length(branches) - 1 # the grandchildren of branches[parents_index]
+    parents_index = parents_index[end]+1:length(branches) # the parents of the next generation
+    return parents_index, n_children
 end
 
-function single_branch!(branches, system, buffer, index, buffer_index, i_start, i_end, i_branch, center, radius, level, expansion_order, n_per_branch)
-    n_branches::Int8 = 0
-    n_bodies::Int32 = i_end - i_start + 1
-    multipole_expansion = initialize_expansion(expansion_order)
-    local_expansion = initialize_expansion(expansion_order)
-    if n_bodies <= n_per_branch # checks for all element structs => branch is a leaf; no new branches needed
-        i_child::Int32 = -1
-        branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
-        branches[i_branch] = branch
-        return nothing
-    else # not a leaf; branch children
-        # count elements in each octant
-        octant_attendance = zeros(Int32, 8)
-        for i_body in i_start:i_end # loop over each body
-            x = system[i_body, POSITION]
-            i_octant = get_octant(x, center)
-            octant_attendance[i_octant] += 1
-        end
+function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, n_per_branch, expansion_order)
+    # count bodies in each octant
+    census!(octant_container, system, bodies_index, center)
+    
+    # cumsum
+    update_octant_accumulator!(octant_container)
 
-        # determine number of children
-        for i_octant in 1:8
-            n_branches += true == (octant_attendance[i_octant] > 0) # check for elements of any type
-        end
+    # number of child branches
+    n_children = get_n_children(octant_container, n_per_branch)
+    
+    if n_children > 0
+        # get beginning index of sorted bodies
+        octant_beginning_index!(octant_container, bodies_index)
 
-        # create branch
-        i_child = length(branches) + 1
-        # i_child::Int32 = length(branches) + 1
-        branches[i_branch] = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion, ReentrantLock(), ReentrantLock())
+        # sort bodies into octants
+        sort_bodies!(system, sort_index, octant_container, buffer, sort_index_buffer, bodies_index, center)
+    end
 
-        # sort bodies
-        ## write offsets
-        offsets = zeros(Int32,8)
-        offsets[1] = i_start
-        for i=2:8
-            offsets[i] = offsets[i-1] + octant_attendance[i-1]
-        end
+    # get child branch information
+    branch_index = i_first_branch : i_first_branch + n_children - 1
+    n_branches = length(branch_index)
 
-        ## create counter
-        counter = deepcopy(offsets)
+    return Branch(bodies_index, n_branches, branch_index, center, radius, expansion_order), n_children
+end
 
-        ## sort element indices into the buffer
-        buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_end, center)
-        place_buffer!(system, index, buffer, buffer_index, i_start, i_end)
+function Branch(bodies_index::UnitRange, n_branches, branch_index, center, radius, expansion_order)
+    return SingleBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order), initialize_expansion(expansion_order), ReentrantLock())
+end
 
-        # recursively build new branches
-        prev_branches = length(branches)
-        resize!(branches, prev_branches + n_branches)
+function Branch(bodies_index, n_branches, branch_index, center, radius, expansion_order)
+    return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order), initialize_expansion(expansion_order), ReentrantLock())
+end
 
-        i_tape = 1
-        for i_octant in 0:7 # check each octant for members
-            if octant_attendance[i_octant+Int8(1)] > 0 # if octant is populated
-                child_i_start = offsets[i_octant+Int8(1)] # index of first member for all element types
-                child_i_end = child_i_start + octant_attendance[i_octant+Int8(1)] - Int32(1) # if attendence is 0, the end index will be less than the start
-                child_radius = radius / 2#(1 << (level + 1))
-                child_center = MVector{3}(center)
-                for d in 0:2
-                    child_center[d + Int8(1)] += child_radius * (((i_octant & Int8(1) << d) >> d) * Int8(2) - Int8(1))
-                end
-                single_branch!(branches, system, buffer, index, buffer_index, child_i_start, child_i_end, i_tape + prev_branches, SVector{3}(child_center), child_radius, level + 1, expansion_order, n_per_branch)
-                i_tape += 1
-            end
-        end
+@inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
+
+@inline function get_octant(position, center)
+    octant = 1
+    position[1] > center[1] && (octant += 1)
+    position[2] > center[2] && (octant += 2)
+    position[3] > center[3] && (octant += 4)
+    return octant
+end
+
+@inline get_population(cumulative_octant_census::AbstractVector, i_octant) = i_octant == 1 ? cumulative_octant_census[1] : cumulative_octant_census[i_octant] - cumulative_octant_census[i_octant-1]
+
+@inline get_population(cumulative_octant_census::AbstractMatrix, i_octant) = i_octant == 1 ? sum(cumulative_octant_census[:,1]) : sum(cumulative_octant_census[:,i_octant]) - sum(cumulative_octant_census[:,i_octant-1])
+
+@inline get_population(cumulative_octant_census::AbstractVector) = cumulative_octant_census[end]
+
+@inline get_population(cumulative_octant_census::AbstractMatrix) = sum(cumulative_octant_census[:,end])
+
+@inline function get_child_center(parent_center, parent_radius, i_octant)
+    delta = parent_radius / 2.0
+    i_octant -= 1
+    dx = iseven(i_octant) ? -delta : delta
+    i_octant >>= 1
+    dy = iseven(i_octant) ? -delta : delta
+    i_octant >>= 1
+    dz = iseven(i_octant) ? -delta : delta
+    child_center = SVector{3,eltype(parent_center)}(parent_center[1] + dx, parent_center[2] + dy, parent_center[3] + dz)
+end
+
+function get_octant_container(systems::Tuple)
+    census = MMatrix{length(systems),8,Int64}(undef)
+    for (i,system) in enumerate(systems)
+        census[i,1] = length(system)
+    end
+    return census
+end
+
+function get_octant_container(system)
+    census = MVector{8,Int64}(undef)
+    census[1] = length(system)
+    return census
+end
+
+function census!(octant_container::AbstractVector, system, bodies_index, center)
+    octant_container .= zero(eltype(octant_container))
+    for position in get_body_positions(system, bodies_index)
+        i_octant = get_octant(position, center)
+        octant_container[i_octant] += 1
     end
 end
 
-Base.eltype(branch::SingleBranch{TF}) where TF = TF
-Base.eltype(branch::MultiBranch{TF,<:Any}) where TF = TF
-
-function buffer_loop!(buffer, buffer_index, counter, system::SortWrapper, index, i_start, i_end, i_system, center)
-    for i_body in i_start:i_end
-        x = system[i_body,POSITION]
-        i_octant = get_octant(x, center)
-        buffer_index[counter[i_octant,i_system]] = index[i_body]
-        counter[i_octant,i_system] += 1
+function census!(octant_container::AbstractMatrix, systems, bodies_indices, center)
+    octant_container .= zero(eltype(octant_container))
+    for (i_system, (system, bodies_index)) in enumerate(zip(systems, bodies_indices))
+        census!(view(octant_container,i_system,:), system, bodies_index, center)
     end
 end
 
-function buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_end, i_system, center)
-    for i_body in i_start:i_end
-        x = system[i_body,POSITION]
-        i_octant = get_octant(x, center)
-        buffer[counter[i_octant,i_system]] = system[i_body]
-        buffer_index[counter[i_octant,i_system]] = index[i_body]
-        counter[i_octant,i_system] += 1
+@inline update_octant_accumulator!(octant_population::AbstractMatrix) = cumsum!(octant_population, octant_population, dims=2)
+
+@inline update_octant_accumulator!(octant_population::AbstractVector) = cumsum!(octant_population, octant_population)
+
+@inline function octant_beginning_index!(cumulative_octant_census::AbstractVector, bodies_index::UnitRange)
+    for i_octant in 8:-1:2
+        cumulative_octant_census[i_octant] = cumulative_octant_census[i_octant-1] + bodies_index[1]
     end
+    cumulative_octant_census[1] = bodies_index[1]
+    return cumulative_octant_census
 end
 
-function buffer_loop!(buffer, buffer_index, counter, system::SortWrapper, index, i_start, i_end, center)
-    for i_body in i_start:i_end
-        x = system[i_body,POSITION]
-        i_octant = get_octant(x, center)
-        buffer_index[counter[i_octant]] = index[i_body]
-        counter[i_octant] += 1
+@inline function octant_beginning_index!(cumulative_octant_census::AbstractMatrix, bodies_indices::AbstractVector)
+    for (i_system,bodies_index) in enumerate(bodies_indices)
+        octant_beginning_index!(view(cumulative_octant_census,i_system,:), bodies_index)
     end
+    return cumulative_octant_census
 end
 
-function buffer_loop!(buffer, buffer_index, counter, system, index, i_start, i_end, center)
-    for i_body in i_start:i_end
-        x = system[i_body,POSITION]
-        i_octant = get_octant(x, center)
-        buffer[counter[i_octant]] = system[i_body]
-        buffer_index[counter[i_octant]] = index[i_body]
-        counter[i_octant] += 1
-    end
+@inline function get_bodies_index(cumulative_octant_census::AbstractVector, parent_bodies_index::UnitRange, i_octant)
+    first_offset = i_octant == 1 ? 0 : cumulative_octant_census[i_octant-1]
+    bodies_index = parent_bodies_index[1] + first_offset : parent_bodies_index[1] + cumulative_octant_census[i_octant] - 1
+    return bodies_index
 end
 
-function place_buffer!(system::SortWrapper, index, buffer, buffer_index, i_start, i_end)
-    system.index[i_start:i_end] .= view(buffer_index,i_start:i_end)
-    index[i_start:i_end] .= view(buffer_index,i_start:i_end)
-    return nothing # no need to sort bodies
+@inline function get_bodies_index(cumulative_octant_census::AbstractMatrix, parent_bodies_indices::AbstractVector, i_octant)
+    n_systems = size(cumulative_octant_census,1)
+    bodies_index = SVector{n_systems,UnitRange{Int64}}([get_bodies_index(view(cumulative_octant_census,i_system,:), parent_bodies_indices[i_system], i_octant) for i_system in 1:n_systems])
+    # TODO why does this require square brackets? ah, because StaticArrays tries to collect the unit range ONLY IF THERE IS ONLY ONE;
+    return bodies_index
 end
 
-function place_buffer!(system, index, buffer, buffer_index, i_start, i_end)
-    # place sorted bodies
-    for i in i_start:i_end
-        system[i] = buffer[i]
-    end
-    index[i_start:i_end] .= view(buffer_index,i_start:i_end)
+@inline get_bodies_index(system) = 1:length(system)
+
+@inline function get_bodies_index(systems::Tuple)
+    n_systems = length(systems)
+    return SVector{n_systems,UnitRange{Int64}}([get_bodies_index(system) for system in systems]) 
+    # TODO why does this require square brackets? ah, because StaticArrays tries to collect the unit range ONLY IF THERE IS ONLY ONE;
 end
 
-function get_buffer(system::SortWrapper)
+#####
+##### create buffers; overload for SortWrappers---in case we cannot sort bodies in place, 
+#####                 wrap the body in a SortWrapper object with an index which can be sorted
+@inline function get_buffer(system::SortWrapper)
     return nothing
 end
 
-function get_buffer(system)
-    return deepcopy(system)
+@inline function get_buffer(system)
+    # return Vector{Int64}(undef,length(system))
+    return [buffer_element(system) for _ in 1:length(system)]
 end
 
-function get_index(system::SortWrapper)
+@inline function get_buffer(systems::Tuple)
+    return Tuple(get_buffer(system) for system in systems)
+end
+
+@inline function get_sort_index(system::SortWrapper)
     return system.index
 end
 
-function get_index(system)
+@inline function get_sort_index(system)
     return collect(1:length(system))
 end
 
+@inline function get_sort_index(systems::Tuple)
+    return Tuple(get_sort_index(system) for system in systems)
+end
+
+@inline function get_sort_index_buffer(system) # need not be overloaded for SortWrapper as it will be the same
+    return Vector{Int64}(undef,length(system))
+end
+
+@inline function get_sort_index_buffer(systems::Tuple)
+    return Tuple(get_sort_index_buffer(system) for system in systems)
+end
+
 #####
-##### shrinking method for bodies of non-zero radius
+##### determine the number of descendants
 #####
-function update_radius(systems, branches, branch_index; second_pass=true)
-    branch = branches[branch_index]
-    if branch.n_branches != 0
-        for b = 0:branch.n_branches - 1
-            update_radius(systems, branches, branch.first_branch + b; second_pass)
-        end
-        step_through_branches(branches, branch_index; second_pass)
-    else
-        step_through_bodies(systems, branches, branch_index; second_pass)
-    end
-    return nothing
-end
-
-function create_rectangle(center, radius)
-    lx = center[1]-radius
-    ly = center[2]-radius
-    lz = center[3]-radius
-    ux = center[1]+radius
-    uy = center[2]+radius
-    uz = center[3]+radius
-    return lx, ly, lz, ux, uy, uz
-end
-
-@inline function update_rectangle(lx, ly, lz, ux, uy, uz, center, radius)
-    return min(center[1]-radius, lx), min(center[2]-radius, ly), min(center[3]-radius, lz), max(center[1]+radius, ux), max(center[2]+radius, uy), max(center[3]+radius, uz)
-end
-
-@inline function get_distance(point1, point2)
-    return sqrt((point1[1] - point2[1])^2 + (point1[2] - point2[2])^2 + (point1[3] - point2[3])^2)
-end
-
-function step_through_branches(branches, branch_index; second_pass=true)
-    # unpack branches
-    branch = branches[branch_index]
-    first_child_index = branch.first_branch
-    first_child = branches[first_child_index]
-
-    # create upper/lower bounds enclosing the branch
-    lx, ly, lz, ux, uy, uz = create_rectangle(first_child.center, first_child.radius)
-    for child_branch in branches[first_child_index:first_child_index+branch.n_branches-1]
-        lx, ly, lz, ux, uy, uz = update_rectangle(lx, ly, lz, ux, uy, uz, child_branch.center, child_branch.radius)
-    end
-
-    # re-center the branch
-    new_center = SVector{3}((ux + lx)/2.0, (uy + ly)/2.0, (uz + lz)/2.0)
-    
-    # recompute (shrink) the radius
-    new_radius = zero(branch.radius)
-    for child_branch in branches[first_child_index:first_child_index+branch.n_branches - 1]
-        new_radius = max(new_radius, get_distance(child_branch.center, new_center) + child_branch.radius)
-    end
-
-    # update branch
-    (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
-    branches[branch_index] = Branch(n_branches, n_bodies, first_branch, first_body, new_center, new_radius, multipole_expansion, local_expansion, lock, child_lock)
-
-    return nothing
-end
-
-function step_through_bodies(systems, branches::Vector{<:MultiBranch}, branch_index; second_pass=true)
-    # unpack
-    branch = branches[branch_index]
-    first_index = branch.first_body[1]
-    
-    # create enclosing rectangle around all bodies
-    lx, ly, lz, ux, uy, uz = create_rectangle(systems[1][first_index, POSITION], systems[1][first_index, RADIUS])
-    for (i_system, system) in enumerate(systems)
-        for i_body in branch.first_body[i_system]:(branch.first_body[i_system]+branch.n_bodies[i_system]-1)
-            lx, ly, lz, ux, uy, uz = update_rectangle(lx, ly, lz, ux, uy, uz, system[i_body,POSITION], system[i_body,RADIUS])
+@inline function get_n_children(cumulative_octant_census, n_per_branch)
+    n_children = 0
+    if get_population(cumulative_octant_census) > n_per_branch
+        for i_octant in 1:8
+            get_population(cumulative_octant_census,i_octant) > 0 && (n_children += 1)
         end
     end
-
-    # re-center the branch
-    new_center = branch.n_bodies == 1 ? SVector{3}(
-        (ux + lx)/2.0 + SHRINKING_OFFSET, 
-        (uy + ly)/2.0 + SHRINKING_OFFSET, 
-        (uz + lz)/2.0 + SHRINKING_OFFSET
-    ) : SVector{3}((ux + lx)/2.0, (uy + ly)/2.0, (uz + lz)/2.0)
-    
-    # compute new radius
-    # if second_pass
-    new_radius = zero(branch.radius)
-    for (i_system, system) in enumerate(systems)
-        for i_body in branch.first_body[i_system]:(branch.first_body[i_system]+branch.n_bodies[i_system]-1)
-            new_radius = max(new_radius, get_distance(system[i_body,POSITION], new_center) + system[i_body,RADIUS])
-        end
-    end
-    # else
-    #     (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
-    #     new_radius = sqrt((rectangle[1] - new_center[1])^2 + (rectangle[3] - new_center[2])^2 + (rectangle[5] - new_center[3])^2)
-    # end
-
-    (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
-    new_branch = Branch(n_branches, n_bodies, first_branch, first_body, new_center, new_radius, multipole_expansion, local_expansion, lock, child_lock)
-    branches[branch_index] = new_branch
-    return nothing
+    return n_children
 end
 
-function step_through_bodies(system, branches::Vector{<:SingleBranch}, branch_index; second_pass=true)
-    # unpack
-    branch = branches[branch_index]
-    first_index = branch.first_body[1]
-    
-    # create enclosing rectangle around all bodies
-    lx, ly, lz, ux, uy, uz = create_rectangle(system[first_index, POSITION], system[first_index, RADIUS])
-    for i_body in branch.first_body:(branch.first_body+branch.n_bodies-1)
-        lx, ly, lz, ux, uy, uz = update_rectangle(lx, ly, lz, ux, uy, uz, system[i_body,POSITION], system[i_body,RADIUS])
+#####
+##### sort bodies into the octree
+#####
+function sort_bodies!(system, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
+    # sort indices
+    for i_body in bodies_index
+        i_octant = get_octant(system[i_body,POSITION], center)
+        buffer[octant_indices[i_octant]] = system[i_body]
+        sort_index_buffer[octant_indices[i_octant]] = sort_index[i_body]
+        octant_indices[i_octant] += 1
     end
-
-    # re-center the branch
-    new_center = branch.n_bodies == 1 ? SVector{3}(
-        (ux + lx)/2.0 + SHRINKING_OFFSET, 
-        (uy + ly)/2.0 + SHRINKING_OFFSET, 
-        (uz + lz)/2.0 + SHRINKING_OFFSET
-    ) : SVector{3}((ux + lx)/2.0, (uy + ly)/2.0, (uz + lz)/2.0)
-    
-    # compute new radius
-    # if second_pass
-    new_radius = zero(branch.radius)
-    for i_body in branch.first_body:(branch.first_body+branch.n_bodies-1)
-        new_radius = max(new_radius, get_distance(system[i_body,POSITION], new_center) + system[i_body,RADIUS])
+    # place buffers
+    for i_body in bodies_index
+        system[i_body] = buffer[i_body]
     end
-    # else
-    #     (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
-    #     new_radius = sqrt((rectangle[1] - new_center[1])^2 + (rectangle[3] - new_center[2])^2 + (rectangle[5] - new_center[3])^2)
-    # end
+    sort_index[bodies_index] .= sort_index_buffer[bodies_index]
+end
 
-    (; n_branches, n_bodies, first_branch, first_body, center, multipole_expansion, local_expansion, lock, child_lock) = branch
-    new_branch = Branch(n_branches, n_bodies, first_branch, first_body, new_center, new_radius, multipole_expansion, local_expansion, lock, child_lock)
-    branches[branch_index] = new_branch
-    return nothing
+function sort_bodies!(systems, sort_indices, octant_indices::AbstractMatrix, buffers, sort_index_buffers, bodies_indices::AbstractVector, center)
+    for (i_system, (system, sort_index, buffer, sort_index_buffer, bodies_index)) in enumerate(zip(systems, sort_indices, buffers, sort_index_buffers, bodies_indices))
+        sort_bodies!(system, sort_index, view(octant_indices,i_system,:), buffer, sort_index_buffer, bodies_index, center)
+    end
+end
+
+#####
+##### invert the sort permutation for undoing the sort operation
+#####
+function invert_index!(inverse_sort_index::AbstractVector{Int64}, sort_index::AbstractVector{Int64})
+    for i_body in eachindex(sort_index)
+        inverse_sort_index[sort_index[i_body]] = i_body
+    end
+end
+
+function invert_index!(inverse_sort_indices::Tuple, sort_indices::Tuple)
+    for (inverse_sort_index, sort_index) in zip(inverse_sort_indices, sort_indices)
+        invert_index!(inverse_sort_index, sort_index)
+    end
 end
 
 #####
@@ -488,149 +349,295 @@ end
 Undoes the sort operation performed by the tree.
 """
 function unsort!(systems::Tuple, tree::MultiTree)
-    for (system, inverse_index) in zip(systems, tree.inverse_index_list)
-        unsort!(system, inverse_index)
+    for (system, buffer, inverse_sort_index) in zip(systems, tree.buffers, tree.inverse_sort_index_list)
+        unsort!(system, buffer, inverse_sort_index)
     end
 end
 
 function unsort!(system, tree::SingleTree)
-    unsort!(system, tree.inverse_index)
+    unsort!(system, tree.buffer, tree.inverse_sort_index)
 end
 
-function unsort!(system, inverse_index)
-    buffer = deepcopy(system)
-    for i in 1:length(system)
-        buffer[i] = system[inverse_index[i]]
+@inline function unsort!(system, buffer, inverse_sort_index)
+    for i_body in 1:length(system)
+        buffer[i_body] = system[inverse_sort_index[i_body]]
     end
-    for i in 1:length(system)
-        system[i] = buffer[i]
-    end
-end
-
-function unsort!(system::SortWrapper, inverse_index)
-    system.index .= system.index[inverse_index]
-end
-
-"""
-Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
-"""
-function resort!(system, tree::SingleTree)
-    buffer = deepcopy(system)
-    index = tree.index
-    for i in 1:length(system)
-        buffer[i] = system[index[i]]
-    end
-    for i in 1:length(system)
-        system[i] = buffer[i]
+    for i_body in 1:length(system)
+        system[i_body] = buffer[i_body]
     end
 end
 
-function resort!(systems::Tuple, tree::MultiTree)
-    for (i_system, system) in enumerate(systems)
-        buffer = deepcopy(system)
-        index = tree.index_list[i_system]
-        for i in 1:length(system)
-            buffer[i] = system[index[i]]
-        end
-        for i in 1:length(system)
-            system[i] = buffer[i]
-        end
-    end
+@inline function unsort!(system::SortWrapper, buffer, inverse_sort_index)
+    system.index .= system.index[inverse_sort_index]
 end
 
-function get_sorted_body(vanilla_system, tree::SingleTree, i_sorted)
-    return vanilla_system[tree.index[i_sorted]]
-end
+# """
+# Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
+# """
+# function resort!(system, tree::SingleTree)
+#     buffer = deepcopy(system)
+#     index = tree.index
+#     for i in 1:length(system)
+#         buffer[i] = system[index[i]]
+#     end
+#     for i in 1:length(system)
+#         system[i] = buffer[i]
+#     end
+# end
 
-function get_sorted_body(vanilla_system, tree::MultiTree, i_system, i_sorted)
-    return vanilla_system[tree.index[i_system][i_sorted]]
-end
+# function resort!(systems::Tuple, tree::MultiTree)
+#     for (i_system, system) in enumerate(systems)
+#         buffer = deepcopy(system)
+#         index = tree.index_list[i_system]
+#         for i in 1:length(system)
+#             buffer[i] = system[index[i]]
+#         end
+#         for i in 1:length(system)
+#             system[i] = buffer[i]
+#         end
+#     end
+# end
+
+# function get_sorted_body(vanilla_system, tree::SingleTree, i_sorted)
+#     return vanilla_system[tree.index[i_sorted]]
+# end
+
+# function get_sorted_body(vanilla_system, tree::MultiTree, i_system, i_sorted)
+#     return vanilla_system[tree.index[i_system][i_sorted]]
+# end
 
 #####
-##### find the center and radius of a (group of) system(s)
+##### find the center and radius of a (group of) system(s) of bodies of zero radius
 #####
-@inline get_radius(dx,dy,dz,scale_radius) = max(dx,dy,dz) * scale_radius
-# @inline get_radius(dx,dy,dz,scale_radius) = sqrt(dx*dx + dy*dy + dz*dz) * scale_radius
+@inline function max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z)
+    if x < x_min
+        x_min = x
+    elseif x > x_max
+        x_max = x
+    end
+    if y < y_min
+        y_min = y
+    elseif y > y_max
+        y_max = y
+    end
+    if z < z_min
+        z_min = z
+    elseif z > z_max
+        z_max = z
+    end
+    
+    return x_min, y_min, z_min, x_max, y_max, z_max
+end
+
+@inline function max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, system)
+    for i in 1:length(system)
+        x, y, z = system[i,POSITION]
+        x_min, y_min, z_min, x_max, y_max, z_max = max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z)
+    end
+
+    return x_min, y_min, z_min, x_max, y_max, z_max
+end
+
+@inline get_radius(dx,dy,dz,scale_radius) = max(dx,dy,dz) * scale_radius # assume cubic cells
+# @inline get_radius(dx,dy,dz,scale_radius) = sqrt(dx*dx + dy*dy + dz*dz) * scale_radius # assume spherical cells
+
+@inline function get_center_radius(x_min, y_min, z_min, x_max, y_max, z_max, scale_radius)
+    center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
+    radius = get_radius(x_max-center[1], y_max-center[2], z_max-center[3], scale_radius)
+    return center, radius
+end
 
 function center_radius(systems::Tuple; scale_radius = 1.00001)
     x_min, y_min, z_min = systems[1][1,POSITION]
     x_max, y_max, z_max = systems[1][1,POSITION]
     for system in systems
-        for i in 1:length(system)
-            x, y, z = system[i,POSITION]
-            if x < x_min
-                x_min = x
-            elseif x > x_max
-                x_max = x
-            end
-            if y < y_min
-                y_min = y
-            elseif y > y_max
-                y_max = y
-            end
-            if z < z_min
-                z_min = z
-            elseif z > z_max
-                z_max = z
-            end
-        end
+        x_min, y_min, z_min, x_max, y_max, z_max = max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, system)
     end
-    center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
-    # TODO: add element smoothing radius here?
-    radius = get_radius(x_max-center[1], y_max-center[2], z_max-center[3], scale_radius) # get half of the longest side length of the rectangle
-    return SVector{3}(center), radius
+    return get_center_radius(x_min, y_min, z_min, x_max, y_max, z_max, scale_radius)
 end
 
 function center_radius(system; scale_radius = 1.00001)
     x_min, y_min, z_min = system[1,POSITION]
     x_max, y_max, z_max = system[1,POSITION]
-    for i in 1:length(system)
-        x, y, z = system[i,POSITION]
-        if x < x_min
-            x_min = x
-        elseif x > x_max
-            x_max = x
-        end
-        if y < y_min
-            y_min = y
-        elseif y > y_max
-            y_max = y
-        end
-        if z < z_min
-            z_min = z
-        elseif z > z_max
-            z_max = z
+    x_min, y_min, z_min, x_max, y_max, z_max = max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, system)
+    return get_center_radius(x_min, y_min, z_min, x_max, y_max, z_max, scale_radius)
+end
+
+#####
+##### shrinking method for bodies of non-zero radius
+#####
+@inline function max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z, radius)
+    x_min = min(x_min, x-radius)
+    y_min = min(y_min, y-radius)
+    z_min = min(z_min, z-radius)
+    x_max = max(x_max, x+radius)
+    y_max = max(y_max, y+radius)
+    z_max = max(z_max, z+radius)
+    
+    return x_min, y_min, z_min, x_max, y_max, z_max
+end
+
+@inline function max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, systems::Tuple, bodies_indices)
+    for (system, bodies_index) in zip(systems, bodies_indices)
+        x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, system, bodies_index)
+    end
+    return x_min, y_min, z_min, x_max, y_max, z_max
+end
+
+@inline function max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, system, bodies_index::UnitRange)
+    for i_body in bodies_index
+        x, y, z = system[i_body,POSITION]
+        radius = system[i_body,RADIUS]
+        x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z, radius)
+    end
+    return x_min, y_min, z_min, x_max, y_max, z_max
+end
+
+@inline function first_body_position(system, bodies_index)
+    return system[bodies_index[1],POSITION]
+end
+
+@inline function first_body_position(systems::Tuple, bodies_indices)
+    return systems[1][bodies_indices[1][1],POSITION]
+end
+
+@inline get_n_bodies(bodies_index::UnitRange) = length(bodies_index)
+
+@inline function get_n_bodies(bodies_indices)
+    n_bodies = 0
+    for bodies_index in bodies_indices
+        n_bodies += get_n_bodies(bodies_index)
+    end
+    return n_bodies
+end
+
+@inline function center_nonzero_radius(system, bodies_index)
+    x_min, y_min, z_min = first_body_position(system, bodies_index)
+    x_max = x_min
+    y_max = y_min
+    z_max = z_min
+    x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, system, bodies_index)
+    if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
+        # TODO with a smarter local expansion evaluation, we could get rid of this provision
+        center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
+    else
+        center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
+    end
+    
+    return center
+end
+
+@inline function get_distance(x, y, z, center)
+    dx = x - center[1]
+    dy = y - center[2]
+    dz = z - center[3]
+    return sqrt(dx*dx + dy*dy + dz*dz)
+end
+
+@inline function shrink_radius(radius, center, system, bodies_index)
+    for i_body in bodies_index
+        x, y, z = system[i_body,POSITION]
+        body_radius = system[i_body,RADIUS]
+        radius = max(radius, get_distance(x, y, z, center) + body_radius)
+    end
+    return radius
+end
+
+@inline function shrink_radius(radius, center, systems::Tuple, bodies_indices)
+    for (system, bodies_index) in zip(systems, bodies_indices)
+        radius = shrink_radius(radius, center, system, bodies_index)
+    end
+    return radius
+end
+
+@inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius) where TB
+    (; bodies_index, n_branches, branch_index, center, radius, multipole_expansion, local_expansion, lock) = branch[]
+    branch[] = TB(bodies_index, n_branches, branch_index, new_center, new_radius, multipole_expansion, local_expansion, lock)
+end
+
+function shrink_leaf!(branch, system)
+    # unpack
+    bodies_index = branch[].bodies_index
+    
+    # recenter
+    new_center = center_nonzero_radius(system, bodies_index)
+    
+    # shrink radius 
+    new_radius = zero(branch[].radius)
+    new_radius = shrink_radius(new_radius, new_center, system, bodies_index)
+
+    # replace branch
+    replace_branch!(branch, new_center, new_radius)
+end
+
+@inline function max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, branch::Branch, child_branches)
+    for child_branch in child_branches
+        x, y, z = child_branch.center
+        radius = child_branch.radius
+        x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z, radius)
+    end
+    return x_min, y_min, z_min, x_max, y_max, z_max
+end
+
+@inline function center_nonzero_radius(branch::Branch, child_branches)
+    # bounding rectangle
+    x_min, y_min, z_min = branch.center
+    x_max = x_min
+    y_max = y_min
+    z_max = z_min
+    x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, branch, child_branches)
+    
+    # find center
+    center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
+    
+    return center
+end
+
+@inline function shrink_radius(radius, center, branch::Branch, child_branches)
+    for child_branch in child_branches
+        x, y, z = child_branch.center
+        body_radius = child_branch.radius
+        radius = max(radius, get_distance(x, y, z, center) + body_radius)
+    end
+    return radius
+end
+
+function shrink_branch!(branch, child_branches)
+    # recenter
+    new_center = center_nonzero_radius(branch[], child_branches)
+
+    # shrink radius
+    new_radius = zero(branch[].radius)
+    new_radius = shrink_radius(new_radius, new_center, branch[], child_branches)
+
+    # replace branch
+    replace_branch!(branch, new_center, new_radius)
+end
+
+function shrink_recenter!(branches, levels_index, system)
+    for level_index in reverse(levels_index) # start at the bottom level
+        for i_branch in level_index
+            branch = view(branches,i_branch)
+            if branch[].n_branches == 0 # leaf
+                shrink_leaf!(branch, system)
+            else
+                children = view(branches, branch[].branch_index)
+                shrink_branch!(branch, children)
+            end
         end
     end
-    center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
-    # TODO: add element smoothing radius here? Note this method creates cubic cells
-    radius = max(x_max-center[1], y_max-center[2], z_max-center[3]) * scale_radius # get half of the longest side length of the rectangle
-    return SVector{3}(center), radius
 end
 
 #####
 ##### helper function
 #####
-@inline function get_octant(x, center)
-    return (UInt8((x[1] > center[1])) + UInt8(x[2] > center[2]) << 0b1 + UInt8(x[3] > center[3]) << 0b10) + 0b1
-end
-
-function n_terms(expansion_order, dimensions)
-    n = 0
-    for order in 0:expansion_order
-        # leverage stars and bars theorem
-        n += binomial(order + dimensions - 1, dimensions - 1)
-    end
-    return n
-end
-
 function initialize_expansion(expansion_order)
     return zeros(Complex{Float64}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function reset_expansions!(tree)
     T = eltype(tree.branches[1].multipole_expansion)
-    Threads.@threads for branch in tree.branches
+    for branch in tree.branches
         branch.multipole_expansion .= zero(T)
         branch.local_expansion .= zero(T)
     end

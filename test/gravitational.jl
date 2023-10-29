@@ -59,6 +59,8 @@ end
 Base.length(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF
 
+fmm.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
+
 fmm.B2M!(system::Gravitational, args...) = fmm.B2M!_sourcepoint(system, args...)
 
 function fmm.direct!(target_system, target_index, source_system::Gravitational, source_index)
@@ -74,9 +76,6 @@ function fmm.direct!(target_system, target_index, source_system::Gravitational, 
             if r > 0
                 dV = source_strength / r
                 target_system[j_target,fmm.SCALAR_POTENTIAL] += dV
-                # if j_target == 22
-                #     @show r source_strength
-                # end
             end
         end
     end
