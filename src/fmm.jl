@@ -45,20 +45,21 @@ end
 #####
 ##### upward pass
 #####
-function upward_pass!(tree, system)
-    upward_pass!(tree.branches, system, 1, tree.expansion_order)
-end
+function upward_pass_single_thread!(branches, systems, expansion_order)
+    # initialize memory
+    harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+    M = zeros(eltype(branches[1].multipole_expansion), 4)
 
-function upward_pass!(branches, system, i_branch, expansion_order)
-    branch = branches[i_branch]
-    for i_child in branch.branch_index
-        upward_pass!(branches, system, i_child, expansion_order)
-    end
-
-    if branch.n_branches == 0
-        B2M!(branch, system, expansion_order)
-    else
-        M2M!(branches, i_branch, expansion_order) # no locks needed, since nothing else will be modifying this branch
+    # loop over branches
+    for branch in view(branches,length(branches):-1:2) # no need to create a multipole expansion at the very top level
+        if branch.n_branches == 0 # branch is a leaf
+            B2M!(branch, systems, harmonics, expansion_order)
+        else # not a leaf
+            # iterate over children
+            for child_branch in view(branches, branch.branch_index)
+                M2M!(branch, child_branch, harmonics, M, expansion_order)
+            end
+        end
     end
 end
 
@@ -77,38 +78,23 @@ function nearfield!(target_system, target_branches, source_system, source_branch
     end
 end
 
-function horizontal_pass!(branches, m2l_list, expansion_order)
+function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
+    harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     for (i_target, j_source) in m2l_list
-        M2L!(branches[i_target], branches[j_source], expansion_order)
+        M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
     end
 end
 
-function horizontal_pass!(target_branches, source_branches, m2l_list, expansion_order)
+function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
+    harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     for (i_target, j_source) in m2l_list
-        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
+        M2L!(target_branches[i_target], source_branches[j_source], harmonics, expansion_order)
     end
 end
 
 #####
 ##### downward pass
 #####
-function downward_pass!(tree, systems)
-    downward_pass!(tree.branches, systems, 1, tree.expansion_order)
-end
-
-function downward_pass!(branches, systems, j_source, expansion_order)
-    branch = branches[j_source]
-
-    if branch.n_branches == 0 # branch is a leaf
-        L2B!(systems, branch, expansion_order)
-    else # recurse to child branches until we hit a leaf
-        L2L!(branches, j_source, expansion_order)
-        for i_child in branch.branch_index
-            downward_pass!(branches, systems, i_child, expansion_order)
-        end
-    end
-end
-
 function downward_pass_single_thread!(branches, systems, expansion_order)
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
     vector_potential = zeros(eltype(branches[1]),3)
@@ -228,18 +214,19 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     nearfield && (nearfield!(systems, tree.branches, direct_list))
     if farfield
         # println("upward pass")
-        upward_pass!(tree, systems)
-        # @time upward_pass!(tree, systems)
+        upward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
+        # @time upward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
         # println("horizontal pass")
         # @time horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
-        horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
-        # downward_pass!(tree, systems)
+        horizontal_pass_single_thread!(tree.branches, m2l_list, tree.expansion_order)
         # println("downward pass")
         downward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
         # @time downward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
     end
     
     # unsort bodies
+    # println("unsort bodies")
+    # @time unsort_bodies && (unsort!(systems, tree))
     unsort_bodies && (unsort!(systems, tree))
 end
 # function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)

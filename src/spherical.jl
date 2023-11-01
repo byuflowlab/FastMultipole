@@ -20,6 +20,7 @@ function cartesian_2_spherical(x, y, z; EPSILON=1e-10)
 end
 
 function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
+    a = 0
     # get partial derivatives of the coordinates
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
@@ -58,10 +59,12 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
             view(potential_hessian,:,:,ind) .+= drkdxidxj * potential_jacobian[k_coord,ind]
         end
     end
-
+    
     workspace .= potential_jacobian
-    mul!(potential_jacobian, drjdxi, workspace)
-
+    # for some reason mul! allocates for nonsquare matrix matrix products
+    mul!(view(potential_jacobian,:,1),drjdxi,view(workspace,1:3,1))
+    mul!(view(potential_jacobian,:,2:4),drjdxi,view(workspace,1:3,2:4))
+    
     return nothing
 end
 
@@ -199,14 +202,11 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
     end
 end
 
-function B2M!(branch::SingleBranch, system, expansion_order)
-    harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (expansion_order+1)*(expansion_order+1)) # this is faster than MVector
+@inline function B2M!(branch::SingleBranch, system, harmonics, expansion_order)
     B2M!(system, branch, branch.bodies_index, harmonics, expansion_order)
 end
 
-function B2M!(branch::MultiBranch, systems, expansion_order)
-    harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (expansion_order+1)*(expansion_order+1)) # this is faster than MVector
-
+function B2M!(branch::MultiBranch, systems, harmonics, expansion_order)
     # iterate over systems
     for (i,system) in enumerate(systems)
         B2M!(system, branch, branch.bodies_index[i], harmonics, expansion_order)
@@ -233,17 +233,16 @@ function M2B!(target_potential, target, i_branch, tree)
     target_potential .+= d_potential
 end
 
-function M2M!(branch, child, harmonics, expansion_order)
+function M2M!(branch, child, harmonics, M, expansion_order)
     # get distance vector
     dx, dy, dz = branch.center - child.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     regular_harmonic!(harmonics, r, theta, phi, expansion_order)
 
-    M = zeros(eltype(branch.multipole_expansion), 4)
     for j in 0:expansion_order # iterate over new Multipole coefficients B_j^k
         for k in 0:j
             i_jk = ((j * (j+1)) >> 1) + k + 1 # current index
-            M .*= 0.0
+            M .= zero(eltype(M))
             for l in 0:j
                 for m in max(-l,-j+k+l):min(k-1,l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) + k - m + 1
@@ -267,20 +266,6 @@ function M2M!(branch, child, harmonics, expansion_order)
                 branch.multipole_expansion[dim,i_jk] += M[dim]
             end
         end
-    end
-end
-
-function M2M!(branches, i_branch, expansion_order)
-    # expose objects
-    branch = branches[i_branch]
-    
-    # initialize memory
-    harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (expansion_order+1)^2)
-
-    # iterate over children
-    for i_child in branch.branch_index
-        child = branches[i_child]
-        M2M!(branch, child, harmonics, expansion_order)
     end
 end
 
@@ -314,14 +299,12 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
     end
 end
 
-function M2L!(target_branch, source_branch, expansion_order)
+function M2L!(target_branch, source_branch, harmonics, expansion_order)
     twice_expansion_order = expansion_order << 1
-    harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
     L = zeros(eltype(target_branch.local_expansion), 4)
-    # @show r theta phi harmonics
     M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 

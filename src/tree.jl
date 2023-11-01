@@ -95,7 +95,7 @@ end
 
 function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
     i_first_branch = parents_index[end] + n_children + 1
-    for parent_branch in branches[parents_index]
+    for parent_branch in view(branches, parents_index)
         if parent_branch.n_branches > 0
             # radius of the child branches
             child_radius = parent_branch.radius / 2.0
@@ -318,7 +318,7 @@ function sort_bodies!(system, sort_index, octant_indices::AbstractVector, buffer
     for i_body in bodies_index
         system[i_body] = buffer[i_body]
     end
-    sort_index[bodies_index] .= sort_index_buffer[bodies_index]
+    sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
 end
 
 function sort_bodies!(systems, sort_indices, octant_indices::AbstractMatrix, buffers, sort_index_buffers, bodies_indices::AbstractVector, center)
@@ -368,7 +368,7 @@ end
 end
 
 @inline function unsort!(system::SortWrapper, buffer, inverse_sort_index)
-    system.index .= system.index[inverse_sort_index]
+    system.index .= view(system.index,inverse_sort_index)
 end
 
 # """

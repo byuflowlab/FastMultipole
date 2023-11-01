@@ -315,9 +315,12 @@ i_branch = 2 # contains 4th and 5th elements
 i_branch_4 = 6 # use the fourth mass
 # i_branch_5 = 7 # use the fifth mass
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
+M = zeros(Complex{Float64},4)
 # using only the 4th mass: (note it has been reordered)
 fmm.B2M!(elements, tree.branches[i_branch_4], new_order_index[4]:new_order_index[4], harmonics, tree.expansion_order) # evaluate multipole coefficients
-fmm.M2M!(tree.branches, i_branch, tree.expansion_order) # translate coefficients to the center of branch 2
+for child_branch in view(tree.branches, tree.branches[i_branch].branch_index) # translate coefficients to the center of branch 2
+    fmm.M2M!(tree.branches[i_branch], child_branch, harmonics, M, expansion_order)
+end
 
 x_target = [8.3,1.4,-4.2]
 target_potential = zeros(4)
@@ -514,8 +517,8 @@ fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_ord
 
 # @show tree.branches[i_branch_multipole].multipole_expansion[1][1:10] multipole_check[1:10]
 # ###
-
-fmm.M2L!(tree.branches[i_branch_local], tree.branches[i_branch_multipole], expansion_order)
+m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+fmm.M2L!(tree.branches[i_branch_local], tree.branches[i_branch_multipole], m2l_harmonics, expansion_order)
 fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, expansion_order, tree.branches[i_branch_local].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,new_order_index[1]]
 
@@ -563,7 +566,7 @@ theta = 0.5
 tree = fmm.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=false)
 
 # perform upward pass
-fmm.upward_pass!(tree, (elements,))
+fmm.upward_pass_single_thread!(tree.branches, (elements,), expansion_order)
 
 # m6 = tree.branches[6].multipole_expansion
 target = [4.1,2.2,3.4]
@@ -589,7 +592,7 @@ u_fmm_67 = mass_target_potential[1]
 # perform horizontal pass
 m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, true, true)
 fmm.nearfield!((elements,), tree.branches, direct_list)
-fmm.horizontal_pass!(tree.branches, m2l_list, expansion_order)
+fmm.horizontal_pass_single_thread!(tree.branches, m2l_list, expansion_order)
 
 # consider the effect on branch 3 (mass 2)
 elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at mass 2
@@ -983,12 +986,13 @@ branch_3 = fmm.MultiBranch(SVector{1}([2:2]), 0, 3:2, x_branch_3, 1/8, fmm.initi
 dummy_index = (zeros(Int64,length(vortexparticles)),)
 tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_index, dummy_index, (deepcopy(vortexparticles),), expansion_order, n_per_branch)
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-fmm.B2M!(branch_2, (vortexparticles,), expansion_order)
-fmm.B2M!(branch_3, (vortexparticles,), expansion_order)
+fmm.B2M!(branch_2, (vortexparticles,), harmonics, expansion_order)
+fmm.B2M!(branch_3, (vortexparticles,), harmonics, expansion_order)
 # @show tree.branches[2].multipole_expansion[2:4,:] # checks out
 
-fmm.M2L!(tree.branches[2], tree.branches[3], expansion_order)
-fmm.M2L!(tree.branches[3], tree.branches[2], expansion_order)
+m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+fmm.M2L!(tree.branches[2], tree.branches[3], m2l_harmonics, expansion_order)
+fmm.M2L!(tree.branches[3], tree.branches[2], m2l_harmonics, expansion_order)
 # @show tree.branches[2].local_expansion
 harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
