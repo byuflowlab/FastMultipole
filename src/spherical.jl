@@ -394,6 +394,7 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
         body_position = system[i_body,POSITION]
         scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
+        # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
         system[i_body,VECTOR_POTENTIAL] .+= vector_potential
         system[i_body,VELOCITY] .+= view(potential_jacobian,:,1)
         system[i_body,VELOCITY_GRADIENT] .+= view(potential_hessian,:,:,1)

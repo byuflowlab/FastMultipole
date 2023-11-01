@@ -4,7 +4,7 @@ global SHRINKING_OFFSET = .000001
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=5, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0)
+function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0)
     # initialize variables
     octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
     cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
@@ -30,11 +30,21 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=5, scale_r
             push!(levels_index, parents_index)
         end
     end
-
+    
     # check depth
     if n_children > 0
-        println("n_per_branch not reached; n_children = $n_children")
+        n_children_prewhile = n_children
+        while n_children > 0
+            parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+            push!(levels_index, parents_index)
+        end
+        @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `ndivisions` > $(length(levels_index))"
     end
+
+    # # check depth
+    # if n_children > 0
+    #     error("n_per_branch not reached; n_children = $n_children")
+    # end
 
     # invert index
     invert_index!(sort_index_buffer, sort_index)
@@ -562,7 +572,15 @@ end
 end
 
 @inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius) where TB
-    (; bodies_index, n_branches, branch_index, center, radius, multipole_expansion, local_expansion, lock) = branch[]
+    # (; bodies_index, n_branches, branch_index, center, radius, multipole_expansion, local_expansion, lock) = branch[]
+    bodies_index = branch[].bodies_index
+    n_branches = branch[].n_branches
+    branch_index = branch[].branch_index
+    center = branch[].center
+    radius = branch[].radius
+    multipole_expansion = branch[].multipole_expansion
+    local_expansion = branch[].local_expansion
+    lock = branch[].lock
     branch[] = TB(bodies_index, n_branches, branch_index, new_center, new_radius, multipole_expansion, local_expansion, lock)
 end
 
