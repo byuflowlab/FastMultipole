@@ -385,8 +385,7 @@ harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
 workspace = zeros(3,4)
-spherical_potential = zeros(52)
-fmm.L2B!(elements, target_i, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree.expansion_order, tree.branches[branch_i])
+fmm.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, expansion_order, tree.branches[branch_i].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,target_i]
 
 dx_direct = xs[4,:] - xs[1,:]
@@ -437,13 +436,12 @@ harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(52)
-fmm.L2B!(elements, new_order_index[5], harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree.expansion_order, tree.branches[2])
-# fmm.L2B!(elements[5], tree, tree.branches[2], harmonics, harmonics_theta, harmonics_theta_2, d_potential_cartesian, d_potential, dH_potential)
+fmm.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, expansion_order, tree.branches[2].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm_no_x = elements.potential[1,new_order_index[5]]
 elements.potential[1,new_order_index[5]] *= 0
 
 # translate local expansion to branch 7 (mass 5)
-fmm.L2L!(tree.branches[2], tree.branches[7], harmonics, tree.expansion_order)
+fmm.L2L!(tree.branches[2], tree.branches[7], harmonics, zeros(eltype(tree.branches[1].multipole_expansion),4), tree.expansion_order)
 
 local_coefficients_check = zeros(Complex{Float64}, (expansion_order+1)^2)
 dx_check, dy_check, dz_check = fmm.cartesian_2_spherical(elements[new_order_index[1],fmm.POSITION] - tree.branches[7].center)
@@ -451,8 +449,7 @@ fmm.irregular_harmonic!(local_coefficients_check, dx_check, dy_check, dz_check, 
 local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
-fmm.L2B!((elements,), tree.branches[7], expansion_order)
-# fmm.L2B!(tree, (elements,), 7, [1])
+fmm.L2B!((elements,), tree.branches[7], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,new_order_index[5]]
 
 dx_direct = elements[new_order_index[5],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
@@ -519,9 +516,7 @@ fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_ord
 # ###
 
 fmm.M2L!(tree.branches[i_branch_local], tree.branches[i_branch_multipole], expansion_order)
-
-spherical_potential = zeros(52)
-fmm.L2B!(elements, new_order_index[1], harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, tree.expansion_order, tree.branches[i_branch_local])
+fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, expansion_order, tree.branches[i_branch_local].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,new_order_index[1]]
 
 local_exp = tree.branches[i_branch_local].local_expansion[1]
@@ -616,7 +611,11 @@ u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx
 u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
 # M2L is performed from branches 6, 7 to branch 3 (containing mass 2)
-fmm.L2B!((elements,), tree.branches[3], expansion_order)
+harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
+workspace = zeros(3,4)
+fmm.L2B!((elements,), tree.branches[3], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_42 = elements[new_order_index[4],fmm.POSITION] - elements[new_order_index[2],fmm.POSITION]
@@ -991,8 +990,12 @@ fmm.B2M!(branch_3, (vortexparticles,), expansion_order)
 fmm.M2L!(tree.branches[2], tree.branches[3], expansion_order)
 fmm.M2L!(tree.branches[3], tree.branches[2], expansion_order)
 # @show tree.branches[2].local_expansion
-fmm.L2B!((vortexparticles,), tree.branches[2], expansion_order)
-fmm.L2B!((vortexparticles,), tree.branches[3], expansion_order)
+harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
+workspace = zeros(3,4)
+fmm.L2B!((vortexparticles,), tree.branches[2], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!((vortexparticles,), tree.branches[3], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 update_velocity_stretching!(vortexparticles)
 
 for i in 1:2

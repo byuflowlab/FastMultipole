@@ -109,6 +109,42 @@ function downward_pass!(branches, systems, j_source, expansion_order)
     end
 end
 
+function downward_pass_single_thread!(branches, systems, expansion_order)
+    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+    vector_potential = zeros(eltype(branches[1]),3)
+    potential_jacobian = zeros(eltype(branches[1]),3,4)
+    potential_hessian = zeros(eltype(branches[1]),3,3,4)
+    derivative_harmonics = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics_theta = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics_theta_2 = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    workspace = zeros(eltype(branches[1]),3,4)
+    L = zeros(eltype(branches[1].multipole_expansion),4)
+    for branch in branches
+        if branch.n_branches == 0 # leaf level
+            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+        else
+            for child_branch in view(branches,branch.branch_index)
+                L2L!(branch, child_branch, regular_harmonics, L, expansion_order)
+            end
+        end
+    end
+end
+
+# function downward_pass_multi_thread!(branches, systems, level_indices, expansion_order)
+#     for level_index in level_indices
+#         Threads.@threads for branch in view(branches,level_index)
+#             harmonics = zeros(eltype(branch.multipole_expansion), (expansion_order+1)*(expansion_order+1))
+#             if branch.n_branches == 0 # leaf level
+#                 L2B!(systems, branch, expansion_order)
+#             else
+#                 for child_branch in view(branches,branch.branch_index)
+#                     L2L!(branch, child_branch, harmonics, expansion_order)
+#                 end
+#             end
+#         end
+#     end
+# end
+
 #####
 ##### create interaction lists
 #####
@@ -182,24 +218,53 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     reset_tree && (reset_expansions!(tree))
 
     # create interaction lists
+    # println("interaction list")
+    # @time m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
     m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
     
     # run FMM
-    println("nearfield")
-    @time nearfield && (nearfield!(systems, tree.branches, direct_list))
+    # println("nearfield")
+    # @time nearfield && (nearfield!(systems, tree.branches, direct_list))
+    nearfield && (nearfield!(systems, tree.branches, direct_list))
     if farfield
-        println("upward pass")
-        @time upward_pass!(tree, systems)
-        println("horizontal pass")
-        @time horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
-        println("downward pass")
-        @time downward_pass!(tree, systems)
+        # println("upward pass")
+        upward_pass!(tree, systems)
+        # @time upward_pass!(tree, systems)
+        # println("horizontal pass")
+        # @time horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
+        horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
+        # downward_pass!(tree, systems)
+        # println("downward pass")
+        downward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
+        # @time downward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
     end
     
     # unsort bodies
-    println("unsort")
-    @time unsort_bodies && (unsort!(systems, tree))
+    unsort_bodies && (unsort!(systems, tree))
 end
+# function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
+#     # reset multipole/local expansions
+#     reset_tree && (reset_expansions!(tree))
+
+#     # create interaction lists
+#     m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
+    
+#     # run FMM
+#     println("nearfield")
+#     @time nearfield && (nearfield!(systems, tree.branches, direct_list))
+#     if farfield
+#         println("upward pass")
+#         @time upward_pass!(tree, systems)
+#         println("horizontal pass")
+#         @time horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
+#         println("downward pass")
+#         @time downward_pass!(tree, systems)
+#     end
+    
+#     # unsort bodies
+#     println("unsort")
+#     @time unsort_bodies && (unsort!(systems, tree))
+# end
 
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
     # reset multipole/local expansions

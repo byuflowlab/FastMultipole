@@ -23,18 +23,18 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
     # get partial derivatives of the coordinates
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
-
+    
     drjdxi = @SMatrix [
         s_theta*c_phi c_theta*c_phi/rho -s_phi/rho/s_theta
         s_theta * s_phi c_theta * s_phi / rho c_phi / rho / s_theta
-        c_theta -s_theta / rho 0
+        c_theta -s_theta / rho 0.0
     ]
-
     # convert Hessian to cartesian coordinates
     workspace3x3 = view(workspace,:,1:3)
     for ind in 1:4
-        workspace3x3 .= potential_hessian[:,:,ind]
-        potential_hessian[:,:,ind] .= drjdxi * workspace3x3 * transpose(drjdxi)
+        # potential_hessian[:,:,ind] .= drjdxi * potential_hessian[:,:,ind] * transpose(drjdxi)
+        mul!(workspace3x3, drjdxi, view(potential_hessian,:,:,ind))
+        mul!(view(potential_hessian,:,:,ind), workspace3x3, transpose(drjdxi))
         for k_coord in 1:3 # loop over r, theta, and phi to save me some space on the stack
             if k_coord == 1 # r coordinate
                 drkdxidxj = @SMatrix [
@@ -55,12 +55,11 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
                     0 0 0
                 ]
             end
-            potential_hessian[:,:,ind] .+= drkdxidxj * potential_jacobian[k_coord,ind]
+            view(potential_hessian,:,:,ind) .+= drkdxidxj * potential_jacobian[k_coord,ind]
         end
     end
 
     workspace .= potential_jacobian
-
     mul!(potential_jacobian, drjdxi, workspace)
 
     return nothing
@@ -310,7 +309,7 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
                     end
                 end
             end
-            local_expansion[:,jks] .+= L
+            view(local_expansion,:,jks) .+= L
         end
     end
 end
@@ -342,21 +341,21 @@ function B2L!(tree, i_branch, source_position, source_strength)
     end
 end
 
-function L2L!(branch, child, harmonics, expansion_order)
+function L2L!(branch, child, regular_harmonics, L, expansion_order)
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, r, theta, phi, expansion_order)
+    regular_harmonic!(regular_harmonics, r, theta, phi, expansion_order)
     for j in 0:expansion_order
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
-            L = zeros(eltype(branch.local_expansion[1]), 4)
+            L .= zero(eltype(branch.local_expansion[1]))
             for n in j:expansion_order
                 for m in j+k-n:-1
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
                     nms = (n * (n + 1)) >> 1 - m + 1
                     oddeven = odd_or_even(k)
                     for dim in 1:4
-                        L[dim] += conj(branch.local_expansion[dim,nms]) * harmonics[jnkm] * oddeven
+                        L[dim] += conj(branch.local_expansion[dim,nms]) * regular_harmonics[jnkm] * oddeven
                     end
                 end
                 for m in 0:n
@@ -365,64 +364,67 @@ function L2L!(branch, child, harmonics, expansion_order)
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
                         for dim in 1:4
-                            L[dim] += branch.local_expansion[dim,nms] * harmonics[jnkm] * oddeven
+                            L[dim] += branch.local_expansion[dim,nms] * regular_harmonics[jnkm] * oddeven
                         end
                     end
                 end
             end
-            child.local_expansion[:,jks] .+= L
+            view(child.local_expansion,:,jks) .+= L
         end
     end
 end
 
-function L2L!(branches, j_source, expansion_order)
-    # expose branch
-    branch = branches[j_source]
+# function L2L!(branches, j_source, expansion_order)
+#     # expose branch
+#     branch = branches[j_source]
 
-    #initialize memory TODO: do this beforehand?
-    harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (expansion_order+1)^2)
+#     #initialize memory TODO: do this beforehand?
+#     harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (expansion_order+1)^2)
 
-    # iterate over children
-    for i_child in branch.branch_index
-        child = branches[i_child]
-        L2L!(branch, child, harmonics, expansion_order)
-    end
-end
+#     # iterate over children
+#     for i_child in branch.branch_index
+#         child = branches[i_child]
+#         L2L!(branch, child, harmonics, expansion_order)
+#     end
+# end
 
-function L2B!(systems, branch::MultiBranch, expansion_order)
-    harmonics = zeros(eltype(branch.multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    harmonics_theta = zeros(eltype(branch.multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    harmonics_theta_2 = zeros(eltype(branch.multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    workspace = zeros(eltype(branch),3,4)
-    spherical_potential = zeros(eltype(branch),52)
+function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
     for (i_system, system) in enumerate(systems)
-        for i_body in branch.bodies_index[i_system]
-            spherical_potential .= zero(eltype(spherical_potential))
-            L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
-        end
+        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
     end
 end
 
-function L2B!(system, branch::SingleBranch, expansion_order)
-    harmonics = zeros(eltype(branch.multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    harmonics_theta = zeros(eltype(branch.multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    harmonics_theta_2 = zeros(eltype(branch.multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    workspace = zeros(eltype(branch),3,4)
-    spherical_potential = zeros(eltype(branch),52)
-    for i_body in branch.bodies_index
-        spherical_potential .= zero(eltype(spherical_potential))
-        L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
+function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+end
+
+function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+    # vector_potential = view(spherical_potential,2:4)
+    # potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
+    # potential_hessian = reshape(view(spherical_potential, 17:52),3,3,4)
+    vector_potential .= zero(eltype(vector_potential))
+    potential_jacobian .= zero(eltype(potential_jacobian))
+    potential_hessian .= zero(eltype(potential_hessian))
+    for i_body in bodies_index
+        body_position = system[i_body,POSITION]
+        scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
+        system[i_body,SCALAR_POTENTIAL] += scalar_potential
+        system[i_body,VECTOR_POTENTIAL] .+= vector_potential
+        system[i_body,VELOCITY] .+= view(potential_jacobian,:,1)
+        system[i_body,VELOCITY_GRADIENT] .+= view(potential_hessian,:,:,1)
     end
 end
 
-function L2B_loop!(scalar_potential, vector_potential, potential_jacobian, potential_hessian, body_position, branch_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
-    dx, dy, dz = body_position - branch_center
+function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
+    a = 0
+    dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, expansion_order)
+    scalar_potential = zero(eltype(vector_potential))
     for n in 0:expansion_order
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
-        scalar_potential[] += real(local_expansion[1,nms] * harmonics[nms])
+        scalar_potential += real(local_expansion[1,nms] * harmonics[nms])
         vector_potential[1] += real(local_expansion[2,nms] * harmonics[nms])
         vector_potential[2] += real(local_expansion[3,nms] * harmonics[nms])
         vector_potential[3] += real(local_expansion[4,nms] * harmonics[nms])
@@ -444,7 +446,7 @@ function L2B_loop!(scalar_potential, vector_potential, potential_jacobian, poten
         for m in 1:n # m > 0
             # nm = n * n + n + m + 1
             nms = (n * (n + 1)) >> 1 + m + 1
-            scalar_potential[] += 2 * real(local_expansion[1,nms] * harmonics[nms])
+            scalar_potential += 2 * real(local_expansion[1,nms] * harmonics[nms])
             vector_potential[1] += 2 * real(local_expansion[2,nms] * harmonics[nms])
             vector_potential[2] += 2 * real(local_expansion[3,nms] * harmonics[nms])
             vector_potential[3] += 2 * real(local_expansion[4,nms] * harmonics[nms])
@@ -467,17 +469,5 @@ function L2B_loop!(scalar_potential, vector_potential, potential_jacobian, poten
     end
     spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
     flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient
-end
-
-function L2B!(system, i_body, harmonics, harmonics_theta, harmonics_theta_2, workspace, spherical_potential, expansion_order, branch)
-    scalar_potential = view(spherical_potential,1)
-    vector_potential = view(spherical_potential,2:4)
-    potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
-    potential_hessian = reshape(view(spherical_potential, 17:52),3,3,4)
-    body_position = system[i_body,POSITION]
-    L2B_loop!(scalar_potential, vector_potential, potential_jacobian, potential_hessian, body_position, branch.center, branch.local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
-    system[i_body,SCALAR_POTENTIAL] += scalar_potential[]
-    system[i_body,VECTOR_POTENTIAL] += vector_potential
-    system[i_body,VELOCITY] += potential_jacobian[:,1]
-    system[i_body,VELOCITY_GRADIENT] += potential_hessian[:,:,1]
+    return scalar_potential
 end

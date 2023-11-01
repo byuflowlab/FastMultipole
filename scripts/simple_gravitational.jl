@@ -26,7 +26,7 @@ function bm_direct()
     n_bodies = 5000
     system2 = generate_gravitational(123, n_bodies)
     fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
-    return nothing
+    return sum(system2.potential)
 end
 
 function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
@@ -117,6 +117,9 @@ function visualize_tree(name, system, tree; probe_indices=[])
 
     return nothing
 end
+# println("generate bodies")
+# @time generate_gravitational(123, 5000)
+# @time generate_gravitational(123, 5000)
 
 # note: old_bodies[tree.index_list[1]] = systems[1].bodies
 println("Run FMM:")
