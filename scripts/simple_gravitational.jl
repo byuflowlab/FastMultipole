@@ -33,10 +33,11 @@ function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_
     system = (generate_gravitational(123, n_bodies),)
     println("Create tree")
     @time tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
-    fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
+    println("Run fmm")
+    @time fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     println("BEGIN DIRECT")
     system2 = generate_gravitational(123, n_bodies)
-    fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
+    @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
     phi = system[1].potential[1,:]
     phi2 = system2.potential[1,:]
     return maximum(abs.(phi2 - phi)), system, tree, system2
@@ -47,10 +48,11 @@ function bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodie
     println("Create trees")
     @time source_tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
     @time target_tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
-    fmm.fmm!(target_tree, system, source_tree, system; theta=theta, nearfield=true, farfield=true)
+    println("Run fmm")
+    @time fmm.fmm!(target_tree, system, source_tree, system; theta=theta, nearfield=true, farfield=true)
     println("BEGIN DIRECT")
     system2 = generate_gravitational(123, n_bodies)
-    fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
+    @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
     phi = system[1].potential[1,:]
     phi2 = system2.potential[1,:]
     return maximum(abs.(phi2 - phi)), system, tree, system2
@@ -131,9 +133,9 @@ println("Run Direct:")
 @time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
 # println("Calculating accuracy:")
-# expansion_order, n_per_branch, theta = 10, 500, 0.3
-# n_bodies = 5000
-# shrink_recenter, ndivisions = true, 5
+expansion_order, n_per_branch, theta = 8, 100, 0.31
+n_bodies = 5000
+shrink_recenter, ndivisions = true, 5
 # sys = generate_gravitational(123,n_bodies)
 # function bmtree()# let sys=sys, expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter
 #         return fmm.Tree(sys; expansion_order, n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
@@ -153,10 +155,14 @@ println("Run Direct:")
 # tree_noshrinking = fmm.Tree(sys_noshrinking; expansion_order, n_per_branch, ndivisions=5, shrink_recenter=false)
 
 # println("done")
-# accuracy, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-# println("single tree accuracy: $accuracy")
-# accuracy, system, tree, system2 = bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-# println("dual tree accuracy: $accuracy")
+run_bm_accuracy() = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+accuracy, system, tree, system2 = run_bm_accuracy()
+accuracy, system, tree, system2 = run_bm_accuracy()
+println("single tree accuracy: $accuracy")
+run_bm_accuracy_dual_tree() = bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
+accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
+println("dual tree accuracy: $accuracy")
 
 # visualize tree
 # visualize_tree("test_fmm", system, tree; probe_indices=[11])

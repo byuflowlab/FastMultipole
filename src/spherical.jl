@@ -36,26 +36,28 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
         # potential_hessian[:,:,ind] .= drjdxi * potential_hessian[:,:,ind] * transpose(drjdxi)
         mul!(workspace3x3, drjdxi, view(potential_hessian,:,:,ind))
         mul!(view(potential_hessian,:,:,ind), workspace3x3, transpose(drjdxi))
-        for k_coord in 1:3 # loop over r, theta, and phi to save me some space on the stack
-            if k_coord == 1 # r coordinate
-                drkdxidxj = @SMatrix [
-                    (1-c_phi^2 * s_theta^2)/rho -s_theta^2*c_phi*s_phi/rho -s_theta*c_phi*c_theta/rho;
-                    (-s_theta^2*c_phi*s_phi)/rho (1-s_theta^2*s_phi^2)/rho -s_theta*s_phi*c_theta/rho;
-                    -s_theta*c_phi*c_theta/rho -s_theta*s_phi*c_theta/rho s_theta^2/rho
-                ]
-            elseif k_coord == 2 # theta coordinate
-                drkdxidxj = @SMatrix [
-                    c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
-                    -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
-                    c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
-                ]
-            else # phi coordinate
-                drkdxidxj = @SMatrix [
-                    2*c_phi*s_phi/rho^2/s_theta^2 (2*s_phi^2-1)/rho^2/s_theta^2 0;
-                    (2*s_phi^2-1)/rho^2/s_theta^2 -2*s_phi*c_phi/rho^2/s_theta^2 0;
-                    0 0 0
-                ]
-            end
+    end
+    for k_coord in 1:3 # loop over r, theta, and phi to save me some space on the stack
+        if k_coord == 1 # r coordinate
+            drkdxidxj = @SMatrix [
+                (1-c_phi^2 * s_theta^2)/rho -s_theta^2*c_phi*s_phi/rho -s_theta*c_phi*c_theta/rho;
+                (-s_theta^2*c_phi*s_phi)/rho (1-s_theta^2*s_phi^2)/rho -s_theta*s_phi*c_theta/rho;
+                -s_theta*c_phi*c_theta/rho -s_theta*s_phi*c_theta/rho s_theta^2/rho
+            ]
+        elseif k_coord == 2 # theta coordinate
+            drkdxidxj = @SMatrix [
+                c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
+                -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
+                c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
+            ]
+        else # phi coordinate
+            drkdxidxj = @SMatrix [
+                2*c_phi*s_phi/rho^2/s_theta^2 (2*s_phi^2-1)/rho^2/s_theta^2 0;
+                (2*s_phi^2-1)/rho^2/s_theta^2 -2*s_phi*c_phi/rho^2/s_theta^2 0;
+                0 0 0
+            ]
+        end
+        for ind in 1:4
             view(potential_hessian,:,:,ind) .+= drkdxidxj * potential_jacobian[k_coord,ind]
         end
     end
