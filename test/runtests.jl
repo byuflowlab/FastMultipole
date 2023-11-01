@@ -9,12 +9,10 @@ import Statistics
 S = Statistics
 import Symbolics
 sym = Symbolics
-using StaticArrays
+using StaticArrays, Random, LegendrePolynomials
 
 import FLOWFMM
 fmm = FLOWFMM
-
-using LegendrePolynomials
 
 test_dir = @__DIR__
 
@@ -1283,6 +1281,87 @@ end
 
 end
 
+function generate_gravitational(seed, n_bodies; radius_factor=0.1)
+    Random.seed!(123)
+    bodies = rand(8,n_bodies)
+    bodies[4,:] ./= (n_bodies^(1/3)*2)
+    bodies[4,:] .*= radius_factor
+    system = Gravitational(bodies)
+end
+
+@testset "single/dual tree, single/multi branch" begin
+
+expansion_order, n_per_branch, theta = 8, 100, 0.31
+n_bodies = 5000
+shrink_recenter, ndivisions = true, 5
+seed = 123
+validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.direct!(validation_system)
+validation_potential = validation_system.potential[1,:]
+
+system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!(system3; n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
+potential3 = system3.potential[1,:]
+@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=5e-4)
+
+system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
+potential4 = system4.potential[1,:]
+@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=5e-4)
+
+system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential5 = system5.potential[1,:]
+@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=5e-4)
+
+system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential6 = system6.potential[1,:]
+@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=5e-4)
+
+system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential7 = system7.potential[1,:]
+@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=5e-4)
+
+end
+
+@testset "sortwrapper" begin
+
+expansion_order, n_per_branch, theta = 10, 100, 0.31
+n_bodies = 5000
+shrink_recenter, ndivisions = true, 5
+seed = 123
+validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.direct!(validation_system)
+validation_potential = validation_system.potential[1,:]
+
+system8 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!(system8; n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
+potential8 = system8.system.potential[1,:]
+@test isapprox(maximum(abs.(potential8 - validation_potential)), 0.0; atol=5e-4)
+
+system9 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system9,); n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
+potential9 = system9.system.potential[1,:]
+@test isapprox(maximum(abs.(potential9 - validation_potential)), 0.0; atol=5e-4)
+
+system10 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!(system10, system10; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential10 = system10.system.potential[1,:]
+@test isapprox(maximum(abs.(potential10 - validation_potential)), 0.0; atol=5e-4)
+
+system11 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system11,), system11; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential11 = system11.system.potential[1,:]
+@test isapprox(maximum(abs.(potential11 - validation_potential)), 0.0; atol=5e-4)
+
+system12 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system12,), (system12,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential12 = system12.system.potential[1,:]
+@test isapprox(maximum(abs.(potential12 - validation_potential)), 0.0; atol=5e-4)
+
+end
 
 # @testset "local P2P" begin
 

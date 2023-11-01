@@ -170,40 +170,63 @@ println("dual tree accuracy: $accuracy")
 # visualize_tree("test_shrinking", sys, tree)
 # visualize_tree("test_noshrinking", sys_noshrinking, tree_noshrinking)
 
-# run some tests
-# system3 = Gravitational(bodies)
-# fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# @time fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# system4 = Gravitational(bodies)
-# fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# @time fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# system5 = Gravitational(bodies)
-# fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# @time fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# system6 = Gravitational(bodies)
-# fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# @time fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# system7 = Gravitational(bodies)
-# fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# @time fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# println("done.")
+# test various single/dual tree, single/multi branch
+n_bodies = 5000
+seed = 123
+validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.direct!(validation_system)
+validation_potential = validation_system.potential[1,:]
 
-# n_bodies = 30000
-# bodies = rand(8,n_bodies)
-# systems = (Gravitational(bodies),)
-# # systems = (fmm.SortWrapper(Gravitational(bodies)),)
-# options = fmm.Options(13,700,10.0)
-# old_bodies = deepcopy(systems[1].bodies)
-# @time tree = fmm.Tree(systems, options)
-# # note: old_bodies[tree.index_list[1]] = systems[1].bodies
-# println("Run FMM:")
-# # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
-# @time fmm.fmm!(tree, systems, options; unsort_bodies=true)
-# println("done.")
-# systems2 = (Gravitational(bodies),)
-# println("Run direct:")
-# @time fmm.direct!(systems2[1], 1:n_bodies, systems2[1], 1:n_bodies)
-# println("done.")
-# phi = systems[1].potential[1,:]
-# phi2 = systems2[1].potential[1,:]
-# @show maximum(abs.(phi2 - phi))
+system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential3 = system3.potential[1,:]
+println("Case 3 err:")
+@show maximum(potential3 - validation_potential)
+system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential4 = system4.potential[1,:]
+println("Case 4 err:")
+@show maximum(potential4 - validation_potential)
+system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential5 = system5.potential[1,:]
+println("Case 5 err:")
+@show maximum(potential5 - validation_potential)
+system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential6 = system6.potential[1,:]
+println("Case 6 err:")
+@show maximum(potential6 - validation_potential)
+system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential7 = system7.potential[1,:]
+println("Case 7 err:")
+@show maximum(potential7 - validation_potential)
+
+# test SortWrapper
+system8 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!(system8; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential8 = system8.system.potential[1,:]
+println("Case 8 err:")
+@show maximum(potential8 - validation_potential)
+system9 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system9,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential9 = system9.system.potential[1,:]
+println("Case 9 err:")
+@show maximum(potential9 - validation_potential)
+system10 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!(system10, system10; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential10 = system10.system.potential[1,:]
+println("Case 10 err:")
+@show maximum(potential10 - validation_potential)
+system11 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system11,), system11; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential11 = system11.system.potential[1,:]
+println("Case 11 err:")
+@show maximum(potential11 - validation_potential)
+system12 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system12,), (system12,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential12 = system12.system.potential[1,:]
+println("Case 12 err:")
+@show maximum(potential12 - validation_potential)
+println("done.")

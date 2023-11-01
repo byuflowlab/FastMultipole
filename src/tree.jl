@@ -306,6 +306,17 @@ end
 #####
 ##### sort bodies into the octree
 #####
+function sort_bodies!(system::SortWrapper, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
+    # sort indices
+    for i_body in bodies_index
+        i_octant = get_octant(system[i_body,POSITION], center)
+        sort_index_buffer[octant_indices[i_octant]] = sort_index[i_body]
+        octant_indices[i_octant] += 1
+    end
+    # place buffers
+    sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
+end
+
 function sort_bodies!(system, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
     # sort indices
     for i_body in bodies_index

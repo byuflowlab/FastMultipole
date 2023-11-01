@@ -229,29 +229,6 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     # @time unsort_bodies && (unsort!(systems, tree))
     unsort_bodies && (unsort!(systems, tree))
 end
-# function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
-#     # reset multipole/local expansions
-#     reset_tree && (reset_expansions!(tree))
-
-#     # create interaction lists
-#     m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
-    
-#     # run FMM
-#     println("nearfield")
-#     @time nearfield && (nearfield!(systems, tree.branches, direct_list))
-#     if farfield
-#         println("upward pass")
-#         @time upward_pass!(tree, systems)
-#         println("horizontal pass")
-#         @time horizontal_pass!(tree.branches, m2l_list, tree.expansion_order)
-#         println("downward pass")
-#         @time downward_pass!(tree, systems)
-#     end
-    
-#     # unsort bodies
-#     println("unsort")
-#     @time unsort_bodies && (unsort!(systems, tree))
-# end
 
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
     # reset multipole/local expansions
@@ -300,8 +277,8 @@ function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=
 end
 
 function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true)
-    source_tree = Tree(source_systems; expansion_order, n_per_branch_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order, n_per_branch_target, shrink_recenter=target_shrink_recenter)
+    source_tree = Tree(source_systems; expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
     return source_tree, target_tree
 end
