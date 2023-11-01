@@ -79,7 +79,8 @@ end
         y = b_y - c_y
         q = system[i_body,SCALAR_STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r, theta, -phi, expansion_order) # Ylm^* -> -dx[3]
+        #l = length(ReverseDiff.tape(r))
+        harmonics .= regular_harmonic!(harmonics, r, theta, -phi, expansion_order) # Ylm^* -> -dx[3]
         # update values
         for l in 0:expansion_order
             for m in 0:l
@@ -88,5 +89,6 @@ end
                 branch.multipole_expansion[1,i_compressed] += harmonics[i_solid_harmonic] * q
             end
         end
+        #@show length(ReverseDiff.tape(r)) - l # 451 allocations (per particle)
     end
 end

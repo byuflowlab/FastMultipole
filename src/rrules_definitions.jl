@@ -4,7 +4,7 @@ tracked_type = Union{ReverseDiff.TrackedReal,ReverseDiff.TrackedArray} # tracked
 """
 function regular_harmonic!(harmonics, rho, theta, phi, P)
 """
-
+# wrong results
 function ChainRulesCore.rrule(::typeof(regular_harmonic!), _harmonics, rho, theta, phi, P)
 
     harmonics = copy(_harmonics)
@@ -60,11 +60,10 @@ function ChainRulesCore.rrule(::typeof(regular_harmonic!), _harmonics, rho, thet
         #y,x = sincos(theta)
         ydx = tan(theta)
         xdy = cot(theta)
-        T = eltype(harmonics)
-        r̄ho = zero(T)
-        t̄heta = zero(T)
-        p̄hi = zero(T)
-        H̄conjH = zero(T)
+        r̄ho = zero(eltype(rho))
+        t̄heta = zero(eltype(theta))
+        p̄hi = zero(eltype(phi))
+        H̄conjH = zero(eltype(_harmonics))
         _pm2 = zero(eltype(theta))
         _pm1 = zero(eltype(theta))
         _pm0 = zero(eltype(theta)) # used in updating _pm1 and _pm2
@@ -72,7 +71,7 @@ function ChainRulesCore.rrule(::typeof(regular_harmonic!), _harmonics, rho, thet
         for m=0:P
             lpl = m * m + 2 * m + 1
             # Precomputing conj(H[lpl])*H̄[lpl] since it shows up everywhere.
-            H̄conjH = conj(h̄[lpl])*harmonics[lpl]
+            H̄conjH = conj(h̄[lpl])*_harmonics[lpl]
             # r̄ho[lpl] = (m/rho)*conj(H[lpl])*H̄[lpl]
             r̄ho += 2*m/rho*H̄conjH
 
@@ -89,7 +88,7 @@ function ChainRulesCore.rrule(::typeof(regular_harmonic!), _harmonics, rho, thet
             for l=m+1:P
                 lpm = l * l + l + m + 1
                 # again, precompute this because it gets used several times.
-                H̄conjH = conj(h̄[lpm])*harmonics[lpm]
+                H̄conjH = conj(h̄[lpm])*_harmonics[lpm]
 
                 # r̄ho[lpm] = ((P-2)/rho)*conj(H[lpm])*H̄[lpm]
                 r̄ho += 2*(P-2)/rho*H̄conjH
@@ -107,23 +106,22 @@ function ChainRulesCore.rrule(::typeof(regular_harmonic!), _harmonics, rho, thet
             end
             pl = -1*(2*m+1)*y*pl
         end
-        h̄armonics = zero(T) # harmonics is completely overwritten.
+        h̄armonics = h̄ # harmonics is completely overwritten.
         s̄elf = NoTangent() # not a closure
         P̄ = NoTangent() # P is the multipole expansion order
-        # The sums result from the fact that the repeated conj(H[lpm])*H̄[lpm] term is actually a dot product... I think. I'll have to do more work on this.
-        return s̄elf, h̄armonics, r̄ho, t̄heta, p̄hi, P̄
+        return s̄elf, h̄armonics, r̄ho, t̄heta, p̄hi, P̄ # complex values are returned where they should be real...
     end
     return harmonics, harmonics_pullback
 
 end
 #ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
-ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::Vector{Complex{ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
+#ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
 
 """
 function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
 """
 
-function get_drjdxi(theta,phi,rho)
+function get_drjdxi(rho,theta,phi)
     s_theta,c_theta = sincos(theta)
     s_phi,c_phi = sincos(phi)
     return @SMatrix [s_theta*c_phi    c_theta*c_phi/rho      -s_phi/rho/s_theta
@@ -131,7 +129,7 @@ function get_drjdxi(theta,phi,rho)
             c_theta         -s_theta / rho          0                    ]
 end
 
-function get_drkdxidxj(theta,phi,rho,k_coord)
+function get_drkdxidxj(rho,theta,phi,k_coord)
     s_theta,c_theta = sincos(theta)
     s_phi,c_phi = sincos(phi)
 
@@ -157,191 +155,270 @@ function get_drkdxidxj(theta,phi,rho,k_coord)
 
 end
 
+# not convinced this works... it might just be that ChainRulesTestUtils is picking values close to singularities, but the derivatives are off by a bit.
 function ChainRulesCore.rrule(::typeof(s2c_hess!),potential_jacobian, potential_hessian, workspace, rho, theta, phi)
 
-    potential_hessian_out = s2c_hess!(potential_jacobian,potential_hessian,workspace,rho,theta,phi)
-    T(A) = permutedims(A,(3,1,2))
+    s_theta, c_theta = sincos(theta)
+    s_phi, c_phi = sincos(phi)
 
+    R = get_drjdxi(rho,s_theta,s_phi,c_theta,c_phi)
+    # we only need to evaluate these functions once instead of 4 times
+    Rr = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,1)
+    Rt = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,2)
+    Rp = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,3)
+    hessian_out = copy(potential_hessian)
+
+    # convert Hessian to cartesian coordinates
+    workspace3x3 = view(workspace,:,1:3)
+    for ind in 1:4
+        workspace3x3 .= potential_hessian[:,:,ind]
+        hessian_out[:,:,ind] .= R * workspace3x3 * transpose(R)
+        hessian_out[:,:,ind] .+= Rr * potential_jacobian[1,ind]
+        hessian_out[:,:,ind] .+= Rt * potential_jacobian[2,ind]
+        hessian_out[:,:,ind] .+= Rp * potential_jacobian[3,ind]
+    end
+    temp = 0.0
     function H_pullback(H̄2)
         
-        R = get_drjdxi(theta,phi,rho)
+        #R = get_drjdxi(rho,theta,phi)
         # partial derivatives of drjdxi ≡ R:
-        dRdr = ForwardDiff.derivative((_rho)->get_drjdxi(theta,phi,_rho),rho)
-        dRdt = ForwardDiff.derivative((_theta)->get_drjdxi(_theta,phi,rho),theta)
-        dRdp = ForwardDiff.derivative((_phi)->get_drjdxi(theta,_phi,rho),phi)
-
+        dRdr = ForwardDiff.derivative((_rho)->get_drjdxi(_rho,theta,phi),rho)
+        dRdt = ForwardDiff.derivative((_theta)->get_drjdxi(rho,_theta,phi),theta)
+        dRdp = ForwardDiff.derivative((_phi)->get_drjdxi(rho,theta,_phi),phi)
+        
+        #Rr = get_drkdxidxj(rho,theta,phi,1)
+        #Rt = get_drkdxidxj(rho,theta,phi,2)
+        #Rp = get_drkdxidxj(rho,theta,phi,3)
         # partial derivatives of drkdxidxj ≡ [Rr; Rj; Rp]
-        dRrdr = ForwardDiff.derivative((_rho)->get_drkdxidxj(theta,phi,_rho,1),rho)
-        dRtdt = ForwardDiff.derivative((_theta)->get_drkdxidxj(_theta,phi,rho,2),theta)
-        dRpdp = ForwardDiff.derivative((_phi)->get_drkdxidxj(theta,_phi,rho,3),phi)
+        dRrdr = ForwardDiff.derivative((_rho)->get_drkdxidxj(_rho,theta,phi,1),rho)
+        dRtdt = ForwardDiff.derivative((_theta)->get_drkdxidxj(rho,_theta,phi,2),theta)
+        dRpdp = ForwardDiff.derivative((_phi)->get_drkdxidxj(rho,theta,_phi,3),phi)
         r̄ho = zero(eltype(rho))
         t̄heta = zero(eltype(theta))
         p̄hi = zero(eltype(phi))
-        H̄ = zeros(size(potential_hessian))
-        J̄ = zeros(size(potential_jacobian))
-        #@show size(dRdr) size(potential_hessian) size(R) size(dRrdr) size(potential_jacobian) size(H̄2)
+        H̄ = zeros(eltype(potential_hessian),size(potential_hessian))
+        J̄ = zeros(eltype(potential_jacobian),size(potential_jacobian))
+        C = 0.0
+        C2 = 0.0
+        C3 = 0.0
+
         for ind = 1:4
-            r̄ho += sum(dRdr'*H̄2[:,:,ind]*R*potential_hessian[:,:,ind]' + dRdr*potential_hessian[:,:,ind]'*R'*H̄2[:,:,ind] + dRrdr'*H̄2[:,:,ind]*potential_jacobian[1,ind]')
-            t̄heta += sum(dRdt'*H̄2[:,:,ind]*R*potential_hessian[:,:,ind]' + dRdt*potential_hessian[:,:,ind]'*R'*H̄2[:,:,ind] + dRtdt'*H̄2[:,:,ind]*potential_jacobian[2,ind]')
-            p̄hi += sum(dRdp'*H̄2[:,:,ind]*R*potential_hessian[:,:,ind]' + dRdp*potential_hessian[:,:,ind]'*R'*H̄2[:,:,ind] + dRpdp'*H̄2[:,:,ind]*potential_jacobian[3,ind]')
-            #@show J̄ get_drkdxidxj(theta,phi,rho,ind)'*H̄2[:,:,ind]
-            J̄[:,ind] .+= sum(get_drkdxidxj(theta,phi,rho,ind)'*H̄2[:,:,ind]) # hopefully this line is correct -_-
-            H̄[:,:,ind] .+= R'*H̄2[:,:,ind]*R
+            #H̄[:,:,ind] .= (R*H̄2[:,:,ind]*R')'
+            for i=1:3
+                for j=1:3
+                    for k=1:3
+                        for l=1:3
+                            C3 = H̄2[j,i,ind]*potential_hessian[k,l,ind]
+                            C = C3*R[j,k]
+                            C2 = C3*R[i,l]
+                            r̄ho += C*dRdr[i,l]
+                            r̄ho += C2*dRdr[j,k]
+                            t̄heta += C*dRdt[i,l]
+                            t̄heta += C2*dRdt[j,k]
+                            p̄hi += C*dRdp[i,l]
+                            p̄hi += C2*dRdp[j,k]
+                            H̄[k,l,ind] += R[i,l]*H̄2[j,i,ind]*R[j,k]
+                            
+                        end
+                    end
+                    r̄ho += H̄2[j,i,ind]*dRrdr[i,j]*potential_jacobian[1,ind]
+                    t̄heta += H̄2[i,j,ind]*dRtdt[j,i]*potential_jacobian[2,ind]
+                    p̄hi += H̄2[i,j,ind]*dRpdp[j,i]*potential_jacobian[3,ind]
+                    J̄[1,ind] += H̄2[i,j,ind]*Rr[j,i]
+                    J̄[2,ind] += H̄2[i,j,ind]*Rt[j,i]
+                    J̄[3,ind] += H̄2[i,j,ind]*Rp[j,i]
+                end
+            end
         end
-        #H̄ = R'*H̄2*R
-        W̄ = zeros(size(workspace))'*H̄2[:,:,1] # just memory for storing calculations in. May need to be ZeroTangent() instead.
-        #@show size(J̄) size(H̄) size(W̄) size(r̄ho) size(t̄heta) size(p̄hi)
+        W̄ = zeros(size(workspace)) # just memory for storing calculations in.
         s̄elf = NoTangent() # not a closure
         
         return s̄elf, J̄, H̄, W̄, r̄ho, t̄heta, p̄hi
     end
-    return potential_hessian_out, H_pullback
+    return hessian_out, H_pullback
 
 end
 ReverseDiff.@grad_from_chainrules s2c_hess!(potential_jacobian, potential_hessian, workspace, rho::tracked_type, theta::tracked_type, phi::tracked_type)
 
+# passes tests
 function ChainRulesCore.rrule(::typeof(s2c_jac!),potential_jacobian, workspace, rho, theta, phi)
-
-    potential_jacobian_out = s2c_jac!(copy(potential_jacobian),workspace,rho,theta,phi)
-
+    #println("initial call:")
+    #@show potential_jacobian
     function J_pullback(J̄2)
+        #println("pullback call:")
+        #@show potential_jacobian
 
-        R = get_drjdxi(theta,phi,rho)
+        R = get_drjdxi(rho,theta,phi)
         # partial derivatives of drjdxi ≡ R:
-        dRdr = ForwardDiff.derivative((_rho)->get_drjdxi(theta,phi,_rho),rho)
-        dRdt = ForwardDiff.derivative((_theta)->get_drjdxi(_theta,phi,rho),theta)
-        dRdp = ForwardDiff.derivative((_phi)->get_drjdxi(theta,_phi,rho),phi)
-
-        r̄ho = dRdr'*J̄2
-        t̄heta = dRdt'*J̄2
-        p̄hi = dRdp'*J̄2
+        dRdr = ForwardDiff.derivative((_rho)->get_drjdxi(_rho,theta,phi),rho)
+        dRdt = ForwardDiff.derivative((_theta)->get_drjdxi(rho,_theta,phi),theta)
+        dRdp = ForwardDiff.derivative((_phi)->get_drjdxi(rho,theta,_phi),phi)
+        r̄ho = 0.0
+        t̄heta = 0.0
+        p̄hi = 0.0
+        C = 0.0
+        # r̄ho' = J2'[j,i]*dRdr[i,k]*J[k,j] (although in the end it's just a scalar so the transpose doesn't matter for r̄ho')
+        # and similarly for t̄heta and p̄hi
+        for i=1:size(potential_jacobian)[1]
+            for j=1:size(potential_jacobian)[2]
+                for k=1:size(potential_jacobian)[1]
+                    C = J̄2[i,j]*potential_jacobian[k,j]
+                    r̄ho += dRdr[i,k]*C
+                    t̄heta += dRdt[i,k]*C
+                    p̄hi += dRdp[i,k]*C
+                end
+            end
+        end
         J̄ = R'*J̄2
-        W̄ = zeros(size(workspace))'*J̄2 # just memory for storing calculations in.
+        W̄ = zeros(size(workspace)) # just memory for storing calculations in.
         s̄elf = NoTangent() # not a closure
+        #@show J̄ sum(r̄ho) sum(t̄heta) sum(p̄hi)
         
         return s̄elf, J̄, W̄, sum(r̄ho), sum(t̄heta), sum(p̄hi)
 
     end
-    return potential_jacobian_out, J_pullback
+    return s2c_jac!(copy(potential_jacobian),workspace,rho,theta,phi), J_pullback
+    #potential_jacobian .= s2c_jac!(potential_jacobian,workspace,rho,theta,phi)
+    #return potential_jacobian, J_pullback
 
 end
 ReverseDiff.@grad_from_chainrules s2c_jac!(potential_jacobian, workspace, rho::tracked_type, theta::tracked_type, phi::tracked_type)
 
 function ChainRulesCore.rrule(::typeof(flatten_jacobian!),jacobian)
 
-    j = flatten_jacobian!(copy(jacobian))
+    jacobian = flatten_jacobian!(jacobian)
     
     function j_pullback(J̄)
 
-        # I need to write real pullbacks for this function and the next one
-        C = zeros(size(jacobian))
-        C[1:3,1] .= -1.0
-        C[2,4] = 1.0
-        C[3,2] = 1.0
-        C[1,3] = 1.0
-        C[3,3] = -1.0
-        C[1,4] = -1.0
-        C[2,2] = -1.0
-        J̄_out = J̄.*C
+        J̄_out = similar(jacobian)
+        J̄_out .= J̄
+        # column 1:
+        J̄_out[1:3,1] .*= -1
+        # column 2:
+        #J̄_out[1,2] += 0
+        J̄_out[2,2] -= J̄[3,1]
+        J̄_out[3,2] += J̄[2,1]
+        # column 3:
+        J̄_out[1,3] += J̄[3,1]
+        #J̄_out[2,3] += 0
+        J̄_out[3,3] -= J̄[1,1]
+        # column 4
+        J̄_out[1,4] -= J̄[2,1]
+        J̄_out[2,4] += J̄[1,1]
+        #J̄_out[3,4] += 0
         #@show size(J̄_out)
         return NoTangent(),J̄_out
 
     end
-    return j,j_pullback
+    return jacobian,j_pullback
 
 end
-ReverseDiff.@grad_from_chainrules flatten_jacobian!(jacobian::tracked_type)
+ReverseDiff.@grad_from_chainrules flatten_jacobian!(jacobian::AbstractArray{<:ReverseDiff.TrackedReal})
 
-# specialized for the 3x3x4 hessian.
+# not fully checked, but should work as long as there are no typos
 function ChainRulesCore.rrule(::typeof(flatten_hessian!),hessian)
 
-    h = flatten_hessian!(copy(hessian))
+    hessian = flatten_hessian!(hessian)
     
     function h_pullback(H̄)
 
-        C = zeros(size(hessian))
-        C[1:3,1:3,1] .= -1.0
-        C[2,1:3,4] .= 1.0
-        C[3,1:3,2] .= 1.0
-        C[1,1:3,3] .= 1.0
-        C[3,1:3,3] .= -1.0
-        C[1,1:3,4] .= -1.0
-        C[2,1:3,2] .= -1.0
+        H̄_out = copy(H̄) # 3x3x4
+        H̄_out[1:3,1:3,1] .*= -1
 
-        H̄_out = H̄.*C
-        #@show size(H̄_out)
-        return NoTangent(), H̄_out#permutedims(H̄_out,(2,1,3))
+        H̄_out[2,1,4] += H̄[1,1,1]
+        H̄_out[3,1,3] -= H̄[1,1,1]
+        
+        H̄_out[3,1,2] += H̄[2,1,1]
+        H̄_out[1,1,4] -= H̄[2,1,1]
+        
+        H̄_out[1,1,3] += H̄[3,1,1]
+        H̄_out[2,1,2] -= H̄[3,1,1]
+        
+        H̄_out[2,2,4] += H̄[1,2,1]
+        H̄_out[3,2,3] -= H̄[1,2,1]
+        
+        H̄_out[3,2,2] += H̄[2,2,1]
+        H̄_out[1,2,4] -= H̄[2,2,1]
+        
+        H̄_out[1,2,3] += H̄[3,2,1]
+        H̄_out[2,2,2] -= H̄[3,2,1]
+        
+        H̄_out[2,3,4] += H̄[1,3,1]
+        H̄_out[3,3,3] -= H̄[1,3,1]
+        
+        H̄_out[3,3,2] += H̄[2,3,1]
+        H̄_out[1,3,4] -= H̄[2,3,1]
+        
+        H̄_out[1,3,3] += H̄[3,3,1]
+        H̄_out[2,3,2] -= H̄[3,3,1]
+        
+        return NoTangent(), H̄_out
 
     end
-    return h,h_pullback
+    return hessian,h_pullback
 
 end
-ReverseDiff.@grad_from_chainrules flatten_hessian!(hessian::tracked_type)
+ReverseDiff.@grad_from_chainrules flatten_hessian!(hessian::AbstractArray{<:ReverseDiff.TrackedReal})
 
+# works
 function ChainRulesCore.rrule(::typeof(update_scalar_potential!),scalar_potential,LE,h,P)
-    error("the pullback probably needs to be recalculated")
-    scalar_potential2 = update_scalar_potential!(copy(scalar_potential),LE,h,P)
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
-        p̄otential = zeros(size(scalar_potential))
-        L̄E = zeros(size(LE))
-        h̄ = zeros(size(h))
+        p̄otential = p̄
+        L̄E = zeros(eltype(LE),size(LE))
+        h̄ = zeros(eltype(h),size(h))
         P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
 
         for n in 0:P
             nms = (n * (n+1)) >> 1 + 1
-            L̄E[nms] += real(p̄[]*h[nms])
-            h̄[nms] += real(p̄[]*LE[nms])
+            L̄E[1,nms] += p̄[1]*conj(h[nms])
+            h̄[nms] += p̄[1]*conj(LE[1,nms])
             for m in 1:n
                 nms = (n * (n + 1)) >> 1 + m + 1
-                L̄E[nms] += 2*real(p̄[]*h[nms])
-                h̄[nms] += 2*real(p̄[]*LE[nms])
+                L̄E[1,nms] += 2*p̄[1]*conj(h[nms])
+                h̄[nms] += 2*p̄[1]*conj(LE[1,nms])
                 
             end
         end
         return s̄elf, p̄otential, L̄E, h̄, P̄
 
     end
-    return scalar_potential2,potential_pullback
+    return update_scalar_potential!(deepcopy(scalar_potential),LE,h,P),potential_pullback
 
 end
-# Both of these are needed for the same function call due to the SubArray input.
-# why does this cause a segfault unless loaded last
-ReverseDiff.@grad_from_chainrules update_scalar_potential!(scalar_potential::Array{<:ReverseDiff.TrackedReal, 0},
-                                                           LE::Matrix{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           h::Vector{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
+
+ReverseDiff.@grad_from_chainrules update_scalar_potential!(scalar_potential::AbstractArray{<:ReverseDiff.TrackedReal},
+                                                           LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            P)
-ReverseDiff.@grad_from_chainrules update_scalar_potential!(scalar_potential::SubArray{<:ReverseDiff.TrackedReal, 0, Vector{<:ReverseDiff.TrackedReal}, Tuple{Int64}, true},
-                                                           LE::Matrix{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           h::Vector{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           P)
+                                                           
 
 function ChainRulesCore.rrule(::typeof(update_vector_potential!),vector_potential,LE,h,P)
 
     vector_potential2 = update_vector_potential!(copy(vector_potential),LE,h,P)
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
-        p̄otential = zeros(size(vector_potential))
-        L̄E = zeros(size(LE))
-        h̄ = zeros(size(h))
+        p̄otential = p̄
+        L̄E = zeros(eltype(LE),size(LE))
+        h̄ = zeros(eltype(h),size(h))
         P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
 
         for n in 0:P
             nms = (n * (n+1)) >> 1 + 1
-            L̄E[nms,1] += real(p̄[1]*h[nms])
-            L̄E[nms,2] += real(p̄[2]*h[nms])
-            L̄E[nms,3] += real(p̄[3]*h[nms])
-            h̄[nms] += real(p̄[1]*LE[nms,1])
-            h̄[nms] += real(p̄[2]*LE[nms,2])
-            h̄[nms] += real(p̄[3]*LE[nms,3])
+            L̄E[2,nms] += p̄[1]*conj(h[nms])
+            L̄E[3,nms] += p̄[2]*conj(h[nms])
+            L̄E[4,nms] += p̄[3]*conj(h[nms])
+            h̄[nms] += p̄[1]*conj(LE[2,nms])
+            h̄[nms] += p̄[2]*conj(LE[3,nms])
+            h̄[nms] += p̄[3]*conj(LE[4,nms])
             for m in 1:n
                 nms = (n * (n + 1)) >> 1 + m + 1
-                L̄E[nms,1] += 2*real(p̄[1]*h[nms])
-                L̄E[nms,2] += 2*real(p̄[2]*h[nms])
-                L̄E[nms,3] += 2*real(p̄[3]*h[nms])
-                h̄[nms] += 2*real(p̄[1]*LE[nms,1])
-                h̄[nms] += 2*real(p̄[2]*LE[nms,2])
-                h̄[nms] += 2*real(p̄[3]*LE[nms,3])
+                L̄E[2,nms] += 2*p̄[1]*conj(h[nms])
+                L̄E[3,nms] += 2*p̄[2]*conj(h[nms])
+                L̄E[4,nms] += 2*p̄[3]*conj(h[nms])
+                h̄[nms] += 2*p̄[1]*conj(LE[2,nms])
+                h̄[nms] += 2*p̄[2]*conj(LE[3,nms])
+                h̄[nms] += 2*p̄[3]*conj(LE[4,nms])
                 
             end
         end
@@ -351,53 +428,56 @@ function ChainRulesCore.rrule(::typeof(update_vector_potential!),vector_potentia
     return vector_potential2,potential_pullback
 
 end
-# Both of these are needed for the same function call due to the SubArray input.
-#=
-ReverseDiff.@grad_from_chainrules update_vector_potential!(vector_potential::Array{ReverseDiff.TrackedReal{Float64, Float64, Nothing}, 1},
-                                                           LE::Matrix{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           h::Vector{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           P)
-ReverseDiff.@grad_from_chainrules update_vector_potential!(vector_potential::SubArray{ReverseDiff.TrackedReal{Float64, Float64, Nothing}, 1, Vector{ReverseDiff.TrackedReal{Float64, Float64, Nothing}}, Tuple{UnitRange{Int64}}, true},
-                                                           LE::Matrix{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           h::Vector{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           P)
-                                                            =#
 
-function ChainRulesCore.rrule(::typeof(update_potential_jacobian!),vector_potential,LE,h,ht,P,r)
-
-    potential_jacobian2 = update_potential_jacobian!(copy(potential_jacobian),LE,h,P,r)
+ReverseDiff.@grad_from_chainrules update_vector_potential!(vector_potential::AbstractArray{<:ReverseDiff.TrackedReal},
+                                                           LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           P)
+                                                           
+                                                           
+# works
+function ChainRulesCore.rrule(::typeof(update_potential_jacobian!),potential_jacobian,LE,h,ht,P,r)
+    potential_jacobian_out = update_potential_jacobian!(copy(potential_jacobian),LE,h,ht,P,r)
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
-        p̄otential = zeros(size(potential_jacobian))
-        L̄E = zeros(size(LE))
-        h̄ = zeros(size(h))
-        h̄t = zeros(size(ht))
+        p̄otential = p̄
+        L̄E = zeros(eltype(LE),size(LE))
+        h̄ = zeros(eltype(h),size(h))
+        h̄t = zeros(eltype(ht),size(ht))
         r̄ = zero(eltype(r))
         P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
+
+        # no need to loop for r̄, since it factors out of the loops.
+        #for ind in 1:4
+        #    r̄ += -potential_jacobian_out[1,ind]/r*p̄[1,ind]
+        #    r̄ += -2*potential_jacobian_out[1,ind]/r*p̄[1,ind]
+        #end
 
         for n in 0:P
             nms = (n * (n+1)) >> 1 + 1
             for ind in 1:4
+
                 # contribution from J[1,ind]
-                r̄ += -potential_jacobian[nms,ind]/r*p̄[nms,ind]
-                L̄E[nms,ind] += n/r*(real(h[nms]))*p̄[nms,ind]
-                h̄[nms] += n/r*(real(LE[nms,ind]))*p̄[nms,ind]
+                r̄ += -n/r^2*real(conj(h[nms]*LE[ind,nms]*p̄[1,ind]))
+                L̄E[ind,nms] += n/r*conj(h[nms])*p̄[1,ind]
+                h̄[nms] += n/r*conj(LE[ind,nms])*p̄[1,ind]
                 # contribution from J[2,ind]
-                L̄E[nms,ind] += real(ht[nms])*p̄[nms,ind]
-                h̄t[nms,ind] += real(LE[nms,ind])*p̄[nms,ind]
+                L̄E[ind,nms] += conj(ht[nms])*p̄[2,ind]
+                h̄t[nms] += conj(LE[ind,nms])*p̄[2,ind]
             end
             for m in 1:n
                 nms = (n * (n + 1)) >> 1 + m + 1
                 for ind in 1:4
                     # contribution from J[1,ind]
-                    L̄E[nms,ind] += 2*n/r*(real(h[nms]))*p̄[nms,ind]
-                    h̄[nms] += 2*n/r*(real(LE[nms,ind]))*p̄[nms,ind]
+                    r̄ += -2*n/r^2*real(conj(h[nms]*LE[ind,nms]*p̄[1,ind]))
+                    L̄E[ind,nms] += 2*n/r*conj(h[nms])*p̄[1,ind]
+                    h̄[nms] += 2*n/r*conj(LE[ind,nms])*p̄[1,ind]
                     # contribution from J[2,ind]
-                    L̄E[nms,ind] += 2*real(ht[nms])*p̄[nms,ind]
-                    h̄t[nms,ind] += 2*real(LE[nms,ind])*p̄[nms,ind]
+                    L̄E[ind,nms] += 2*conj(ht[nms])*p̄[2,ind]
+                    h̄t[nms] += 2*conj(LE[ind,nms])*p̄[2,ind]
                     # contribution from J[3,ind]
-                    L̄E[nms,ind] += 2*m*imag(h[nms])*p̄[nms,ind] # sign flip due to complex conjugate in inner product
-                    h̄[nms] += 2*m*imag(LE[nms,ind])*p̄[nms,ind] # sign flip due to complex conjugate in inner product
+                    L̄E[ind,nms] += 2*m*conj(h[nms]*im)*p̄[3,ind]
+                    h̄[nms] += 2*m*conj(LE[ind,nms]*im)*p̄[3,ind]
 
                 end
             end
@@ -405,18 +485,240 @@ function ChainRulesCore.rrule(::typeof(update_potential_jacobian!),vector_potent
         return s̄elf, p̄otential, L̄E, h̄, h̄t, P̄, r̄
 
     end
-    return potential_jacobian2,potential_pullback
+    #@show size(potential_jacobian) size(LE) size(h) size(ht) size(P) size(r)
+    return potential_jacobian_out,potential_pullback
 
 end
-#=
-# Both of these are needed for the same function call due to the SubArray input.
-ReverseDiff.@grad_from_chainrules update_potential_jacobian!(vector_potential::Array{ReverseDiff.TrackedReal{Float64, Float64, Nothing}, 1},
-                                                           LE::Matrix{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           h::Vector{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
+
+ReverseDiff.@grad_from_chainrules update_potential_jacobian!(potential_jacobian::AbstractArray{<:ReverseDiff.TrackedReal},
+                                                           LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           ht::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            P,
-                                                           r<:ReverseDiff.TrackedReal)
-ReverseDiff.@grad_from_chainrules update_potential_jacobian!(vector_potential::SubArray{ReverseDiff.TrackedReal{Float64, Float64, Nothing}, 1, Vector{ReverseDiff.TrackedReal{Float64, Float64, Nothing}}, Tuple{UnitRange{Int64}}, true},
-                                                           LE::Matrix{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
-                                                           h::Vector{Complex{ReverseDiff.TrackedReal{Float64, Float64, ReverseDiff.TrackedArray{Float64, Float64, 1, Vector{Float64}, Vector{Float64}}}}},
+                                                           r::ReverseDiff.TrackedReal)
+                                                           
+# incorrect gradients
+function ChainRulesCore.rrule(::typeof(update_potential_hessian!),potential_hessian,LE,h,ht,ht2,P,r)
+    potential_hessian2 = update_potential_hessian!(copy(potential_hessian),LE,h,ht,ht2,P,r)
+    function potential_pullback(p̄)
+        s̄elf = NoTangent() # not a closure
+        p̄otential = zeros(size(potential_hessian))
+        L̄E = zeros(size(LE))
+        h̄ = zeros(size(h))
+        h̄t = zeros(size(ht))
+        h̄t2 = zeros(size(ht2))
+        r̄ = zero(eltype(r))
+        P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
+
+        # r̄ is fast to calculate because it factors out of the expressions for calculating the hessian of the potential.
+        for ind in 1:4
+            r̄ += 2*potential_hessian[1,1,ind]*p̄[1,1,ind]
+            r̄ += potential_hessian[1,2,ind]*p̄[1,2,ind]
+            r̄ += potential_hessian[2,1,ind]*p̄[2,1,ind]
+            r̄ += potential_hessian[1,3,ind]*p̄[1,3,ind]
+            r̄ += potential_hessian[3,1,ind]*p̄[3,1,ind]
+        end
+        r̄ *= -1/r
+
+        # everything else still needs to be looped over.
+        for n in 0:P
+            nms = (n * (n+1)) >> 1 + 1
+            c1 = n/r
+            c2 = c1*(n-1)/r
+            for ind in 1:4
+                # contribution from H[1,1,ind]
+                L̄E[ind,nms] += c2*real(h[nms])*p̄[1,1,ind]
+                h̄[nms] += c2*real(LE[ind,nms])*p̄[1,1,ind]
+                # contribution from H[1,2,ind] and H[2,1,ind]
+                L̄E[ind,nms] += c1*real(ht[nms])*(p̄[1,2,ind] + p̄[2,1,ind])
+                h̄t[nms] += c1*real(LE[ind,nms])*(p̄[1,2,ind] + p̄[2,1,ind])
+                # contriubiton from H[2,2,ind]
+                L̄E[ind,nms] += real(ht2[nms])*p̄[2,2,ind]
+                h̄t2[nms] += real(LE[ind,nms])*p̄[2,2,ind]
+            end
+            for m in 1:n
+                nms = (n * (n + 1)) >> 1 + m + 1
+                for ind in 1:4
+                    # H[1,1,ind]
+                    L̄E[ind,nms] += 2*c2*real(h[nms])*p̄[1,1,ind]
+                    h̄[nms] += 2*c2*real(LE[ind,nms])*p̄[1,1,ind]
+                    # H[1,2,ind] and H[2,1,ind]
+                    L̄E[ind,nms] += 2*c1*real(ht[nms])*(p̄[1,2,ind] + p̄[2,1,ind])
+                    h̄t[nms] += 2*c1*real(LE[ind,nms])*(p̄[1,2,ind] + p̄[2,1,ind])
+                    # H[2,2,ind]
+                    L̄E[ind,nms] += 2*real(ht2[nms])*p̄[2,2,ind]
+                    h̄t2[nms] += 2*real(LE[ind,nms])*p̄[2,2,ind]
+                    # H[1,3,ind] and H[3,1,ind]
+                    L̄E[ind,nms] += -2*m*c1*imag(h[nms])*(p̄[1,3,ind] + p̄[3,1,ind])
+                    h̄[nms] += -2*m*c1*imag(L̄E[ind,nms])*(p̄[1,3,ind] + p̄[3,1,ind])
+                    # H[2,3,ind] and H[3,2,ind]
+                    L̄E[ind,nms] += -2*m*imag(ht[nms])*(p̄[2,3,ind] + p̄[3,2,ind])
+                    h̄t[ind] += -2*m*imag(L̄E[ind,nms])*(p̄[2,3,ind] + p̄[3,2,ind])
+                    # H[3,3,ind]
+                    L̄E[ind,nms] += -2*m^2*real(h[nms])*p̄[3,3,ind]
+                    h̄[nms] += -2*m^2*real(LE[ind,nms])*p̄[3,3,ind]
+                end
+            end
+        end
+        return s̄elf, p̄otential, L̄E, h̄, h̄t, h̄t2, P̄, r̄
+
+    end
+    return potential_hessian2,potential_pullback
+
+end
+
+ReverseDiff.@grad_from_chainrules update_potential_hessian!(potential_hessian::AbstractArray{<:ReverseDiff.TrackedReal},
+                                                           LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           ht::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                                           ht2::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            P,
-                                                           r<:ReverseDiff.TrackedReal)=#
+                                                           r::ReverseDiff.TrackedReal)
+
+function ChainRulesCore.rrule(::typeof(M2L_loop!),LE,L,ME,h,expansion_order)
+
+    function LE_pullback(L̄E2)
+        s̄elf = NoTangent()
+        L̄E = L̄E2
+        L̄ = zeros(eltype(L),size(L))
+        M̄E = zeros(eltype(ME),size(ME))
+        h̄ = zeros(eltype(h),size(h))
+        P̄ = NoTangent()
+        for j in 0:expansion_order
+            Cnm = odd_or_even(j)
+            for k in 0:j
+                jks = (j * (j + 1)) >> 1 + k + 1
+                
+                for n in 0:expansion_order
+                    for m in -n:-1
+                        nms = (n * (n+1)) >> 1 - m + 1
+                        jnkm = (j + n)^2 + j + n + m - k + 1
+                        # jnkm_max = (P + P)^2 + P + P + -1 - 0 + 1 = (2P)^2 + 2P = 2P(2P+1)
+                        for dim in 1:4
+                            M̄E[dim,nms] += conj(L̄E2[dim,jks])*Cnm*h[jnkm]
+                            h̄[jnkm] += L̄E2[dim,jks]*Cnm*ME[dim,nms]
+                        end
+                    end
+                    for m in 0:n
+                        nms = (n * (n+1)) >> 1 + m + 1
+                        jnkm = (j + n) * (j + n) + j + n + m - k + 1
+                        # jnkm_max = 2P * 2P + 2P + P + P - 0 + 1 = (2P)^2 + 2P + 2P + 1 = 4P^2 + 4P + 1 = (2P + 1)^2
+                        Cnm2 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m)
+                        for dim in 1:4
+                            M̄E[dim,nms] += L̄E2[dim,jks]*Cnm2*conj(h[jnkm])
+                            h̄[jnkm] += L̄E2[dim,jks]*Cnm2*conj(ME[dim,nms])
+                        end
+                    end
+                end
+            end
+        end
+        return s̄elf,L̄E,L̄,M̄E,h̄,P̄
+    end
+    return M2L_loop!(copy(LE),L,ME,h,expansion_order), LE_pullback
+end
+
+ReverseDiff.@grad_from_chainrules M2L_loop!(LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            L::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            ME::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            expansion_order)
+
+function ChainRulesCore.rrule(::typeof(M2M_loop!),BM,CM,h,P)
+
+    function BM_pullback(B̄M2)
+        s̄elf = NoTangent()
+        B̄M = B̄M2
+        C̄M = zeros(eltype(CM),size(CM))
+        h̄ = zeros(eltype(h),size(h))
+        P̄ = NoTangent()
+
+        #M = zeros(eltype(BM), 4)
+        for j in 0:P # iterate over new multipole coefficients B_j^k
+            for k in 0:j
+                i_jk = ((j * (j+1)) >> 1) + k + 1 # current index
+                for l in 0:j
+                    for m in max(-l,-j+k+l):min(k-1,l)
+                        jlkms = (((j-l) * (j-l+1)) >> 1) + k - m + 1
+                        lm = l * l + l - m + 1
+                        ipow = ipow2l(m)
+                        oddeven = odd_or_even(l)
+                        C = ipow * oddeven
+                        for dim in 1:4
+                            C̄M[dim,jlkms] += B̄M2[dim,i_jk]*C*conj(h[lm])
+                            h̄[lm] += B̄M2[dim,i_jk]*C*conj(CM[dim,jlkms])
+                        end
+                    end
+                    for m in k:min(l,j+k-l)
+                        jlkms = (((j-l) * (j-l+1)) >> 1) - k + m + 1
+                        lm = l * l + l - m + 1
+                        oddeven = odd_or_even(k + l + m)
+                        for dim in 1:4
+                            C̄M[dim,jlkms] += conj(B̄M2[dim,i_jk])*h[lm]*oddeven
+                            h̄[lm] += B̄M2[dim,i_jk]*CM[dim,jlkms]*oddeven
+                        end
+                    end
+                end
+            end
+        end
+        return s̄elf, B̄M, C̄M, h̄, P̄
+        
+    end
+    return M2M_loop!(copy(BM),CM,h,P),BM_pullback
+
+end
+ReverseDiff.@grad_from_chainrules M2M_loop!(BM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            CM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            P)
+
+function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,P)
+
+    function CLE_pullback(C̄LE2)
+        s̄elf = NoTangent()
+        C̄LE = C̄LE2
+        B̄LE = zeros(eltype(BLE),size(BLE))
+        h̄ = zeros(eltype(h),size(h))
+        P̄ = NoTangent()
+        for j in 0:P
+            for k in 0:j
+                jks = (j * (j + 1)) >> 1 + k + 1
+                #L = zeros(eltype(CLE[1]), 4)
+                for n in j:P
+                    for m in j+k-n:-1
+                        jnkm = (n-j) * (n-j) + n - j + m - k + 1
+                        nms = (n * (n + 1)) >> 1 - m + 1
+                        oddeven = odd_or_even(k)
+                        for dim in 1:4
+                            #L[dim] += conj(BLE[dim,nms]) * h[jnkm] * oddeven
+                            B̄LE[dim,nms] += conj(C̄LE2[dim,jks])*h[jnkm]*oddeven
+                            h̄[jnkm] += C̄LE2[dim,jks]*BLE[dim,nms]*oddeven
+                        end
+                    end
+                    for m in 0:n
+                        if n-j >= abs(m-k)
+                            jnkm = (n - j) * (n - j) + n - j + m - k + 1
+                            nms = (n * (n + 1)) >> 1 + m + 1
+                            oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
+                            for dim in 1:4
+                                #L[dim] += BLE[dim,nms] * h[jnkm] * oddeven
+                                B̄LE[dim,nms] += C̄LE2[dim,jks]*conj(h[jnkm])*oddeven
+                                h̄[jnkm] += C̄LE2[dim,jks]*conj(BLE[dim,nms])*oddeven
+                                #M̄E[dim,nms] += L̄E2[dim,jks]*Cnm2*conj(h[jnkm])
+                                #h̄[jnkm] += L̄E2[dim,jks]*Cnm2*conj(ME[dim,nms])
+                            end
+                        end
+                    end
+                end
+                #CLE[:,jks] .+= L
+            end
+        end
+        return s̄elf, C̄LE, B̄LE, h̄, P̄
+
+    end
+    return L2L_loop!(copy(CLE),BLE,h,P),CLE_pullback
+    
+end
+ReverseDiff.@grad_from_chainrules L2L_loop!(CLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            BLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            P)

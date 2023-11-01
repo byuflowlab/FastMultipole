@@ -137,7 +137,6 @@ function downward_pass!(branches, systems, j_source, expansion_order)
     if branch.first_branch == -1 # branch is a leaf
         L2B!(systems, branch, expansion_order)
     else # recurse to child branches until we hit a leaf
-        println("L2L!")
         L2L!(branches, j_source, expansion_order)
         Threads.@threads for i_child in branch.first_branch:branch.first_branch + branch.n_branches - 1
             downward_pass!(branches, systems, i_child, expansion_order)
@@ -150,15 +149,25 @@ end
 #####
 function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     # reset multipole/local expansions
+    l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
+    println("tape entries before fmm: $l") # 106 tape entries up to here
     reset_tree && (reset_expansions!(tree))
     
     # run FMM
     farfield && (upward_pass!(tree, systems))
+    println("upward pass tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)") # + 102294 # update: 11570. will be 7780 after regular_harmonic! has an rrule
+    l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
     horizontal_pass!(tree, systems, theta, farfield, nearfield)
+    println("horizontal pass tape entries: $(length(ReverseDiff.tape(systems[1].potential[1])) - l)") # + 293164 # update: + 12216. will be 3648 after irregular_harmonic! has an rrule
+    l = length(ReverseDiff.tape(systems[1].potential[1]))
     farfield && (downward_pass!(tree, systems))
+    println("downward pass tape entries: $(length(ReverseDiff.tape(systems[1].potential[1])) - l)") # + 108350 (about 100k less than before removing allocations from B2L_loop!) # update: 16440. will be 13720 after regular_harmonic! has an rrule
+    l = length(ReverseDiff.tape(systems[1].potential[1]))
     
     # unsort bodies
     unsort_bodies && (unsort!(systems, tree))
+    println("tape entries after fmm: $(length(ReverseDiff.tape(systems[1].potential[1])) - l)") # + 0 (and no further tape entries past this point)
+
 end
 
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
