@@ -2,12 +2,12 @@ import FLOWFMM as fmm
 using WriteVTK
 import Base: getindex, setindex!
 using StaticArrays
-i_POSITION = 1:3
-i_RADIUS = 4
-i_STRENGTH = 5:8
-i_POTENTIAL = 1:4
-i_VELOCITY = 5:7
-i_VELOCITY_GRADIENT = 8:16
+const i_POSITION = 1:3
+const i_RADIUS = 4
+const i_STRENGTH = 5:8
+const i_POTENTIAL = 1:4
+const i_VELOCITY = 5:7
+const i_VELOCITY_GRADIENT = 8:16
 
 #####
 ##### gravitational kernel and mass elements
@@ -59,9 +59,12 @@ end
 Base.length(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF
 
+fmm.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
+
 fmm.B2M!(system::Gravitational, args...) = fmm.B2M!_sourcepoint(system, args...)
 
 function fmm.direct!(target_system, target_index, source_system::Gravitational, source_index)
+    # nbad = 0
     for i_source in source_index
         source_x, source_y, source_z = source_system[i_source,fmm.POSITION]
         source_strength = source_system.bodies[i_source].strength[1]
@@ -71,15 +74,16 @@ function fmm.direct!(target_system, target_index, source_system::Gravitational, 
             dy = target_y - source_y
             dz = target_z - source_z
             r = sqrt(dx*dx + dy*dy + dz*dz)
+            # te = @elapsed begin
             if r > 0
                 dV = source_strength / r
                 target_system[j_target,fmm.SCALAR_POTENTIAL] += dV
-                # if j_target == 22
-                #     @show r source_strength
-                # end
             end
+        # end
+        # if te > 0.00001; nbad += 1; end
         end
     end
+    # println("nbad = $nbad")
 end
 
 function save_vtk(filename, element::Gravitational, nt=0; compress=false, extra_fields=nothing)

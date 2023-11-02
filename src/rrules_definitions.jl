@@ -371,12 +371,12 @@ function ChainRulesCore.rrule(::typeof(update_scalar_potential!),scalar_potentia
 
         for n in 0:P
             nms = (n * (n+1)) >> 1 + 1
-            L̄E[1,nms] += p̄[1]*conj(h[nms])
-            h̄[nms] += p̄[1]*conj(LE[1,nms])
+            L̄E[1,nms] += p̄*conj(h[nms])
+            h̄[nms] += p̄*conj(LE[1,nms])
             for m in 1:n
                 nms = (n * (n + 1)) >> 1 + m + 1
-                L̄E[1,nms] += 2*p̄[1]*conj(h[nms])
-                h̄[nms] += 2*p̄[1]*conj(LE[1,nms])
+                L̄E[1,nms] += 2*p̄*conj(h[nms])
+                h̄[nms] += 2*p̄*conj(LE[1,nms])
                 
             end
         end
@@ -387,7 +387,7 @@ function ChainRulesCore.rrule(::typeof(update_scalar_potential!),scalar_potentia
 
 end
 
-ReverseDiff.@grad_from_chainrules update_scalar_potential!(scalar_potential::AbstractArray{<:ReverseDiff.TrackedReal},
+ReverseDiff.@grad_from_chainrules update_scalar_potential!(scalar_potential::<:ReverseDiff.TrackedReal,
                                                            LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            P)

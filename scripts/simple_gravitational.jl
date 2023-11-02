@@ -17,8 +17,8 @@ function bm_fmm()
     expansion_order, n_per_branch, theta = 5, 100, 0.4
     n_bodies = 5000
     system = generate_gravitational(123, n_bodies)
-    tree = fmm.Tree(system, expansion_order, n_per_branch; shrinking=true)
-    fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
     return nothing
 end
 
@@ -26,17 +26,34 @@ function bm_direct()
     n_bodies = 5000
     system2 = generate_gravitational(123, n_bodies)
     fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
-    return nothing
+    return sum(system2.potential)
 end
 
-function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)
-    system = generate_gravitational(123, n_bodies)
-    tree = fmm.Tree(system, expansion_order, n_per_branch; shrinking=shrinking)
-    fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
+function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    system = (generate_gravitational(123, n_bodies),)
+    println("Create tree")
+    @time tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    println("Run fmm")
+    @time fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     println("BEGIN DIRECT")
     system2 = generate_gravitational(123, n_bodies)
-    fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
-    phi = system.potential[1,:]
+    @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
+    phi = system[1].potential[1,:]
+    phi2 = system2.potential[1,:]
+    return maximum(abs.(phi2 - phi)), system, tree, system2
+end
+
+function bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    system = (generate_gravitational(123, n_bodies),)
+    println("Create trees")
+    @time source_tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    @time target_tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    println("Run fmm")
+    @time fmm.fmm!(target_tree, system, source_tree, system; theta=theta, nearfield=true, farfield=true)
+    println("BEGIN DIRECT")
+    system2 = generate_gravitational(123, n_bodies)
+    @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
+    phi = system[1].potential[1,:]
     phi2 = system2.potential[1,:]
     return maximum(abs.(phi2 - phi)), system, tree, system2
 end
@@ -102,61 +119,114 @@ function visualize_tree(name, system, tree; probe_indices=[])
 
     return nothing
 end
+# println("generate bodies")
+# @time generate_gravitational(123, 5000)
+# @time generate_gravitational(123, 5000)
 
 # note: old_bodies[tree.index_list[1]] = systems[1].bodies
-# println("Run FMM:")
-# @time bm_fmm()
-# @time bm_fmm()
+println("Run FMM:")
+@time bm_fmm()
+@time bm_fmm()
 
-# println("Run Direct:")
-# @time bm_direct()
-# @time bm_direct()
+println("Run Direct:")
+@time bm_direct()
+@time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
-println("Calculating accuracy:")
-expansion_order, n_per_branch, theta = 13, 1, 0.4
+# println("Calculating accuracy:")
+expansion_order, n_per_branch, theta = 8, 100, 0.31
 n_bodies = 5000
-shrinking = false
-accuracy, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrinking)
-println("accuracy: $accuracy")
+shrink_recenter, ndivisions = true, 5
+# sys = generate_gravitational(123,n_bodies)
+# function bmtree()# let sys=sys, expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter
+#         return fmm.Tree(sys; expansion_order, n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
+#     # end
+# end
+# @time fmm.Tree(sys; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
+# fmm.unsort!(sys, tree)
+# @time bmtree()
+# fmm.unsort!(sys, tree)
+# @time bmtree()
+# @time bmtree()
+# @time bmtree()
+
+# println("done")
+
+# sys_noshrinking = generate_gravitational(123,n_bodies)
+# tree_noshrinking = fmm.Tree(sys_noshrinking; expansion_order, n_per_branch, ndivisions=5, shrink_recenter=false)
+
+# println("done")
+run_bm_accuracy() = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+accuracy, system, tree, system2 = run_bm_accuracy()
+accuracy, system, tree, system2 = run_bm_accuracy()
+println("single tree accuracy: $accuracy")
+run_bm_accuracy_dual_tree() = bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
+accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
+println("dual tree accuracy: $accuracy")
 
 # visualize tree
-visualize_tree("test_fmm", system, tree; probe_indices=[11])
-visualize_tree("test_direct", system2, tree)
+# visualize_tree("test_fmm", system, tree; probe_indices=[11])
+# visualize_tree("test_direct", system2, tree)
+# visualize_tree("test_shrinking", sys, tree)
+# visualize_tree("test_noshrinking", sys_noshrinking, tree_noshrinking)
 
-# run some tests
-# system3 = Gravitational(bodies)
-# fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# @time fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# system4 = Gravitational(bodies)
-# fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# @time fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-# system5 = Gravitational(bodies)
-# fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# @time fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# system6 = Gravitational(bodies)
-# fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# @time fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# system7 = Gravitational(bodies)
-# fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# @time fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-# println("done.")
+# test various single/dual tree, single/multi branch
+n_bodies = 5000
+seed = 123
+validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.direct!(validation_system)
+validation_potential = validation_system.potential[1,:]
 
-# n_bodies = 30000
-# bodies = rand(8,n_bodies)
-# systems = (Gravitational(bodies),)
-# # systems = (fmm.SortWrapper(Gravitational(bodies)),)
-# options = fmm.Options(13,700,10.0)
-# old_bodies = deepcopy(systems[1].bodies)
-# @time tree = fmm.Tree(systems, options)
-# # note: old_bodies[tree.index_list[1]] = systems[1].bodies
-# println("Run FMM:")
-# # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
-# @time fmm.fmm!(tree, systems, options; unsort_bodies=true)
-# println("done.")
-# systems2 = (Gravitational(bodies),)
-# println("Run direct:")
-# @time fmm.direct!(systems2[1], 1:n_bodies, systems2[1], 1:n_bodies)
-# println("done.")
-# phi = systems[1].potential[1,:]
-# phi2 = systems2[1].potential[1,:]
-# @show maximum(abs.(phi2 - phi))
+system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential3 = system3.potential[1,:]
+println("Case 3 err:")
+@show maximum(potential3 - validation_potential)
+system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential4 = system4.potential[1,:]
+println("Case 4 err:")
+@show maximum(potential4 - validation_potential)
+system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential5 = system5.potential[1,:]
+println("Case 5 err:")
+@show maximum(potential5 - validation_potential)
+system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential6 = system6.potential[1,:]
+println("Case 6 err:")
+@show maximum(potential6 - validation_potential)
+system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential7 = system7.potential[1,:]
+println("Case 7 err:")
+@show maximum(potential7 - validation_potential)
+
+# test SortWrapper
+system8 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!(system8; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential8 = system8.system.potential[1,:]
+println("Case 8 err:")
+@show maximum(potential8 - validation_potential)
+system9 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system9,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
+potential9 = system9.system.potential[1,:]
+println("Case 9 err:")
+@show maximum(potential9 - validation_potential)
+system10 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!(system10, system10; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential10 = system10.system.potential[1,:]
+println("Case 10 err:")
+@show maximum(potential10 - validation_potential)
+system11 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system11,), system11; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential11 = system11.system.potential[1,:]
+println("Case 11 err:")
+@show maximum(potential11 - validation_potential)
+system12 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
+fmm.fmm!((system12,), (system12,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+potential12 = system12.system.potential[1,:]
+println("Case 12 err:")
+@show maximum(potential12 - validation_potential)
+println("done.")

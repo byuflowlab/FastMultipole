@@ -2,23 +2,9 @@ const BRANCH_TYPE = Float64
 global SHRINKING_OFFSET = .000001
 
 #####
-##### tree constructors
+##### tree constructor
 #####
-"""
-    Tree(elements; expansion_order=2, n_per_branch=1)
 
-Constructs an octree of the provided element objects.
-
-# Inputs
-
-- `elements`- a struct containing the following members:
-
-    * `bodies::Array{Float64,2}`- 3+4+mxN array containing element positions, strengths, and m other values that must be sorted into the octree
-    * `potential::Array{Float64,2}`- 4+12+36xN array of the potential, Jacobian, and Hessian that are reset every iteration (and don't require sorting)
-    * `velocity::Array{Float64,2}`- 3xN array of the velocity vectors at each element, reset every iteration, and calculated in post-processing
-    * `direct!::Function`- function calculates the direct influence of the body at the specified location
-    * `B2M!::Function`- function converts the body's influence into a multipole expansion
-"""
 function Tree(systems::Tuple, expansion_order, n_per_branch; shrinking=true)
     # initialize objects
     buffer_list = Tuple(get_buffer(system) for system in systems)

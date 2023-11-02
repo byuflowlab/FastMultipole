@@ -118,6 +118,8 @@ function fmm.direct!(target_system, target_index, source_system::VortexParticles
     end
 end
 
+fmm.buffer_element(system::VortexParticles) = (deepcopy(system.bodies[1]),zeros(eltype(system),52))
+
 fmm.B2M!(system::VortexParticles, args...) = fmm.B2M!_vortexpoint(system, args...)
 
 function VortexParticles(position, strength;
