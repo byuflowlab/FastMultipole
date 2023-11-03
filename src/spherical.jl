@@ -348,9 +348,7 @@ function L2L!(branch, child, regular_harmonics, L, expansion_order)
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
-                        for dim in 1:4
-                            L[dim] += branch.local_expansion[dim,nms] * regular_harmonics[jnkm] * oddeven
-                        end
+                        L .+= view(branch.local_expansion,:,nms) .* (regular_harmonics[jnkm] * oddeven)
                     end
                 end
             end

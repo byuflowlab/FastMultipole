@@ -80,6 +80,7 @@ end
 
 function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+    @show length(m2l_list)
     for (i_target, j_source) in m2l_list
         M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
     end
