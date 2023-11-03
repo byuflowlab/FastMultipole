@@ -419,13 +419,21 @@ end
 #     end
 # end
 
-# function get_sorted_body(vanilla_system, tree::SingleTree, i_sorted)
-#     return vanilla_system[tree.index[i_sorted]]
-# end
+function unsorted_index_2_sorted_index(i_unsorted, tree::SingleTree)
+    return tree.inverse_sort_index[i_unsorted]
+end
 
-# function get_sorted_body(vanilla_system, tree::MultiTree, i_system, i_sorted)
-#     return vanilla_system[tree.index[i_system][i_sorted]]
-# end
+function unsorted_index_2_sorted_index(i_unsorted, i_system, tree::MultiTree)
+    return tree.inverse_sort_index[i_system][i_unsorted]
+end
+
+function sorted_index_2_unsorted_index(i_sorted, tree::SingleTree)
+    return tree.sort_index[i_sorted]
+end
+
+function sorted_index_2_unsorted_index(i_unsorted, i_system, tree::MultiTree)
+    return tree.sort_index[i_system][i_unsorted]
+end
 
 #####
 ##### find the center and radius of a (group of) system(s) of bodies of zero radius

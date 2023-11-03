@@ -382,13 +382,10 @@ function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, p
 end
 
 function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
-    # vector_potential = view(spherical_potential,2:4)
-    # potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
-    # potential_hessian = reshape(view(spherical_potential, 17:52),3,3,4)
-    vector_potential .= zero(eltype(vector_potential))
-    potential_jacobian .= zero(eltype(potential_jacobian))
-    potential_hessian .= zero(eltype(potential_hessian))
     for i_body in bodies_index
+        vector_potential .= zero(eltype(vector_potential))
+        potential_jacobian .= zero(eltype(potential_jacobian))
+        potential_hessian .= zero(eltype(potential_hessian))
         body_position = system[i_body,POSITION]
         scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
