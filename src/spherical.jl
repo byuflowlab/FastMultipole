@@ -562,9 +562,7 @@ function L2L_loop!(CLE,BLE,h,L,P)
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
-                        for dim in 1:4
-                            L[dim] += BLE[dim,nms] * h[jnkm] * oddeven
-                        end
+                        L .+= view(branch.local_expansion,:,nms) .* (regular_harmonics[jnkm] * oddeven)
                     end
                 end
             end
@@ -599,9 +597,6 @@ function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, p
 end
 
 function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
-    # vector_potential = view(spherical_potential,2:4)
-    # potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
-    # potential_hessian = reshape(view(spherical_potential, 17:52),3,3,4)
     for i_body in bodies_index
         vector_potential .= zero(eltype(vector_potential))
         potential_jacobian .= zero(eltype(potential_jacobian))
@@ -609,6 +604,7 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
         body_position = system[i_body,POSITION]
         scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
+        # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
         system[i_body,VECTOR_POTENTIAL] .+= vector_potential
         system[i_body,VELOCITY] .+= view(potential_jacobian,:,1)
         system[i_body,VELOCITY_GRADIENT] .+= view(potential_hessian,:,:,1)

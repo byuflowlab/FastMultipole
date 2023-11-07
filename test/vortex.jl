@@ -47,7 +47,7 @@ Base.getindex(vp::VortexParticles, i, ::fmm.ScalarPotential) = vp.potential[1,i]
 Base.getindex(vp::VortexParticles, i, ::fmm.Velocity) = view(vp.velocity_stretching,i_VELOCITY_vortex,i)
 Base.getindex(vp::VortexParticles, i, ::fmm.VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
 Base.getindex(vp::VortexParticles, i, ::fmm.VectorStrength) = vp.bodies[i].strength
-Base.getindex(vp::VortexParticles, i) = vp.bodies[i], view(vp.potential,:,i)
+Base.getindex(vp::VortexParticles, i) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
 function Base.setindex!(vp::VortexParticles, val, i)
     body, potential = val
     vp.bodies[i] = body
@@ -112,13 +112,13 @@ function fmm.direct!(target_system, target_index, source_system::VortexParticles
             end
             fmm.flatten_derivatives!(jacobian, hessian)
 
-            target_system[i_target,fmm.VELOCITY] .+= jacobian[:,1]
-            target_system[i_target,fmm.VELOCITY_GRADIENT] .+= hessian[:,:,1]
+            target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
+            target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)
         end
     end
 end
 
-fmm.buffer_element(system::VortexParticles) = (deepcopy(system.bodies[1]),zeros(eltype(system),52))
+fmm.buffer_element(system::VortexParticles) = (deepcopy(system.bodies[1]),zeros(eltype(system),52),zeros(eltype(system),6))
 
 fmm.B2M!(system::VortexParticles, args...) = fmm.B2M!_vortexpoint(system, args...)
 

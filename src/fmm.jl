@@ -274,15 +274,15 @@ Note: this function merely adds to existing potential of its elements to avoid o
 
 The user must reset the potential manually.
 """
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true)
-    tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true)
+    tree = Tree(systems; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
     return tree
 end
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true)
-    source_tree = Tree(source_systems; expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true)
+    source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter, ndivisions=ndivisions_source)
+    target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
     return source_tree, target_tree
 end

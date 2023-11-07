@@ -55,7 +55,7 @@ function bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodie
     @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
     phi = system[1].potential[1,:]
     phi2 = system2.potential[1,:]
-    return maximum(abs.(phi2 - phi)), system, tree, system2
+    return maximum(abs.(phi2 - phi)), system, source_tree, target_tree, system2
 end
 
 function visualize_tree(name, system, tree; probe_indices=[])
@@ -133,9 +133,9 @@ println("Run Direct:")
 @time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
 # println("Calculating accuracy:")
-expansion_order, n_per_branch, theta = 8, 100, 0.31
-n_bodies = 5000
-shrink_recenter, ndivisions = true, 5
+expansion_order, n_per_branch, theta = 8, 300, 0.3
+n_bodies = 100000
+shrink_recenter, ndivisions = true, 10
 # sys = generate_gravitational(123,n_bodies)
 # function bmtree()# let sys=sys, expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter
 #         return fmm.Tree(sys; expansion_order, n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
@@ -156,77 +156,16 @@ shrink_recenter, ndivisions = true, 5
 
 # println("done")
 run_bm_accuracy() = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-accuracy, system, tree, system2 = run_bm_accuracy()
+# accuracy, system, tree, system2 = run_bm_accuracy()
 accuracy, system, tree, system2 = run_bm_accuracy()
 println("single tree accuracy: $accuracy")
-run_bm_accuracy_dual_tree() = bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
-accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
-println("dual tree accuracy: $accuracy")
+# run_bm_accuracy_dual_tree() = bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
+# accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
+# println("dual tree accuracy: $accuracy")
 
 # visualize tree
 # visualize_tree("test_fmm", system, tree; probe_indices=[11])
 # visualize_tree("test_direct", system2, tree)
 # visualize_tree("test_shrinking", sys, tree)
 # visualize_tree("test_noshrinking", sys_noshrinking, tree_noshrinking)
-
-# test various single/dual tree, single/multi branch
-n_bodies = 5000
-seed = 123
-validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.direct!(validation_system)
-validation_potential = validation_system.potential[1,:]
-
-system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!(system3; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-potential3 = system3.potential[1,:]
-println("Case 3 err:")
-@show maximum(potential3 - validation_potential)
-system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-potential4 = system4.potential[1,:]
-println("Case 4 err:")
-@show maximum(potential4 - validation_potential)
-system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-potential5 = system5.potential[1,:]
-println("Case 5 err:")
-@show maximum(potential5 - validation_potential)
-system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-potential6 = system6.potential[1,:]
-println("Case 6 err:")
-@show maximum(potential6 - validation_potential)
-system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-potential7 = system7.potential[1,:]
-println("Case 7 err:")
-@show maximum(potential7 - validation_potential)
-
-# test SortWrapper
-system8 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-fmm.fmm!(system8; n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-potential8 = system8.system.potential[1,:]
-println("Case 8 err:")
-@show maximum(potential8 - validation_potential)
-system9 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-fmm.fmm!((system9,); n_per_branch=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_bodies=true)
-potential9 = system9.system.potential[1,:]
-println("Case 9 err:")
-@show maximum(potential9 - validation_potential)
-system10 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-fmm.fmm!(system10, system10; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-potential10 = system10.system.potential[1,:]
-println("Case 10 err:")
-@show maximum(potential10 - validation_potential)
-system11 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-fmm.fmm!((system11,), system11; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-potential11 = system11.system.potential[1,:]
-println("Case 11 err:")
-@show maximum(potential11 - validation_potential)
-system12 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-fmm.fmm!((system12,), (system12,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=0.34, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
-potential12 = system12.system.potential[1,:]
-println("Case 12 err:")
-@show maximum(potential12 - validation_potential)
-println("done.")
