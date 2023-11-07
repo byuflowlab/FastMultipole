@@ -210,12 +210,6 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     # @time m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
     m2l_list, direct_list = build_interaction_lists(tree.branches, theta, farfield, nearfield)
     
-    # run FMM
-    horizontal_pass!(tree, systems, theta, farfield, nearfield)
-
-    farfield && (downward_pass!(tree, systems))
-    
-    
     nearfield && (nearfield!(systems, tree.branches, direct_list))
     if farfield
         upward_pass_single_thread!(tree.branches, systems, tree.expansion_order)

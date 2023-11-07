@@ -178,7 +178,7 @@ function flatten_derivatives!(jacobian, hessian)
     hessian .= flatten_hessian!(hessian)
 end
 
-@inline function update_scalar_potential!(scalar_potential,LE,h,P)
+@inline function update_scalar_potential(scalar_potential,LE,h,P)
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
@@ -504,20 +504,20 @@ end
 
 function M2L!(target_branch, source_branch, harmonics, expansion_order)
     twice_expansion_order = expansion_order << 1
-    l = length(ReverseDiff.tape(target_branch.center))
+    #l = length(ReverseDiff.tape(target_branch.center))
     harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
     dx, dy, dz = target_branch.center - source_branch.center
-    @show length(ReverseDiff.tape(target_branch.center)) - l
-    l = length(ReverseDiff.tape(target_branch.center))
+    #@show length(ReverseDiff.tape(target_branch.center)) - l
+    #l = length(ReverseDiff.tape(target_branch.center))
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    @show length(ReverseDiff.tape(target_branch.center)) - l
-    l = length(ReverseDiff.tape(target_branch.center))
+    #@show length(ReverseDiff.tape(target_branch.center)) - l
+    #l = length(ReverseDiff.tape(target_branch.center))
     irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order) # remaining tape allocations to reduce come from here... 1071 each time this is run
     L = zeros(eltype(target_branch.multipole_expansion), 4)
-    @show length(ReverseDiff.tape(target_branch.center)) - l
-    l = length(ReverseDiff.tape(target_branch.center))
+    #@show length(ReverseDiff.tape(target_branch.center)) - l
+    #l = length(ReverseDiff.tape(target_branch.center))
     target_branch.local_expansion .= M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
-    @show length(ReverseDiff.tape(target_branch.center)) - l
+    #@show length(ReverseDiff.tape(target_branch.center)) - l
 end
 
 # currently, this function never runs.
@@ -537,17 +537,17 @@ function B2L!(tree, i_branch, source_position, source_strength)
     end
 end
 
-function L2L!(branch, child, harmonics, expansion_order) # 15-50k tape entries from this, also only in the loop.
+function L2L!(branch, child, harmonics, L, expansion_order) # 15-50k tape entries from this, also only in the loop.
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
-    child.local_expansion .= L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,expansion_order)
+    #@show typeof(child.local_expansion) typeof(branch.local_expansion) typeof(harmonics) typeof(L) typeof(expansion_order)
+    child.local_expansion .= L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
 end
-function L2L_loop!(CLE,BLE,h,P)
+function L2L_loop!(CLE,BLE,h,L,P)
     for j in 0:P
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
-            L = zeros(eltype(CLE[1]), 4)
             for n in j:P
                 for m in j+k-n:-1
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
@@ -602,10 +602,10 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
     # vector_potential = view(spherical_potential,2:4)
     # potential_jacobian = reshape(view(spherical_potential, 5:16),3,4)
     # potential_hessian = reshape(view(spherical_potential, 17:52),3,3,4)
-    vector_potential .= zero(eltype(vector_potential))
-    potential_jacobian .= zero(eltype(potential_jacobian))
-    potential_hessian .= zero(eltype(potential_hessian))
     for i_body in bodies_index
+        vector_potential .= zero(eltype(vector_potential))
+        potential_jacobian .= zero(eltype(potential_jacobian))
+        potential_hessian .= zero(eltype(potential_hessian))
         body_position = system[i_body,POSITION]
         scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
@@ -619,10 +619,11 @@ function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, expansion_order)
-    scalar_potential = update_scalar_potential!(zero(eltype(vector_potential)),local_expansion,harmonics,expansion_order)
+    scalar_potential = update_scalar_potential(zero(eltype(vector_potential)),local_expansion,harmonics,expansion_order)
     vector_potential .= update_vector_potential!(vector_potential,local_expansion,harmonics,expansion_order)
     potential_jacobian .= update_potential_jacobian!(potential_jacobian,local_expansion,harmonics,harmonics_theta,expansion_order,r)
     potential_hessian .= update_potential_hessian!(potential_hessian,local_expansion,harmonics,harmonics_theta,harmonics_theta_2,expansion_order,r)
+    #@show size(potential_hessian) size(local_expansion) size(harmonics) size(harmonics_theta) size(harmonics_theta_2)
     #spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
     potential_hessian .= s2c_hess!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
     potential_jacobian .= s2c_jac!(potential_jacobian, workspace, r, theta, phi)
