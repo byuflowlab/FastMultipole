@@ -273,7 +273,10 @@ end
 
 @inline function get_buffer(system)
     # return Vector{Int64}(undef,length(system))
-    return [buffer_element(system) for _ in 1:length(system)]
+    # [buffer_element(system) for _ in 1:length(system)]
+    buffer = [buffer_element(system)]
+    resize!(buffer,length(system))
+    return buffer
 end
 
 @inline function get_buffer(systems::Tuple)

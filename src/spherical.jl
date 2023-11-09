@@ -251,21 +251,23 @@ function M2M!(branch, child, harmonics, M, expansion_order)
                     lm = l * l + l - m + 1
                     ipow = ipow2l(m)
                     oddeven = odd_or_even(l)
+                    C_tmp = harmonics[lm] * ipow * oddeven
                     for dim in 1:4
-                        M[dim] += child.multipole_expansion[dim,jlkms] * harmonics[lm] * ipow * oddeven
+                        @inbounds M[dim] += child.multipole_expansion[dim,jlkms] * C_tmp
                     end
                 end
                 for m in k:min(l,j+k-l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) - k + m + 1
                     lm = l * l + l - m + 1
                     oddeven = odd_or_even(k + l + m)
+                    C_tmp = harmonics[lm] * oddeven
                     for dim in 1:4
-                        M[dim] += conj(child.multipole_expansion[dim,jlkms]) * harmonics[lm] * oddeven
+                        @inbounds M[dim] += conj(child.multipole_expansion[dim,jlkms]) * C_tmp
                     end
                 end
             end
             for dim in 1:4
-                branch.multipole_expansion[dim,i_jk] += M[dim]
+                @inbounds branch.multipole_expansion[dim,i_jk] += M[dim]
             end
         end
     end
@@ -282,17 +284,18 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
                     nms = (n * (n+1)) >> 1 - m + 1
                     jnkm = (j + n)^2 + j + n + m - k + 1
                     # jnkm_max = (P + P)^2 + P + P + -1 - 0 + 1 = (2P)^2 + 2P = 2P(2P+1)
+                    Cnm_tmp = Cnm * harmonics[jnkm]
                     for dim in 1:4
-                        L[dim] += conj(multipole_expansion[dim,nms]) * Cnm * harmonics[jnkm]
+                        @inbounds L[dim] += conj(multipole_expansion[dim,nms]) * Cnm_tmp
                     end
                 end
                 for m in 0:n
                     nms = (n * (n+1)) >> 1 + m + 1
                     jnkm = (j + n) * (j + n) + j + n + m - k + 1
                     # jnkm_max = 2P * 2P + 2P + P + P - 0 + 1 = (2P)^2 + 2P + 2P + 1 = 4P^2 + 4P + 1 = (2P + 1)^2
-                    Cnm2 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m)
+                    Cnm_tmp = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m) * harmonics[jnkm]
                     for dim in 1:4
-                        L[dim] += multipole_expansion[dim,nms] * Cnm2 * harmonics[jnkm]
+                        @inbounds L[dim] += multipole_expansion[dim,nms] * Cnm_tmp
                     end
                 end
             end
@@ -339,8 +342,9 @@ function L2L!(branch, child, regular_harmonics, L, expansion_order)
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
                     nms = (n * (n + 1)) >> 1 - m + 1
                     oddeven = odd_or_even(k)
+                    C_tmp = regular_harmonics[jnkm] * oddeven
                     for dim in 1:4
-                        L[dim] += conj(branch.local_expansion[dim,nms]) * regular_harmonics[jnkm] * oddeven
+                        @inbounds L[dim] += conj(branch.local_expansion[dim,nms]) * C_tmp
                     end
                 end
                 for m in 0:n
@@ -348,7 +352,8 @@ function L2L!(branch, child, regular_harmonics, L, expansion_order)
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
-                        L .+= view(branch.local_expansion,:,nms) .* (regular_harmonics[jnkm] * oddeven)
+                        C_tmp = regular_harmonics[jnkm] * oddeven
+                        L .+= view(branch.local_expansion,:,nms) .* C_tmp
                     end
                 end
             end
