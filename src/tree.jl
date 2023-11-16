@@ -73,6 +73,10 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     #         i_leaf_index += 1
     #     end
     # end
+    
+    # store leaves
+    # leaf_index = Vector{Int}(undef,0)
+    # sizehint!(leaf_index,)
 
     # assemble tree
     tree = Tree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
@@ -427,7 +431,7 @@ function unsorted_index_2_sorted_index(i_unsorted, tree::SingleTree)
 end
 
 function unsorted_index_2_sorted_index(i_unsorted, i_system, tree::MultiTree)
-    return tree.inverse_sort_index[i_system][i_unsorted]
+    return tree.inverse_sort_index_list[i_system][i_unsorted]
 end
 
 function sorted_index_2_unsorted_index(i_sorted, tree::SingleTree)
@@ -435,7 +439,7 @@ function sorted_index_2_unsorted_index(i_sorted, tree::SingleTree)
 end
 
 function sorted_index_2_unsorted_index(i_unsorted, i_system, tree::MultiTree)
-    return tree.sort_index[i_system][i_unsorted]
+    return tree.sort_index_list[i_system][i_unsorted]
 end
 
 #####

@@ -66,17 +66,61 @@ end
 #####
 ##### horizontal pass
 #####
-function nearfield!(system, branches, direct_list)
+function nearfield_single_thread!(system, branches, direct_list)
     for (i_target, j_source) in direct_list
         P2P!(system, branches[i_target], branches[j_source])
     end
 end
 
-function nearfield!(target_system, target_branches, source_system, source_branches, direct_list)
+function nearfield_single_thread!(target_system, target_branches, source_system, source_branches, direct_list)
     for (i_target, j_source) in direct_list
         P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
     end
 end
+
+# function nearfield_multithread!(system, branches, direct_list)
+#     # divide chunks
+#     n_P2P = length(direct_list)
+#     n_chunks = Threads.nthreads() - 1
+#     n_per_chunk, rem = divrem(n_P2P, n_chunks)
+
+#     # spread remainder
+#     for i_start in 1:n_per_chunk+1:(n_per_chunk+1)*rem
+#         @show i_start:i_start+n_per_chunk
+#         for (i_target, j_source) in view(direct_list,i_start:i_start+n_per_chunk)
+#             P2P!(system, branches[i_target], branches[j_source])
+#         end
+#     end
+#     # regular chunks
+#     for i_start in (n_per_chunk+1)*rem+1:n_per_chunk:n_P2P
+#         @show i_start:i_start+n_per_chunk-1
+#         for (i_target, j_source) in view(direct_list,i_start:i_start+n_per_chunk-1)
+#             P2P!(system, branches[i_target], branches[j_source])
+#         end
+#     end
+# end
+
+# function nearfield_multithread!(target_system, target_branches, source_system, source_branches, direct_list)
+#     # divide chunks
+#     n_P2P = length(direct_list)
+#     n_chunks = Threads.nthreads() - 1
+#     n_per_chunk, rem = divrem(n_P2P, n_chunks)
+
+#     # spread remainder
+#     for i_start in 1:n_per_chunk+1:(n_per_chunk+1)*rem
+#         @show i_start:i_start+n_per_chunk
+#         for (i_target, j_source) in view(direct_list,i_start:i_start+n_per_chunk)
+#             P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
+#         end
+#     end
+#     # regular chunks
+#     for i_start in (n_per_chunk+1)*rem+1:n_per_chunk:n_P2P
+#         @show i_start:i_start+n_per_chunk-1
+#         for (i_target, j_source) in view(direct_list,i_start:i_start+n_per_chunk-1)
+#             P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
+#         end
+#     end
+# end
 
 function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
@@ -91,6 +135,39 @@ function horizontal_pass_single_thread!(target_branches, source_branches, m2l_li
         M2L!(target_branches[i_target], source_branches[j_source], harmonics, expansion_order)
     end
 end
+
+function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
+    # divide chunks
+    n_M2L = length(m2l_list)
+    n_chunks = Threads.nthreads() - 1
+    n_per_chunk, rem = divrem(n_P2P, n_chunks)
+
+    harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+    for (i_target, j_source) in m2l_list
+        M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
+    end
+end
+
+function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_list, expansion_order)
+    harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+    for (i_target, j_source) in m2l_list
+        M2L!(target_branches[i_target], source_branches[j_source], harmonics, expansion_order)
+    end
+end
+
+# function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
+#     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+#     for (i_target, j_source) in m2l_list
+#         M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
+#     end
+# end
+
+# function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
+#     harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+#     for (i_target, j_source) in m2l_list
+#         M2L!(target_branches[i_target], source_branches[j_source], harmonics, expansion_order)
+#     end
+# end
 
 #####
 ##### downward pass
@@ -211,7 +288,7 @@ function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, f
     # run FMM
     # println("nearfield")
     # @time nearfield && (nearfield!(systems, tree.branches, direct_list))
-    nearfield && (nearfield!(systems, tree.branches, direct_list))
+    nearfield && (nearfield_single_thread!(systems, tree.branches, direct_list))
     if farfield
         # println("upward pass")
         upward_pass_single_thread!(tree.branches, systems, tree.expansion_order)
@@ -239,7 +316,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
 
     # run FMM
-    nearfield && (nearfield!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+    nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
     if farfield
         upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)
         horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
@@ -270,15 +347,17 @@ Note: this function merely adds to existing potential of its elements to avoid o
 
 The user must reset the potential manually.
 """
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true)
+function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
     tree = Tree(systems; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
+    save_tree && (visualize(save_name, systems, tree))
     return tree
 end
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true)
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
     source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter, ndivisions=ndivisions_source)
     target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
+    save_tree && (visualize(save_name, systems, tree))
     return source_tree, target_tree
 end
