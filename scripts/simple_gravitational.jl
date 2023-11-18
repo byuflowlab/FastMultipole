@@ -129,7 +129,7 @@ theta = 0.5
 sys = generate_gravitational(123, 500000)
 tree = fmm.Tree(sys; expansion_order=expansion_order, n_per_branch=n_per_branch)
 m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, true, true)
-fmm.horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
+fmm.horizontal_pass_multi_thread!(tree.branches, m2l_list, expansion_order)
 t = @elapsed fmm.horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
 t_per_op = t / length(m2l_list)
 @show t_per_op
