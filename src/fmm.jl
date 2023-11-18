@@ -169,17 +169,17 @@ function horizontal_pass_single_thread!(target_branches, source_branches, m2l_li
     end
 end
 
-function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
-    # divide chunks
-    n_M2L = length(m2l_list)
-    n_chunks = Threads.nthreads() - 1
-    n_per_chunk, rem = divrem(n_P2P, n_chunks)
+# function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
+#     # divide chunks
+#     n_M2L = length(m2l_list)
+#     n_chunks = Threads.nthreads() - 1
+#     n_per_chunk, rem = divrem(n_P2P, n_chunks)
 
-    harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-    for (i_target, j_source) in m2l_list
-        M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
-    end
-end
+#     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+#     for (i_target, j_source) in m2l_list
+#         M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
+#     end
+# end
 
 function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_list, expansion_order)
     harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
