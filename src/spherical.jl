@@ -304,12 +304,11 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
     end
 end
 
-function M2L!(target_branch, source_branch, harmonics, expansion_order)
+function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
     twice_expansion_order = expansion_order << 1
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
-    L = zeros(eltype(target_branch.local_expansion), 4)
     M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
