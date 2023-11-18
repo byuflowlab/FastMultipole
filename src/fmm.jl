@@ -77,12 +77,16 @@ function body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf
     end
 end
 
-function upward_pass_multithread!(branches, systems, expansion_order, levels_indices, leaf_index, thread_pool)
+function translate_multipoles_multi_thread!(branches, systems, expansion_order, levels_indices)
+    return nothing
+end
+
+function upward_pass_multithread!(branches, systems, expansion_order, levels_indices, leaf_index)
     # create multipole expansions
-    body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index, thread_pool)
+    body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
 
     # m2m translation
-    translate_multipoles_multi_thread!(branches, systems, expansion_order, levels_indices, thread_pool)
+    translate_multipoles_multi_thread!(branches, systems, expansion_order, levels_indices)
 end
 
 #####
@@ -148,6 +152,15 @@ function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     for (i_target, j_source) in m2l_list
         M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
+    end
+end
+
+function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
+    harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+    Threads.@threads for (i_target, j_source) in m2l_list
+        Threads.@lock branches[i_target].lock do
+            M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
+        end
     end
 end
 

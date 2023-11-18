@@ -123,9 +123,19 @@ end
 # @time generate_gravitational(123, 5000)
 # @time generate_gravitational(123, 5000)
 
-sys = generate_gravitational(123, 50000)
+expansion_order = 4
+n_per_branch = 50
+theta = 0.5
+sys = generate_gravitational(123, 500000)
+tree = fmm.Tree(sys; expansion_order=expansion_order, n_per_branch=n_per_branch)
+m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, true, true)
+fmm.horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
+t = @elapsed fmm.horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
+t_per_op = t / length(m2l_list)
+@show t_per_op
+
 # nfp, nfe = fmm.get_nearfield_parameters(sys)
-params, errors, nearfield_params, nearfield_errors = fmm.estimate_tau(sys; expansion_orders = 1:9:20, epsilon=0.1, cost_file_read=false, cost_file_write=true)
+# params, errors, nearfield_params, nearfield_errors = fmm.estimate_tau(sys; expansion_orders = 1:9:20, epsilon=0.1, cost_file_read=false, cost_file_write=true)
 
 # note: old_bodies[tree.index_list[1]] = systems[1].bodies
 # println("Run FMM:")
