@@ -4,7 +4,7 @@ global SHRINKING_OFFSET = .000001
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0)
+function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
     # initialize variables
     octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
     cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
@@ -75,20 +75,33 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     # end
     
     # store leaves
-    # leaf_index = Vector{Int}(undef,0)
-    # sizehint!(leaf_index,)
+    leaf_index = Vector{Int}(undef,0)
+    sizehint!(leaf_index, length(levels_index[end]))
+    for (i_branch,branch) in enumerate(branches)
+        if branch.n_branches == 0
+            push!(leaf_index, i_branch)
+        end
+    end
+
+    # cost parameters
+    if estimate_cost
+        params, errors, nearfield_params, nearfield_errors = estimate_tau(system; read_cost_file=read_cost_file, write_cost_file=write_cost_file)
+        cost_parameters = CostParameters(params..., nearfield_params)
+    else
+        cost_parameters = CostParameters(system)
+    end
 
     # assemble tree
-    tree = Tree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
+    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
 
     return tree
 end
 
-Tree(branches::Vector{<:SingleBranch}, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
-    SingleTree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
+Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters) = 
+    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
 
-Tree(branches::Vector{<:MultiBranch}, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
-    MultiTree(branches, levels_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
+Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters) = 
+    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
 
 @inline total_n_bodies(system) = length(system)
 
@@ -539,7 +552,7 @@ end
 
 @inline get_n_bodies(bodies_index::UnitRange) = length(bodies_index)
 
-@inline function get_n_bodies(bodies_indices)
+@inline function get_n_bodies(bodies_indices::AbstractVector{<:UnitRange})
     n_bodies = 0
     for bodies_index in bodies_indices
         n_bodies += get_n_bodies(bodies_index)

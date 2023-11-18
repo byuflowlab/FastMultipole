@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TestEnv = "1e6cf692-eddd-4d53-88a5-2d735e33781b"

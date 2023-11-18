@@ -57,6 +57,66 @@ struct SourcePanel <: AbstractKernel end # not yet implemented
 
 struct DipolePanel <: AbstractKernel end # not yet implemented
 
+
+#####
+##### cost parameters
+#####
+abstract type CostParameters end
+
+struct SingleCostParameters <: CostParameters
+    alloc_M2M_L2L::SVector{3,Float64}
+    tau_M2M_L2L::SVector{5,Float64}
+    alloc_M2L::SVector{3,Float64}
+    tau_M2L::SVector{5,Float64}
+    alloc_L2B::SVector{3,Float64}
+    tau_L2B::SVector{3,Float64}
+    C_nearfield::Float64
+    tau_B2M::SVector{3,Float64}
+end
+
+SingleCostParameters(;
+    alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT, 
+    tau_M2M_L2L = TAU_M2M_DEFAULT, 
+    alloc_M2L = ALLOC_M2L_DEFAULT, 
+    tau_M2L = TAU_M2L_DEFAULT, 
+    tau_L2L = TAU_L2L_DEFAULT, 
+    alloc_L2B = ALLOC_L2B_DEFAULT, 
+    tau_L2B = TAU_L2B_DEFAULT, 
+    C_nearfield = C_NEARFIELD_DEFAULT,
+    tau_B2M = TAU_B2M_DEFAULT
+) = SingleCostParameters(alloc_M2M_L2L, tau_M2M_L2L, alloc_M2L, tau_M2L, alloc_L2B, tau_L2B, C_nearfield, tau_B2M)
+
+struct MultiCostParameters{N} <: CostParameters
+    alloc_M2M_L2L::SVector{3,Float64}
+    tau_M2M_L2L::SVector{5,Float64}
+    alloc_M2L::SVector{3,Float64}
+    tau_M2L::SVector{5,Float64}
+    alloc_L2B::SVector{3,Float64}
+    tau_L2B::SVector{3,Float64}
+    C_nearfield::SVector{N,Float64}
+    tau_B2M::SVector{N,SVector{3,Float64}}
+end
+
+MultiCostParameters{N}(;
+    alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT,
+    tau_M2M_L2L = TAU_M2M_L2L_DEFAULT,
+    alloc_M2L = ALLOC_M2L_DEFAULT,
+    tau_M2L = TAU_M2L_DEFAULT,
+    alloc_L2B = ALLOC_L2B_DEFAULT,
+    tau_L2B = TAU_L2B_DEFAULT,
+    C_nearfield = SVector{N,Float64}(C_NEARFIELD_DEFAULT for _ in 1:N),
+    tau_B2M = SVector{N,SVector{3,Float64}}(TAU_B2M_DEFAULT for _ in 1:N)
+) where N = MultiCostParameters{N}(alloc_M2M_L2L, tau_M2M_L2L, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_B2M)
+
+CostParameters(systems::Tuple) = MultiCostParameters()
+CostParameters(system) = SingleCostParameters()
+
+CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::Float64, tau_M2M_L2L) = 
+    SingleCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
+
+CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) = 
+    MultiCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
+
 #####
 ##### octree creation
 #####
@@ -97,21 +157,25 @@ sorted_bodies[inverse_index_list] undoes the sort operation performed by the tre
 struct MultiTree{TF,N,TB} <: Tree
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
+    leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
     expansion_order::Int64
     n_per_branch::Int64    # max number of bodies in a leaf
+    cost_parameters::MultiCostParameters{N}
 end
 
 struct SingleTree{TF,TB} <: Tree
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
+    leaf_index::Vector{Int}
     sort_index::Vector{Int64}
     inverse_sort_index::Vector{Int64}
     buffer::TB
     expansion_order::Int64
     n_per_branch::Int64    # max number of bodies in a leaf
+    cost_parameters::SingleCostParameters
 end
 
 #####

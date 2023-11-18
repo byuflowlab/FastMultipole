@@ -1363,6 +1363,23 @@ potential12 = system12.system.potential[1,:]
 
 end
 
+@testset "file read/write" begin
+
+    params = (fmm.ALLOC_M2M_DEFAULT, fmm.TAU_B2M_DEFAULT, fmm.TAU_M2M_L2L_DEFAULT, fmm.ALLOC_M2L_DEFAULT, fmm.TAU_M2L_DEFAULT, fmm.TAU_L2L_DEFAULT, fmm.ALLOC_L2B_DEFAULT, fmm.TAU_L2B_DEFAULT)
+    errors = rand(8)
+    nearfield_params = fmm.C_NEARFIELD_DEFAULT
+    nearfield_error = rand()
+
+    fmm.write_cost_parameters("testing.csv", params, errors, nearfield_params, nearfield_error)
+    params_check, errors_check, nearfield_params_check, nearfield_error_check = fmm.read_cost_parameters("testing.csv")
+
+    for (p,p_check) in zip((params_check...,errors_check,nearfield_params_check,nearfield_error_check),(params...,errors,nearfield_params,nearfield_error))
+        @test p == p_check
+    end
+
+    rm("testing.csv")
+end
+
 # @testset "local P2P" begin
 
 # bodies = [

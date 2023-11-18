@@ -20,8 +20,8 @@ const i_VELOCITY_vortex = 1:3
 const i_STRETCHING_vortex = 4:6
 
 struct Vorton{TF}
-    position::SVector{3,TF}
-    strength::SVector{3,TF}
+    position::fmm.SVector{3,TF}
+    strength::fmm.SVector{3,TF}
     sigma::TF
 end
 
@@ -129,7 +129,7 @@ function VortexParticles(position, strength;
 )
     @assert size(position)[1] == 3
     @assert size(strength)[1] == 3
-    bodies = [Vorton(SVector{3}(position[:,i]), SVector{3}(strength[:,i]), 0.0) for i in 1:size(position)[2]]
+    bodies = [Vorton(fmm.SVector{3}(position[:,i]), fmm.SVector{3}(strength[:,i]), 0.0) for i in 1:size(position)[2]]
     return VortexParticles(bodies, potential, velocity_stretching)
 end
 
@@ -138,12 +138,12 @@ function VortexParticles(bodies;
     potential = zeros(i_VELOCITY_GRADIENT_vortex[end],N),
     velocity_stretching = zeros(3+3,N)
 )
-    bodies = [Vorton(SVector{3}(bodies[1:3,i]), SVector{3}(bodies[5:7,i]), bodies[4,i]) for i in 1:size(bodies)[2]]
+    bodies = [Vorton(fmm.SVector{3}(bodies[1:3,i]), fmm.SVector{3}(bodies[5:7,i]), bodies[4,i]) for i in 1:size(bodies)[2]]
     return VortexParticles(bodies, potential, velocity_stretching)
 end
 
 @inline function update_velocity_stretching!(system, i_body)
-    # vorticity = @SVector [
+    # vorticity = @fmm.SVector [
     #     jacobian[2,3] - jacobian[3,2],
     #     jacobian[3,1] - jacobian[1,3],
     #     jacobian[1,2] - jacobian[2,1]
@@ -193,7 +193,7 @@ function convect!(vortex_particles::VortexParticles, nsteps;
         # integration options
         integrate!::IntegrationScheme=Euler(1.0),
         # fmm options
-        fmm_p=4, fmm_ncrit=50, fmm_theta=0.5, fmm_targets=SVector{1}(Int8(1)),
+        fmm_p=4, fmm_ncrit=50, fmm_theta=0.5, fmm_targets=fmm.SVector{1}(Int8(1)),
         direct::Bool=false,
         # save options
         save::Bool=true, filename::String="default", compress::Bool=false,

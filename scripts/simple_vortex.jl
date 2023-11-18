@@ -136,3 +136,6 @@ end
 # err_potential, err_velocity, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # println("relative potential error: $err_potential")
 # println("relative velocity error: $err_velocity")
+
+system = generate_vortices(123, 50000)
+fmm.get_nearfield_parameters(system)

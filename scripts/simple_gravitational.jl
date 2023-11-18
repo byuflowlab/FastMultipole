@@ -123,19 +123,23 @@ end
 # @time generate_gravitational(123, 5000)
 # @time generate_gravitational(123, 5000)
 
-# note: old_bodies[tree.index_list[1]] = systems[1].bodies
-println("Run FMM:")
-@time bm_fmm()
-@time bm_fmm()
+sys = generate_gravitational(123, 50000)
+# nfp, nfe = fmm.get_nearfield_parameters(sys)
+params, errors, nearfield_params, nearfield_errors = fmm.estimate_tau(sys; expansion_orders = 1:9:20, epsilon=0.1, cost_file_read=false, cost_file_write=true)
 
-println("Run Direct:")
-@time bm_direct()
-@time bm_direct()
+# note: old_bodies[tree.index_list[1]] = systems[1].bodies
+# println("Run FMM:")
+# @time bm_fmm()
+# @time bm_fmm()
+
+# println("Run Direct:")
+# @time bm_direct()
+# @time bm_direct()
 # @btime fmm.fmm!($tree, $systems, $options; unsort_bodies=true)
 # println("Calculating accuracy:")
-expansion_order, n_per_branch, theta = 8, 300, 0.3
-n_bodies = 100000
-shrink_recenter, ndivisions = true, 10
+# expansion_order, n_per_branch, theta = 8, 300, 0.3
+# n_bodies = 100000
+# shrink_recenter, ndivisions = true, 10
 # sys = generate_gravitational(123,n_bodies)
 # function bmtree()# let sys=sys, expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter
 #         return fmm.Tree(sys; expansion_order, n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
@@ -155,10 +159,10 @@ shrink_recenter, ndivisions = true, 10
 # tree_noshrinking = fmm.Tree(sys_noshrinking; expansion_order, n_per_branch, ndivisions=5, shrink_recenter=false)
 
 # println("done")
-run_bm_accuracy() = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# run_bm_accuracy() = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # accuracy, system, tree, system2 = run_bm_accuracy()
-accuracy, system, tree, system2 = run_bm_accuracy()
-println("single tree accuracy: $accuracy")
+# accuracy, system, tree, system2 = run_bm_accuracy()
+# println("single tree accuracy: $accuracy")
 # run_bm_accuracy_dual_tree() = bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
 # accuracy, system, tree, system2 = run_bm_accuracy_dual_tree()
@@ -169,3 +173,4 @@ println("single tree accuracy: $accuracy")
 # visualize_tree("test_direct", system2, tree)
 # visualize_tree("test_shrinking", sys, tree)
 # visualize_tree("test_noshrinking", sys_noshrinking, tree_noshrinking)
+

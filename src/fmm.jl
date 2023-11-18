@@ -63,6 +63,28 @@ function upward_pass_single_thread!(branches, systems, expansion_order)
     end
 end
 
+function body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
+    n_threads = Threads.nthreads()
+    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
+    rem > 0 && (n_per_chunk += 1)
+
+    Threads.@threads for i_start in 1:n_per_chunk:length(leaf_index)
+        harmonics = zeros(eltype(branches[i_start].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+        M = zeros(eltype(branches[i_start].multipole_expansion), 4)
+        for leaf in view(branches,i_start:i_start+n_per_chunk-1)
+            B2M!(leaf, systems, harmonics, expansion_order)
+        end
+    end
+end
+
+function upward_pass_multithread!(branches, systems, expansion_order, levels_indices, leaf_index, thread_pool)
+    # create multipole expansions
+    body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index, thread_pool)
+
+    # m2m translation
+    translate_multipoles_multi_thread!(branches, systems, expansion_order, levels_indices, thread_pool)
+end
+
 #####
 ##### horizontal pass
 #####
@@ -214,33 +236,33 @@ end
 function build_interaction_lists(branches, theta, farfield, nearfield)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, branches, theta, farfield, nearfield)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, branches, branches, theta, farfield, nearfield)
     
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, branches, theta, farfield, nearfield)
-    source_branch = branches[j_source]
-    target_branch = branches[i_target]
+# function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, branches, theta, farfield, nearfield)
+#     source_branch = branches[j_source]
+#     target_branch = branches[i_target]
 
-    spacing = source_branch.center - target_branch.center
-    center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
-    summed_radii_squared = target_branch.radius + source_branch.radius
-    summed_radii_squared *= summed_radii_squared
-    if center_spacing_squared * theta * theta >= summed_radii_squared && farfield# meet M2L criteria
-        push!(m2l_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield # both leaves
-        push!(direct_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
-        for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, branches, theta, farfield, nearfield)
-        end
-    else
-        for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, branches, theta, farfield, nearfield)
-        end
-    end
-end
+#     spacing = source_branch.center - target_branch.center
+#     center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
+#     summed_radii_squared = target_branch.radius + source_branch.radius
+#     summed_radii_squared *= summed_radii_squared
+#     if center_spacing_squared * theta * theta >= summed_radii_squared && farfield# meet M2L criteria
+#         push!(m2l_list, SVector{2}(i_target, j_source))
+#     elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield # both leaves
+#         push!(direct_list, SVector{2}(i_target, j_source))
+#     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
+#         for i_child in target_branch.branch_index
+#             build_interaction_lists!(m2l_list, direct_list, i_child, j_source, branches, theta, farfield, nearfield)
+#         end
+#     else
+#         for j_child in source_branch.branch_index
+#             build_interaction_lists!(m2l_list, direct_list, i_target, j_child, branches, theta, farfield, nearfield)
+#         end
+#     end
+# end
 
 function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
