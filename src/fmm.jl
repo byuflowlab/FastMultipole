@@ -159,7 +159,7 @@ end
 function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
     # divide chunks
     n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
+    n_per_chunk, rem = divrem(length(m2l_list),n_threads)
     rem > 0 && (n_per_chunk += 1)
     n_per_chunk == 0 && (n_per_chunk = 1)
 
