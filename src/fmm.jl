@@ -157,10 +157,20 @@ function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
 end
 
 function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
-    Threads.@threads for (i_target, j_source) in m2l_list
-        harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-        L = zeros(eltype(branches[1].local_expansion), 4)
-        Threads.@lock branches[i_target].lock M2L!(branches[i_target], branches[j_source], harmonics, L, expansion_order)
+    # divide chunks
+    n_threads = Threads.nthreads()
+    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
+    rem > 0 && (n_per_chunk += 1)
+    n_per_chunk == 0 && (n_per_chunk = 1)
+
+    # divide and concquer
+    Threads.@threads for i_start in 1:n_per_chunk:length(m2l_list)
+        harmonics = zeros(eltype(branches[i_start].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+        L = zeros(eltype(branches[i_start].local_expansion), 4)
+        for (i_target, j_source) in view(m2l_list,i_start:i_start+n_per_chunk-1)
+            target_branch = branches[i_target]
+            Threads.@lock target_branch.lock M2L!(target_branch, branches[j_source], harmonics, L, expansion_order)
+        end
     end
 end
 
