@@ -158,9 +158,7 @@ end
 function horizontal_pass_multi_thread!(branches, m2l_list, expansion_order)
     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     Threads.@threads for (i_target, j_source) in m2l_list
-        Threads.@lock branches[i_target].lock do
-            M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
-        end
+        Threads.@lock branches[i_target].lock M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
     end
 end
 
