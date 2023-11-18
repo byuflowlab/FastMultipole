@@ -134,6 +134,11 @@ t = @elapsed fmm.horizontal_pass_multi_thread!(tree.branches, m2l_list, expansio
 t_per_op = t / length(m2l_list)
 @show t_per_op
 
+fmm.horizontal_pass_single_thread!(tree.branches, m2l_list, expansion_order)
+t = @elapsed fmm.horizontal_pass_single_thread!(tree.branches, m2l_list, expansion_order)
+t_per_op = t / length(m2l_list)
+@show t_per_op
+
 # nfp, nfe = fmm.get_nearfield_parameters(sys)
 # params, errors, nearfield_params, nearfield_errors = fmm.estimate_tau(sys; expansion_orders = 1:9:20, epsilon=0.1, cost_file_read=false, cost_file_write=true)
 
