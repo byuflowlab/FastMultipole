@@ -142,7 +142,7 @@ println("done.")
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-using BenchmarkTools
+# using BenchmarkTools
 
 #####
 ##### translate multipoles
@@ -154,8 +154,12 @@ st_tm_fun(this_index) = fmm.translate_multipoles_single_thread!(tree.branches, e
 for i in 1:6
     levels_index = tree.levels_index[i]
     this_index = [levels_index]
-    t_mt = @belapsed mt_tm_fun($this_index)
-    t_st = @belapsed st_tm_fun($this_index)
+    mt_tm_fun(this_index)
+    st_tm_fun(this_index)
+    t_mt = @elapsed mt_tm_fun(this_index)
+    t_st = @elapsed st_tm_fun(this_index)
+    # t_mt = @belapsed mt_tm_fun($this_index)
+    # t_st = @belapsed st_tm_fun($this_index)
     push!(tm_mt, t_mt)
     push!(tm_st, t_st)
 end
@@ -171,11 +175,15 @@ println(round.(tm_summary, digits=5))
 b2m_st = []
 b2m_mt = []
 mt_b2m_fun(this_index) = fmm.body_2_multipole_multi_thread!(tree.branches, sys, expansion_order, this_index) 
-st_b2m_fun(this_index) = fmm.body_2_multipole_single_thread!(tree.branches, sys, expansion_order, this_index) 
+st_b2m_fun(this_index) = fmm.body_2_multipole_single_thread!(tree.branches, sys, expansion_order, this_index)
 for i in [1, 10, 100, 1000, 10000]
     this_index = tree.leaf_index[1:i]
-    t_mt = @belapsed mt_b2m_fun($this_index)
-    t_st = @belapsed st_b2m_fun($this_index)
+    mt_b2m_fun(this_index)
+    st_b2m_fun(this_index)
+    t_mt = @elapsed mt_b2m_fun(this_index)
+    t_st = @elapsed st_b2m_fun(this_index)
+    # t_mt = @belapsed mt_b2m_fun($this_index)
+    # t_st = @belapsed st_b2m_fun($this_index)
     push!(b2m_mt,t_mt)
     push!(b2m_st,t_st)
 end
@@ -195,9 +203,12 @@ mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.b
 st_m2l_fun(this_index) = fmm.horizontal_pass_single_thread!(tree.branches, tree.branches, this_index, expansion_order)
 for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
     this_index = m2l_list[1:i]
-    println("i passes: $i")
-    t_mt = @belapsed mt_m2l_fun($this_index)
-    t_st = @belapsed st_m2l_fun($this_index)
+    mt_m2l_fun(this_index)
+    st_m2l_fun(this_index)
+    t_mt = @elapsed mt_m2l_fun(this_index)
+    t_st = @elapsed st_m2l_fun(this_index)
+    # t_mt = @belapsed mt_m2l_fun($this_index)
+    # t_st = @belapsed st_m2l_fun($this_index)
     push!(m2l_mt, t_mt)
     push!(m2l_st, t_st)
 end
@@ -217,8 +228,12 @@ st_direct_fun(this_index) = fmm.nearfield_single_thread!(sys, tree.branches, sys
 for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
     println("i passes: $i")
     this_index = direct_list[1:i]
-    t_mt = @belapsed mt_direct_fun($this_index)
-    t_st = @belapsed st_direct_fun($this_index)
+    mt_direct_fun(this_index)
+    st_direct_fun(this_index)
+    t_mt = @elapsed mt_direct_fun(this_index)
+    t_st = @elapsed st_direct_fun(this_index)
+    # t_mt = @belapsed mt_direct_fun($this_index)
+    # t_st = @belapsed st_direct_fun($this_index)
     push!(direct_mt, t_mt)
     push!(direct_st, t_st)
 end
@@ -238,8 +253,12 @@ st_tl_fun(this_index) = fmm.translate_multipoles_single_thread!(tree.branches, e
 for i in 1:6
     levels_index = tree.levels_index[i]
     this_index = [levels_index]
-    t_mt = @belapsed mt_tl_fun($this_index)
-    t_st = @belapsed st_tl_fun($this_index)
+    mt_tl_fun(this_index)
+    st_tl_fun(this_index)
+    t_mt = @elapsed mt_tl_fun(this_index)
+    t_st = @elapsed st_tl_fun(this_index)
+    # t_mt = @belapsed mt_tl_fun($this_index)
+    # t_st = @belapsed st_tl_fun($this_index)
     push!(tl_mt, t_mt)
     push!(tl_st, t_st)
 end
@@ -259,8 +278,12 @@ st_l2b_fun(this_index) = fmm.local_2_body_single_thread!(tree.branches, sys, exp
 for i in [1, 10, 100, 1000, 10000]
     println("i leaves: $i")
     this_index = tree.leaf_index[1:i]
-    t_mt = @belapsed mt_l2b_fun($this_index)
-    t_st = @belapsed st_l2b_fun($this_index)
+    mt_l2b_fun(this_index)
+    st_l2b_fun(this_index)
+    t_mt = @elapsed mt_l2b_fun(this_index)
+    t_st = @elapsed st_l2b_fun(this_index)
+    # t_mt = @belapsed mt_l2b_fun($this_index)
+    # t_st = @belapsed st_l2b_fun($this_index)
     push!(l2b_mt, t_mt)
     push!(l2b_st, t_st)
 end
