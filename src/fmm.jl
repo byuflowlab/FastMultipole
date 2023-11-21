@@ -108,7 +108,7 @@ function translate_multipoles_multi_thread!(branches, expansion_order, levels_in
     for level_index in view(levels_index,length(levels_index):-1:1)
         
         # if its too fine, no sense multithreading
-        if true # length(level_index) > 100
+        if Threads.nthreads() < 5 # length(level_index) > 100 # this just isn't efficient for high numbers of threads
 
             # divide chunks
             n_per_chunk, rem = divrem(length(level_index),n_threads)
@@ -272,7 +272,7 @@ function translate_locals_multi_thread!(branches, expansion_order, levels_index)
     for level_index in levels_index
         
         # if its too fine, no sense multithreading
-        if true # length(level_index) > 100
+        if Threads.nthreads() < 5 # length(level_index) > 100
 
             # divide chunks
             n_per_chunk, rem = divrem(length(level_index),n_threads)
