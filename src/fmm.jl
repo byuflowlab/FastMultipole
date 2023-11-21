@@ -410,11 +410,15 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
     # run FMM
     if Threads.nthreads() == 1
-        nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        println("nearfield")
+        @time nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
-            upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)
-            horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)
+            println("upward pass:")
+            @time upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)
+            println("horizontal pass:")
+            @time horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+            println("downward pass:")
+            @time downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
     else # multithread
         println("nearfield")
