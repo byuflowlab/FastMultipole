@@ -158,10 +158,12 @@ end
 
 function upward_pass_multi_thread!(branches, systems, expansion_order, levels_index, leaf_index)
     # create multipole expansions
-    body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
+    println("b2m")
+    @time body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
 
     # m2m translation
-    translate_multipoles_multi_thread!(branches, expansion_order, levels_index)
+    println("tm")
+    @time translate_multipoles_multi_thread!(branches, expansion_order, levels_index)
 end
 
 #####
@@ -344,11 +346,13 @@ function local_2_body_single_thread!(branches, systems, expansion_order, leaf_in
 end
 
 function downward_pass_multi_thread!(branches, systems, expansion_order, levels_index, leaf_index)
-    # create multipole expansions
-    local_2_body_multi_thread!(branches, systems, expansion_order, leaf_index)
-
     # m2m translation
-    translate_locals_multi_thread!(branches, expansion_order, levels_index)
+    println("tl")
+    @time translate_locals_multi_thread!(branches, expansion_order, levels_index)
+    
+    # create multipole expansions
+    println("l2b")
+    @time local_2_body_multi_thread!(branches, systems, expansion_order, leaf_index)
 end
 
 #####
@@ -413,10 +417,12 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
     else # multithread
-        nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        println("nearfield")
+        @time nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             upward_pass_multi_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-            horizontal_pass_multi_thread!(target_tree.branches, source_tree.branches, m2l_list, target_tree.expansion_order)
+            println("horizontal pass:")
+            @time horizontal_pass_multi_thread!(target_tree.branches, source_tree.branches, m2l_list, target_tree.expansion_order)
             downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
