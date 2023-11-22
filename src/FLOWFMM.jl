@@ -1,8 +1,7 @@
 module FLOWFMM
 
 import Base.:^
-using LinearAlgebra, StaticArrays, WriteVTK, BenchmarkTools, DelimitedFiles
-using ThreadPools
+using LinearAlgebra, StaticArrays, WriteVTK, DelimitedFiles
 
 const ONE_OVER_4PI = 1/4/pi
 

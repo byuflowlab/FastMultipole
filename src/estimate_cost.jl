@@ -47,7 +47,8 @@ end
 
 function get_tau_b2m(system, branch, b2m_n_bodies, harmonics_m2m_l2l, expansion_order)
     bodies_index = 1:min(b2m_n_bodies,length(system))
-    tau_b2m = @belapsed B2M!($system, $branch, $bodies_index, $harmonics_m2m_l2l, $expansion_order)
+    tau_b2m = @elapsed B2M!($system, $branch, $bodies_index, $harmonics_m2m_l2l, $expansion_order)
+    tau_b2m = @elapsed B2M!($system, $branch, $bodies_index, $harmonics_m2m_l2l, $expansion_order)
     return tau_b2m / length(bodies_index)
 end
 
@@ -59,20 +60,27 @@ function estimate_tau_fmm(expansion_order, type=Float64)
     branch1 = Branch(1:5, 1, 1:1, rand(SVector{3,type}), rand(), expansion_order)
     branch2 = Branch(1:5, 1, 1:1, rand(SVector{3,type}), rand(), expansion_order)
     harmonics_m2m_l2l, ML = allocate_m2m_l2l(expansion_order, type)
-    alloc_m2m_l2l = @belapsed harmonics_m2m, M = allocate_m2m_l2l($expansion_order, $type)
-    tau_m2m_l2l = @belapsed M2M!($branch1, $branch2, $harmonics_m2m_l2l, $ML, $expansion_order)
+    alloc_m2m_l2l = @elapsed harmonics_m2m, M = allocate_m2m_l2l($expansion_order, $type)
+    alloc_m2m_l2l = @elapsed harmonics_m2m, M = allocate_m2m_l2l($expansion_order, $type)
+    tau_m2m_l2l = @elapsed M2M!(branch1, branch2, harmonics_m2m_l2l, ML, expansion_order)
+    tau_m2m_l2l = @elapsed M2M!(branch1, branch2, harmonics_m2m_l2l, ML, expansion_order)
     harmonics_m2l = allocate_m2l(expansion_order, type)
-    alloc_m2l = @belapsed harmonics_m2l = allocate_m2l($expansion_order, $type)
-    tau_m2l = @belapsed M2L!($branch1, $branch2, $harmonics_m2l, $expansion_order)
+    alloc_m2l = @elapsed harmonics_m2l = allocate_m2l(expansion_order, type)
+    alloc_m2l = @elapsed harmonics_m2l = allocate_m2l(expansion_order, type)
+    tau_m2l = @elapsed M2L!(branch1, branch2, harmonics_m2l, expansion_order)
+    tau_m2l = @elapsed M2L!(branch1, branch2, harmonics_m2l, expansion_order)
     # harmonics_l2l, L = allocate_m2m_l2l(expansion_order, type)
-    # alloc_l2l = @belapsed harmonics_l2l, L = allocate_m2m_l2l($expansion_order, $type)
-    # tau_l2l = @belapsed L2L!($branch1, $branch2, $harmonics_l2l, $L, $expansion_order)
+    # alloc_l2l = @belapsed harmonics_l2l, L = allocate_m2m_l2l(expansion_order, type)
+    # tau_l2l = @belapsed L2L!(branch1, branch2, harmonics_l2l, L, expansion_order)
     vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b(expansion_order, type)
-    alloc_l2b = @belapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b($expansion_order, $type)
+    alloc_l2b = @elapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b(expansion_order, type)
+    alloc_l2b = @elapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b(expansion_order, type)
     body_position = rand(SVector{3,type})
     expansion_center = 10 * rand(SVector{3,type})
-    tau_l2b = @belapsed L2B_loop!($vector_potential, $potential_jacobian, $potential_hessian, $body_position, $expansion_center, 
-                $branch2.local_expansion, $derivative_harmonics, $derivative_harmonics_theta, $derivative_harmonics_theta_2, $expansion_order, $workspace)
+    tau_l2b = @elapsed L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, 
+                branch2.local_expansion, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, expansion_order, workspace)
+    tau_l2b = @elapsed L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, 
+                branch2.local_expansion, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, expansion_order, workspace)
     return alloc_m2m_l2l, tau_m2m_l2l, alloc_m2l, tau_m2l, alloc_l2b, tau_l2b
 end
 
@@ -116,9 +124,11 @@ function get_system_parameters(system, expansion_orders; n_bodies_max=5000, n_bo
     for (i,n_bodies) in enumerate(n_bodies_list)
         println("\tn bodies: $n_bodies")
         bodies_index = 1:n_bodies
-        nearfield_benchmarks[i] = @belapsed direct!($system, $bodies_index, $system, $bodies_index)
+        nearfield_benchmarks[i] = @elapsed direct!(system, bodies_index, system, bodies_index)
+        nearfield_benchmarks[i] = @elapsed direct!(system, bodies_index, system, bodies_index)
         for (j,(expansion_order,branch,harmonics)) in enumerate(zip(expansion_orders,branches,harmonics_list))
-            b2m_benchmarks[j,i] = @belapsed B2M!($system, $branch, $bodies_index, $harmonics, $expansion_order)
+            b2m_benchmarks[j,i] = @elapsed B2M!(system, branch, bodies_index, harmonics, expansion_order)
+            b2m_benchmarks[j,i] = @elapsed B2M!(system, branch, bodies_index, harmonics, expansion_order)
             b2m_benchmarks[j,i] /= n_bodies
         end
     end
