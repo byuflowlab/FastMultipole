@@ -204,7 +204,7 @@ m2l_st = []
 m2l_mt = []
 mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.branches, this_index, expansion_order)
 st_m2l_fun(this_index) = fmm.horizontal_pass_single_thread!(tree.branches, tree.branches, this_index, expansion_order)
-for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
+for i in [1, 10, 100, 1000, 10000, 100000]
     this_index = m2l_list[1:i]
     mt_m2l_fun(this_index)
     st_m2l_fun(this_index)
@@ -216,7 +216,7 @@ for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
     push!(m2l_st, t_st)
 end
 m2l_speedup = m2l_st ./ m2l_mt
-m2l_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], m2l_st, m2l_mt, m2l_speedup)
+m2l_summary = hcat([1, 10, 100, 1000, 10000, 100000], m2l_st, m2l_mt, m2l_speedup)
 println("n m2l transformations | 1 thread, workstation | 72 threads, workstation | speedup")
 println("--- | --- | --- | ---")
 println(round.(m2l_summary, digits=5))
