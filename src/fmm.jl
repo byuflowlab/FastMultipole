@@ -211,15 +211,6 @@ function horizontal_pass_single_thread!(target_branches, source_branches, m2l_li
     end
 end
 
-function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_end, expansion_order)
-    # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-    # L = zeros(eltype(target_branches[1].local_expansion), 4)
-    for (i_target, j_source) in view(m2l_list,i_start:i_end)
-        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
-        # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
-    end
-end
-
 # function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order, harmonics, L)
 #     for (i_target, j_source) in m2l_list
 #         @lock target_branches[i_target].lock M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
