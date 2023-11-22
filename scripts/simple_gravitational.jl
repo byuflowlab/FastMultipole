@@ -127,12 +127,12 @@ end
 expansion_order = 4
 n_per_branch = 50
 theta = 0.5
-n_bodies = 10000
+n_bodies = 1000000
 shrink_recenter = false
 farfield=nearfield=true
 
 expansion_order, n_per_branch, theta = 8, 30, 0.3
-n_bodies = 850000
+n_bodies = 1000000
 shrink_recenter, ndivisions = false, 15
 println("create system...")
 sys = generate_gravitational(123, n_bodies)
@@ -142,8 +142,8 @@ println("done.")
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-bm_fmm()
-@time bm_fmm()
+# bm_fmm()
+# @time bm_fmm()
 
 # # using BenchmarkTools
 
@@ -196,30 +196,30 @@ bm_fmm()
 # println("--- | --- | --- | ---")
 # println(round.(b2m_summary, digits=5))
 
-# #####
-# ##### m2l
-# #####
-# m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, farfield, nearfield)
-# m2l_st = []
-# m2l_mt = []
-# mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.branches, this_index, expansion_order)
-# st_m2l_fun(this_index) = fmm.horizontal_pass_single_thread!(tree.branches, tree.branches, this_index, expansion_order)
-# for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
-#     this_index = m2l_list[1:i]
-#     mt_m2l_fun(this_index)
-#     st_m2l_fun(this_index)
-#     t_mt = @elapsed mt_m2l_fun(this_index)
-#     t_st = @elapsed st_m2l_fun(this_index)
-#     # t_mt = @belapsed mt_m2l_fun($this_index)
-#     # t_st = @belapsed st_m2l_fun($this_index)
-#     push!(m2l_mt, t_mt)
-#     push!(m2l_st, t_st)
-# end
-# m2l_speedup = m2l_st ./ m2l_mt
-# m2l_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], m2l_st, m2l_mt, m2l_speedup)
-# println("n m2l transformations | 1 thread, workstation | 72 threads, workstation | speedup")
-# println("--- | --- | --- | ---")
-# println(round.(m2l_summary, digits=5))
+#####
+##### m2l
+#####
+m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, farfield, nearfield)
+m2l_st = []
+m2l_mt = []
+mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.branches, this_index, expansion_order)
+st_m2l_fun(this_index) = fmm.horizontal_pass_single_thread!(tree.branches, tree.branches, this_index, expansion_order)
+for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
+    this_index = m2l_list[1:i]
+    mt_m2l_fun(this_index)
+    st_m2l_fun(this_index)
+    t_mt = @elapsed mt_m2l_fun(this_index)
+    t_st = @elapsed st_m2l_fun(this_index)
+    # t_mt = @belapsed mt_m2l_fun($this_index)
+    # t_st = @belapsed st_m2l_fun($this_index)
+    push!(m2l_mt, t_mt)
+    push!(m2l_st, t_st)
+end
+m2l_speedup = m2l_st ./ m2l_mt
+m2l_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], m2l_st, m2l_mt, m2l_speedup)
+println("n m2l transformations | 1 thread, workstation | 72 threads, workstation | speedup")
+println("--- | --- | --- | ---")
+println(round.(m2l_summary, digits=5))
 
 # #####
 # ##### direct

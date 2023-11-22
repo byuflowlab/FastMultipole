@@ -312,6 +312,14 @@ function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
     M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
+function M2L!(target_branch, source_branch, expansion_order)
+    twice_expansion_order = expansion_order << 1
+    dx, dy, dz = target_branch.center - source_branch.center
+    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
+    irregular_harmonic!(source_branch.harmonics, r, theta, phi, twice_expansion_order)
+    M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
+end
+
 function B2L!(tree, i_branch, source_position, source_strength)
     branch = tree.branches[i_branch]
     irregular_harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (tree.expansion_order+1)^2)
