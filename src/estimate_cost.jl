@@ -47,8 +47,8 @@ end
 
 function get_tau_b2m(system, branch, b2m_n_bodies, harmonics_m2m_l2l, expansion_order)
     bodies_index = 1:min(b2m_n_bodies,length(system))
-    tau_b2m = @elapsed B2M!($system, $branch, $bodies_index, $harmonics_m2m_l2l, $expansion_order)
-    tau_b2m = @elapsed B2M!($system, $branch, $bodies_index, $harmonics_m2m_l2l, $expansion_order)
+    tau_b2m = @elapsed B2M!(system, branch, bodies_index, harmonics_m2m_l2l, expansion_order)
+    tau_b2m = @elapsed B2M!(system, branch, bodies_index, harmonics_m2m_l2l, expansion_order)
     return tau_b2m / length(bodies_index)
 end
 
@@ -60,8 +60,8 @@ function estimate_tau_fmm(expansion_order, type=Float64)
     branch1 = Branch(1:5, 1, 1:1, rand(SVector{3,type}), rand(), expansion_order)
     branch2 = Branch(1:5, 1, 1:1, rand(SVector{3,type}), rand(), expansion_order)
     harmonics_m2m_l2l, ML = allocate_m2m_l2l(expansion_order, type)
-    alloc_m2m_l2l = @elapsed harmonics_m2m, M = allocate_m2m_l2l($expansion_order, $type)
-    alloc_m2m_l2l = @elapsed harmonics_m2m, M = allocate_m2m_l2l($expansion_order, $type)
+    alloc_m2m_l2l = @elapsed harmonics_m2m, M = allocate_m2m_l2l(expansion_order, type)
+    alloc_m2m_l2l = @elapsed harmonics_m2m, M = allocate_m2m_l2l(expansion_order, type)
     tau_m2m_l2l = @elapsed M2M!(branch1, branch2, harmonics_m2m_l2l, ML, expansion_order)
     tau_m2m_l2l = @elapsed M2M!(branch1, branch2, harmonics_m2m_l2l, ML, expansion_order)
     harmonics_m2l = allocate_m2l(expansion_order, type)
@@ -122,7 +122,7 @@ function get_system_parameters(system, expansion_orders; n_bodies_max=5000, n_bo
     # run benchmarks
     println("===== Running Nearfield Benchmarks =====")
     for (i,n_bodies) in enumerate(n_bodies_list)
-        println("\tn bodies: $n_bodies")
+        println("\tn bodies: n_bodies")
         bodies_index = 1:n_bodies
         nearfield_benchmarks[i] = @elapsed direct!(system, bodies_index, system, bodies_index)
         nearfield_benchmarks[i] = @elapsed direct!(system, bodies_index, system, bodies_index)
@@ -147,12 +147,12 @@ function get_system_parameters(system, expansion_orders; n_bodies_max=5000, n_bo
         this_error = max(abs(this_C-C),this_error)
     end
     this_error /= C # relative error
-    this_error > epsilon && (@warn "relative error in nearfield cost estimate greater than $epsilon; load balancing may have unexpected behavior; Cs = $Cs")
+    this_error > epsilon && (@warn "relative error in nearfield cost estimate greater than epsilon; load balancing may have unexpected behavior; Cs = Cs")
 
     # estimate b2m parameters
     b2m_mean = MVector(sum(b2m_benchmarks,dims=2)) ./ size(b2m_benchmarks,2)
     b2m_error = maximum(abs.(b2m_benchmarks .- b2m_mean) ./ b2m_mean)
-    b2m_error > epsilon && (@warn "relative error in b2m cost estimate greater than $epsilon; load balancing may have unexpected behavior; b2m = $(b2m_benchmarks)")
+    b2m_error > epsilon && (@warn "relative error in b2m cost estimate greater than epsilon; load balancing may have unexpected behavior; b2m = (b2m_benchmarks)")
     mat_nx3 = MMatrix{length(expansion_orders),3,Float64}(p^i for p in expansion_orders, i in 0:2)
     b2m_params = mat_nx3 \ b2m_mean
 
@@ -204,7 +204,7 @@ function unpack_b2m!(file_contents, b2m_params)
 end
 
 function write_cost_parameters(cost_file_path, params, errors, nearfield_params, nearfield_error, b2m_params, b2m_error)
-    @assert length(params) + 7 == length(COST_PARAMETERS) "received the wrong number of cost parameters for file write; expected $(length(COST_PARAMETERS)); got $(length(params) + 7)"
+    @assert length(params) + 7 == length(COST_PARAMETERS) "received the wrong number of cost parameters for file write; expected (length(COST_PARAMETERS)); got (length(params) + 7)"
     max_length = 0
     for param in (params..., errors, nearfield_params, nearfield_error, b2m_params, b2m_error)
         max_length = max(max_length,length(param))
@@ -238,12 +238,12 @@ function initialize_cost_parameters(systems, param_name)
     end
 end
 
-function estimate_tau(systems, type=Float64; expansion_orders = 1:3:20, epsilon=0.1, cost_file_read=true, cost_file_write=true, cost_file_path="cost_parameters_$(typeof(systems)).csv")
+function estimate_tau(systems, type=Float64; expansion_orders = 1:3:20, epsilon=0.1, cost_file_read=true, cost_file_write=true, cost_file_path="cost_parameters_(typeof(systems)).csv")
     read_file = false
     params_index = 1:6
     if cost_file_read && isfile(cost_file_path)
         read_file = true
-        println("Reading cost parameter file $(cost_file_path)...")
+        println("Reading cost parameter file (cost_file_path)...")
         params, errors, nearfield_params, nearfield_error = read_cost_parameters(cost_file_path)
     else
         # preallocate
@@ -258,7 +258,7 @@ function estimate_tau(systems, type=Float64; expansion_orders = 1:3:20, epsilon=
         # get fmm benchmarks
         println("===== BEGIN FMM BENCHMARKS =====")
         for (ip,expansion_order) in enumerate(expansion_orders)
-            println("\tp = $expansion_order")
+            println("\tp = expansion_order")
             benchmarks = estimate_tau_fmm(expansion_order, type)
             for (list, benchmark) in zip(lists, benchmarks)
                 list[ip] = benchmark
@@ -275,7 +275,7 @@ function estimate_tau(systems, type=Float64; expansion_orders = 1:3:20, epsilon=
                 param .= mat_nx5 \ list
                 errors[i] = get_error(param, mat_nx5, list)
             else
-                error("load balance parameter has the incorrect size; expected 3 or 5, got $length(param)")
+                error("load balance parameter has the incorrect size; expected 3 or 5, got length(param)")
             end
         end
         
@@ -287,10 +287,10 @@ function estimate_tau(systems, type=Float64; expansion_orders = 1:3:20, epsilon=
         nearfield_params, nearfield_error, b2m_params, b2m_error = get_system_parameters(systems, expansion_orders)
     end
 
-    maximum(errors) > epsilon && (@warn "error in load-balancing- inefficient multithreading behavior may occur; relative error=$(maximum(errors))")
+    maximum(errors) > epsilon && (@warn "error in load-balancing- inefficient multithreading behavior may occur; relative error=(maximum(errors))")
 
     if cost_file_write && !read_file
-        println("Writing cost parameter file $(cost_file_path)...")
+        println("Writing cost parameter file (cost_file_path)...")
         write_cost_parameters(cost_file_path, params, errors, nearfield_params, nearfield_error, b2m_params, b2m_error)
     end
 
