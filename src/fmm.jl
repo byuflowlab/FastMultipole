@@ -236,11 +236,13 @@ function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_lis
     # assign tasks
     tasks_1 = map(range_1) do i_start
     # tasks_1 = map(range_1, containers_1) do i_start, containers
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
+        # Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
+        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list[i_start:i_start+n_per_chunk], expansion_order)#, containers...)
     end
     tasks_2 = map(range_2) do i_start
     # tasks_2 = map(range_2, containers_2) do i_start, containers
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
+        # Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
+        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list[i_start:i_start+n_per_chunk-1], expansion_order)#, containers...)
     end
 
     # synchronize
