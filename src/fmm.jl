@@ -175,31 +175,65 @@ function nearfield_single_thread!(target_system, target_branches, source_system,
     end
 end
 
-function nearfield_multi_thread!(target_system, target_branches, source_system, source_branches, direct_list)
-    # divide chunks
-    n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(direct_list),n_threads)
-    if n_per_chunk == 0
-        n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-        rem = 0 # no reason to spread a remainder
-    end
-
-    # spread remainder over rem chunks
-    Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)..., range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(direct_list))...)
-        chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
-        for (i_target, j_source) in view(direct_list,i_start:i_start+chunk_size-1)
-            P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
-        end
-    end
+function estimate_cost(n_targets, source_bodies_index::UnitRange, source_cost_parameter)
+    return n_targets * source_cost_parameter * get_n_bodies(source_bodies_index)
 end
 
-function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_end, expansion_order)
-    # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-    # L = zeros(eltype(target_branches[1].local_expansion), 4)
-    for (i_target, j_source) in view(m2l_list,i_start:i_end)
-        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
-        # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
+function estimate_cost(n_targets, source_bodies_indices, source_cost_parameters)
+    t = 0.0
+    for (cost_parameter, bodies_index) in zip(source_cost_parameters,source_bodies_indices)
+        t += cost_parameter * length(bodies_index) * n_targets
     end
+    return t
+end
+
+function estimate_cost(target_branches, source_branches, source_cost_parameters, direct_list)
+    t = 0.0
+    for (i_target, j_source) in direct_list
+        n_targets = get_n_bodies(target_branches[i_target])
+        t += estimate_cost(n_targets, source_branches[j_source].bodies_index, source_cost_parameters)
+    end
+    return t
+end
+
+function nearfield_create_chunks!(chunks, target_branches, source_branches, source_cost_parameters, direct_list, cost_per_chunk)
+    cost = 0.0
+    i_thread = 1
+    i_start = 1
+    i_end = 0
+    for (i_target, j_source) in direct_list
+        i_end += 1
+        cost += estimate_cost(get_n_bodies(target_branches[i_target]), source_branches[j_source].bodies_index, source_cost_parameters)
+        if cost >= cost_per_chunk || i_end == length(direct_list)
+            chunks[i_thread] = i_start:i_end
+            i_thread += 1
+            i_start = i_end + 1
+            cost = 0.0
+        end
+    end
+    resize!(chunks,i_thread-1)
+end
+
+function nearfield_multi_thread!(target_system, target_branches, source_system, source_branches, source_cost_parameters, direct_list)
+    # divide chunks
+    n_threads = Threads.nthreads()
+    total_cost = estimate_cost(target_branches, source_branches, source_cost_parameters, direct_list)
+    cost_per_chunk = total_cost / n_threads
+    
+    # create chunk map (first_direct_list_index, last_index)
+    chunks = Vector{UnitRange{Int}}(undef,0)
+    resize!(chunks, n_threads)
+    nearfield_create_chunks!(chunks, target_branches, source_branches, source_cost_parameters, direct_list, cost_per_chunk)
+
+    # assign tasks
+    tasks = map(chunks) do chunk
+        Threads.@spawn nearfield_single_thread!(target_system, target_branches, source_system, source_branches, view(direct_list,chunk))
+    end
+
+    # synchronize
+    wait.(tasks)
+
+    return nothing
 end
 
 function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
@@ -217,15 +251,15 @@ end
 #     end
 # end
 
-@inline function preallocate_horizontal_pass(expansion_type, expansion_order)
-    harmonics = zeros(expansion_type, (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-    L = zeros(expansion_type, 4)
-    return harmonics, L
-end
+# @inline function preallocate_horizontal_pass(expansion_type, expansion_order)
+#     harmonics = zeros(expansion_type, (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+#     L = zeros(expansion_type, 4)
+#     return harmonics, L
+# end
 
-@inline function preallocate_horizontal_pass(expansion_type, expansion_order, n)
-    containers = [preallocate_horizontal_pass(expansion_type, expansion_order) for _ in 1:n]
-end
+# @inline function preallocate_horizontal_pass(expansion_type, expansion_order, n)
+#     containers = [preallocate_horizontal_pass(expansion_type, expansion_order) for _ in 1:n]
+# end
 
 function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_list, expansion_order)
     # divide chunks
@@ -245,13 +279,11 @@ function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_lis
     # assign tasks
     tasks_1 = map(range_1) do i_start
     # tasks_1 = map(range_1, containers_1) do i_start, containers
-        # Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_start+n_per_chunk, expansion_order)#, containers...)
+        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
     end
     tasks_2 = map(range_2) do i_start
     # tasks_2 = map(range_2, containers_2) do i_start, containers
-        # Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_start+n_per_chunk-1, expansion_order)#, containers...)
+        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
     end
 
     # synchronize
@@ -456,12 +488,16 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         end
     else # multithread
         println("nearfield")
-        @time nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        @time nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, source_tree.cost_parameters, direct_list))
         if farfield
-            upward_pass_multi_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+            println("upward pass:")
+            @time upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+            # upward_pass_multi_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
             println("horizontal pass:")
             @time horizontal_pass_multi_thread!(target_tree.branches, source_tree.branches, m2l_list, target_tree.expansion_order)
-            downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+            # downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+            println("downward pass:")
+            @time downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
 

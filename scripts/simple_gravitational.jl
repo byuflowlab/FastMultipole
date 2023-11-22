@@ -200,51 +200,51 @@ println("done.")
 ##### m2l
 #####
 m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, farfield, nearfield)
-m2l_st = []
-m2l_mt = []
-mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.branches, this_index, expansion_order)
-st_m2l_fun(this_index) = fmm.horizontal_pass_single_thread!(tree.branches, tree.branches, this_index, expansion_order)
-for i in [1, 10, 100, 1000, 10000, 100000]
-    this_index = m2l_list[1:i]
-    mt_m2l_fun(this_index)
-    st_m2l_fun(this_index)
-    t_mt = @elapsed mt_m2l_fun(this_index)
-    t_st = @elapsed st_m2l_fun(this_index)
-    # t_mt = @belapsed mt_m2l_fun($this_index)
-    # t_st = @belapsed st_m2l_fun($this_index)
-    push!(m2l_mt, t_mt)
-    push!(m2l_st, t_st)
-end
-m2l_speedup = m2l_st ./ m2l_mt
-m2l_summary = hcat([1, 10, 100, 1000, 10000, 100000], m2l_st, m2l_mt, m2l_speedup)
-println("n m2l transformations | 1 thread, workstation | 72 threads, workstation | speedup")
-println("--- | --- | --- | ---")
-println(round.(m2l_summary, digits=5))
+# m2l_st = []
+# m2l_mt = []
+# mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.branches, this_index, expansion_order)
+# st_m2l_fun(this_index) = fmm.horizontal_pass_single_thread!(tree.branches, tree.branches, this_index, expansion_order)
+# for i in [1, 10, 100, 1000, 10000, 100000]
+#     this_index = m2l_list[1:i]
+#     mt_m2l_fun(this_index)
+#     st_m2l_fun(this_index)
+#     t_mt = @elapsed mt_m2l_fun(this_index)
+#     t_st = @elapsed st_m2l_fun(this_index)
+#     # t_mt = @belapsed mt_m2l_fun($this_index)
+#     # t_st = @belapsed st_m2l_fun($this_index)
+#     push!(m2l_mt, t_mt)
+#     push!(m2l_st, t_st)
+# end
+# m2l_speedup = m2l_st ./ m2l_mt
+# m2l_summary = hcat([1, 10, 100, 1000, 10000, 100000], m2l_st, m2l_mt, m2l_speedup)
+# println("n m2l transformations | 1 thread | $(Threads.nthreads()) threads | speedup")
+# println("--- | --- | --- | ---")
+# println(round.(m2l_summary, digits=5))
 
 # #####
 # ##### direct
 # #####
-# direct_mt = []
-# direct_st = []
-# mt_direct_fun(this_index) = fmm.nearfield_multi_thread!(sys, tree.branches, sys, tree.branches, this_index)
-# st_direct_fun(this_index) = fmm.nearfield_single_thread!(sys, tree.branches, sys, tree.branches, this_index) 
-# for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
-#     println("i passes: $i")
-#     this_index = direct_list[1:i]
-#     mt_direct_fun(this_index)
-#     st_direct_fun(this_index)
-#     t_mt = @elapsed mt_direct_fun(this_index)
-#     t_st = @elapsed st_direct_fun(this_index)
-#     # t_mt = @belapsed mt_direct_fun($this_index)
-#     # t_st = @belapsed st_direct_fun($this_index)
-#     push!(direct_mt, t_mt)
-#     push!(direct_st, t_st)
-# end
-# direct_speedup = direct_st ./ direct_mt
-# direct_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], direct_st, direct_mt, direct_speedup)
-# println("n leaves | 1 thread, workstation | 72 threads, workstation | speedup")
-# println("--- | --- | --- | ---")
-# println(round.(direct_summary, digits=5))
+direct_mt = []
+direct_st = []
+mt_direct_fun(this_index) = fmm.nearfield_multi_thread!(sys, tree.branches, sys, tree.branches, tree.cost_parameters, this_index)
+st_direct_fun(this_index) = fmm.nearfield_single_thread!(sys, tree.branches, sys, tree.branches, this_index) 
+for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
+    println("i passes: $i")
+    this_index = direct_list[1:i]
+    mt_direct_fun(this_index)
+    st_direct_fun(this_index)
+    t_mt = @elapsed mt_direct_fun(this_index)
+    t_st = @elapsed st_direct_fun(this_index)
+    # t_mt = @belapsed mt_direct_fun($this_index)
+    # t_st = @belapsed st_direct_fun($this_index)
+    push!(direct_mt, t_mt)
+    push!(direct_st, t_st)
+end
+direct_speedup = direct_st ./ direct_mt
+direct_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], direct_st, direct_mt, direct_speedup)
+println("n leaves | 1 thread | $(Threads.nthreads()) threads | speedup")
+println("--- | --- | --- | ---")
+println(round.(direct_summary, digits=5))
 
 # #####
 # ##### translate locals

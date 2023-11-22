@@ -401,3 +401,31 @@ end
 # function load_balance_nearfield(direct_list, m2l_list, branches, cost_parameters)
 
 # end
+
+function direct_cost_estimate(system, n_per_branch; n_iter=10)
+    # store original states
+    original_states = [system[1]]
+    resize!(original_states, n_per_branch)
+    for i in 2:n_per_branch
+        original_states[i] = system[i]
+    end
+
+    # benchmark
+    t = 0.0
+    for i in 1:n_iter+1 # one for precompilation
+        i > 1 && (t += @elapsed direct!(system, 1:n_per_branch, system, 1:n_per_branch))
+    end
+    t /= n_iter # mean time per iteration
+    t /= n_per_branch^2 # mean time per interaction
+
+    # restore original states
+    for i in 1:n_per_branch
+        system[i] = original_states[i]
+    end
+
+    return t
+end
+
+function direct_cost_estimate(systems::Tuple, n_per_branch; n_iter=10)
+    return SVector{length(systems),Float64}(direct_cost_estimate(system, n_per_branch; n_iter=n_iter) for system in systems)
+end

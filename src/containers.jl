@@ -166,6 +166,7 @@ struct MultiTree{TF,N,TB} <: Tree
     expansion_order::Int64
     n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
+    cost_parameters::SVector{N,Float64}
 end
 
 struct SingleTree{TF,TB} <: Tree
@@ -178,6 +179,7 @@ struct SingleTree{TF,TB} <: Tree
     expansion_order::Int64
     n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
+    cost_parameters::Float64
 end
 
 #####
