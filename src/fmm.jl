@@ -193,10 +193,10 @@ function nearfield_multi_thread!(target_system, target_branches, source_system, 
     end
 end
 
-function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
+function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_end, expansion_order)
     # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     # L = zeros(eltype(target_branches[1].local_expansion), 4)
-    for (i_target, j_source) in m2l_list
+    for (i_target, j_source) in view(m2l_list,i_start:i_end)
         M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
         # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
     end
@@ -237,12 +237,12 @@ function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_lis
     tasks_1 = map(range_1) do i_start
     # tasks_1 = map(range_1, containers_1) do i_start, containers
         # Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list[i_start:i_start+n_per_chunk], expansion_order)#, containers...)
+        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_start+n_per_chunk, expansion_order)#, containers...)
     end
     tasks_2 = map(range_2) do i_start
     # tasks_2 = map(range_2, containers_2) do i_start, containers
         # Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list[i_start:i_start+n_per_chunk-1], expansion_order)#, containers...)
+        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, i_start, i_start+n_per_chunk-1, expansion_order)#, containers...)
     end
 
     # synchronize
