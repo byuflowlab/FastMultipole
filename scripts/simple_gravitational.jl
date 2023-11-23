@@ -2,6 +2,7 @@ include("../test/gravitational.jl")
 using BenchmarkTools
 using Random
 using WriteVTK
+using BSON
 
 function generate_gravitational(seed, n_bodies; radius_factor=0.1)
     Random.seed!(123)
@@ -13,9 +14,72 @@ function generate_gravitational(seed, n_bodies; radius_factor=0.1)
     system = Gravitational(bodies)
 end
 
+function bm_fmm_1024()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 1024
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_4096()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 4096
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_16384()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 16384
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_65536()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 65536
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_262144()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 262144
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_1048576()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 1048576
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_4194304()
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 4194304
+    system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
 function bm_fmm()
     expansion_order, n_per_branch, theta = 5, 100, 0.4
-    n_bodies = 100000
+    n_bodies = 10000
     system = generate_gravitational(123, n_bodies)
     # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
     fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
@@ -124,26 +188,47 @@ end
 # @time generate_gravitational(123, 5000)
 
 
-expansion_order = 4
-n_per_branch = 50
-theta = 0.5
-n_bodies = 1000000
-shrink_recenter = false
-farfield=nearfield=true
+# shrink_recenter = false
+# farfield=nearfield=true
+# expansion_order, n_per_branch, theta = 8, 30, 0.3
+# n_bodies = 1_000_000
 
-expansion_order, n_per_branch, theta = 8, 30, 0.3
-n_bodies = 1000000
-shrink_recenter, ndivisions = false, 15
-println("create system...")
-sys = generate_gravitational(123, n_bodies)
-println("create tree...")
-tree = fmm.Tree(sys; n_per_branch=n_per_branch, expansion_order=expansion_order, ndivisions=ndivisions)
-println("done.")
+# shrink_recenter, ndivisions = false, 15
+# println("create system...")
+# sys = generate_gravitational(123, n_bodies)
+# println("create tree...")
+# tree = fmm.Tree(sys; n_per_branch=n_per_branch, expansion_order=expansion_order, ndivisions=ndivisions)
+# println("done.")
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-# bm_fmm()
-# @time bm_fmm()
+println("begin benchmark")
+ts = zeros(6)
+println("n = 1024")
+bm_fmm_1024()
+ts[1] = @elapsed bm_fmm_1024()
+println("n = 4096")
+bm_fmm_4096()
+ts[2] = @elapsed bm_fmm_4096()
+println("n = 16384")
+bm_fmm_16384()
+ts[3] = @elapsed bm_fmm_16384()
+println("n = 65536")
+bm_fmm_65536()
+ts[4] = @elapsed bm_fmm_65536()
+println("n = 262144")
+bm_fmm_262144()
+ts[5] = @elapsed bm_fmm_262144()
+println("n = 1048576")
+bm_fmm_1048576()
+ts[6] = @elapsed bm_fmm_1048576()
+println("n = 4194304")
+bm_fmm_4194304()
+ts[7] = @elapsed bm_fmm_4194304()
+
+n_bodies = [4^i for i in 5:11]
+
+BSON.@save "benchmark_$(Threads.nthreads()).bson" ts n_bodies
 
 # # using BenchmarkTools
 
@@ -199,7 +284,7 @@ println("done.")
 #####
 ##### m2l
 #####
-m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, farfield, nearfield)
+# m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, farfield, nearfield)
 # m2l_st = []
 # m2l_mt = []
 # mt_m2l_fun(this_index) = fmm.horizontal_pass_multi_thread!(tree.branches, tree.branches, this_index, expansion_order)
@@ -224,27 +309,27 @@ m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, farfie
 # #####
 # ##### direct
 # #####
-direct_mt = []
-direct_st = []
-mt_direct_fun(this_index) = fmm.nearfield_multi_thread!(sys, tree.branches, sys, tree.branches, tree.cost_parameters, this_index)
-st_direct_fun(this_index) = fmm.nearfield_single_thread!(sys, tree.branches, sys, tree.branches, this_index) 
-for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
-    println("i passes: $i")
-    this_index = direct_list[1:i]
-    mt_direct_fun(this_index)
-    st_direct_fun(this_index)
-    t_mt = @elapsed mt_direct_fun(this_index)
-    t_st = @elapsed st_direct_fun(this_index)
-    # t_mt = @belapsed mt_direct_fun($this_index)
-    # t_st = @belapsed st_direct_fun($this_index)
-    push!(direct_mt, t_mt)
-    push!(direct_st, t_st)
-end
-direct_speedup = direct_st ./ direct_mt
-direct_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], direct_st, direct_mt, direct_speedup)
-println("n leaves | 1 thread | $(Threads.nthreads()) threads | speedup")
-println("--- | --- | --- | ---")
-println(round.(direct_summary, digits=5))
+# direct_mt = []
+# direct_st = []
+# mt_direct_fun(this_index) = fmm.nearfield_multi_thread!(sys, tree.branches, sys, tree.branches, tree.cost_parameters, this_index)
+# st_direct_fun(this_index) = fmm.nearfield_single_thread!(sys, tree.branches, sys, tree.branches, this_index) 
+# for i in [1, 10, 100, 1000, 10000, 100000, 1000000]
+#     println("i passes: $i")
+#     this_index = direct_list[1:i]
+#     mt_direct_fun(this_index)
+#     st_direct_fun(this_index)
+#     t_mt = @elapsed mt_direct_fun(this_index)
+#     t_st = @elapsed st_direct_fun(this_index)
+#     # t_mt = @belapsed mt_direct_fun($this_index)
+#     # t_st = @belapsed st_direct_fun($this_index)
+#     push!(direct_mt, t_mt)
+#     push!(direct_st, t_st)
+# end
+# direct_speedup = direct_st ./ direct_mt
+# direct_summary = hcat([1, 10, 100, 1000, 10000, 100000, 1000000], direct_st, direct_mt, direct_speedup)
+# println("n leaves | 1 thread | $(Threads.nthreads()) threads | speedup")
+# println("--- | --- | --- | ---")
+# println(round.(direct_summary, digits=5))
 
 # #####
 # ##### translate locals
