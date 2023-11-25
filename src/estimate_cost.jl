@@ -326,9 +326,10 @@ function get_t(coefficients::AbstractVector{<:AbstractVector}, expansion_order)
     return t
 end
 
+=#
 get_n_bodies(branch::SingleBranch) = length(branch.bodies_index)
 get_n_bodies(branch::MultiBranch) = SVector{length(branch.bodies_index)}(length(index) for index in branch.bodies_index)
-
+#=
 function get_t_nearfield(direct_list, branches::Vector{<:SingleBranch}, C_nearfield)
     t = 0.0
     for (i_target, j_source) in direct_list
