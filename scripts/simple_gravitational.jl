@@ -1,3 +1,6 @@
+using Pkg
+this_dir = @__DIR__
+Pkg.activate(normpath(this_dir,".."))
 include("../test/gravitational.jl")
 using BenchmarkTools
 using Random
