@@ -202,29 +202,36 @@ end
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-println("begin benchmark")
-ts = zeros(6)
+println("===== begin benchmark: $(Threads.nthreads()) threads =====")
+ts = zeros(7)
 println("n = 1024")
 bm_fmm_1024()
 ts[1] = @elapsed bm_fmm_1024()
+@show ts[1]
 println("n = 4096")
 bm_fmm_4096()
 ts[2] = @elapsed bm_fmm_4096()
+@show ts[2]
 println("n = 16384")
 bm_fmm_16384()
 ts[3] = @elapsed bm_fmm_16384()
+@show ts[3]
 println("n = 65536")
 bm_fmm_65536()
 ts[4] = @elapsed bm_fmm_65536()
+@show ts[4]
 println("n = 262144")
 bm_fmm_262144()
 ts[5] = @elapsed bm_fmm_262144()
+@show ts[5]
 println("n = 1048576")
 bm_fmm_1048576()
 ts[6] = @elapsed bm_fmm_1048576()
+@show ts[6]
 println("n = 4194304")
 bm_fmm_4194304()
 ts[7] = @elapsed bm_fmm_4194304()
+@show ts[7]
 
 n_bodies = [4^i for i in 5:11]
 
