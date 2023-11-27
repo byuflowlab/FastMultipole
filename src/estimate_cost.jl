@@ -440,6 +440,15 @@ function direct_cost_estimate(system, n_per_branch; n_iter=10)
     return t
 end
 
+function dummy_direct_cost_estimate(system, n_per_branch)
+    return NaN
+end
+
 function direct_cost_estimate(systems::Tuple, n_per_branch; n_iter=10)
     return SVector{length(systems),Float64}(direct_cost_estimate(system, n_per_branch; n_iter=n_iter) for system in systems)
 end
+
+function dummy_direct_cost_estimate(systems::Tuple, n_per_branch)
+    return SVector{length(systems),Float64}(dummy_direct_cost_estimate(system, n_per_branch) for system in systems)
+end
+

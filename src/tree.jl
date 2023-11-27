@@ -90,7 +90,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     # else
     #     cost_parameters = CostParameters(system)
     # end
-    cost_parameters = direct_cost_estimate(system, n_per_branch)
+    cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
 
     # assemble tree
     tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
@@ -181,7 +181,7 @@ function Branch(bodies_index::UnitRange, n_branches, branch_index, center, radiu
 end
 
 function Branch(bodies_index, n_branches, branch_index, center, radius, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), ReentrantLock())
+    return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -601,7 +601,7 @@ end
 end
 
 @inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius) where TB
-    # (; bodies_index, n_branches, branch_index, center, radius, multipole_expansion, local_expansion, lock) = branch[]
+    # (; bodies_index, n_branches, branch_index, center, radius, multipole_expansion, local_expansion, harmonics, ML, lock) = branch[]
     bodies_index = branch[].bodies_index
     n_branches = branch[].n_branches
     branch_index = branch[].branch_index
@@ -609,8 +609,10 @@ end
     radius = branch[].radius
     multipole_expansion = branch[].multipole_expansion
     local_expansion = branch[].local_expansion
+    harmonics = branch[].harmonics
+    ML = branch[].ML
     lock = branch[].lock
-    branch[] = TB(bodies_index, n_branches, branch_index, new_center, new_radius, multipole_expansion, local_expansion, lock)
+    branch[] = TB(bodies_index, n_branches, branch_index, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
 end
 
 function shrink_leaf!(branch, system)

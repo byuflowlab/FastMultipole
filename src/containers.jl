@@ -130,6 +130,8 @@ struct MultiBranch{TF,N} <: Branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
     local_expansion::Array{Complex{TF},2}     # local expansion coefficients
+    harmonics::Vector{Complex{TF}}
+    ML::MVector{4,Complex{TF}}
     lock::ReentrantLock
 end
 
