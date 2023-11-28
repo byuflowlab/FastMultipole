@@ -193,10 +193,10 @@ end
 
 # shrink_recenter = false
 # farfield=nearfield=true
-# expansion_order, n_per_branch, theta = 8, 30, 0.3
-# n_bodies = 1_000_000
+expansion_order, n_per_branch, theta = 4, 100, 0.4
+n_bodies = 100_000
 
-# shrink_recenter, ndivisions = false, 15
+shrink_recenter, ndivisions = true, 15
 # println("create system...")
 # sys = generate_gravitational(123, n_bodies)
 # println("create tree...")
@@ -205,40 +205,46 @@ end
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-println("===== begin benchmark: $(Threads.nthreads()) threads =====")
-ts = zeros(7)
-println("n = 1024")
-bm_fmm_1024()
-ts[1] = @elapsed bm_fmm_1024()
-@show ts[1]
-println("n = 4096")
-bm_fmm_4096()
-ts[2] = @elapsed bm_fmm_4096()
-@show ts[2]
-println("n = 16384")
-bm_fmm_16384()
-ts[3] = @elapsed bm_fmm_16384()
-@show ts[3]
-println("n = 65536")
-bm_fmm_65536()
-ts[4] = @elapsed bm_fmm_65536()
-@show ts[4]
-println("n = 262144")
-bm_fmm_262144()
-ts[5] = @elapsed bm_fmm_262144()
-@show ts[5]
-println("n = 1048576")
-bm_fmm_1048576()
-ts[6] = @elapsed bm_fmm_1048576()
-@show ts[6]
-println("n = 4194304")
-bm_fmm_4194304()
-ts[7] = @elapsed bm_fmm_4194304()
-@show ts[7]
+err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+@show err
+err_ns, sys_ns, tree_ns, sys2_ns = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, false)
+@show err_ns
+# bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 
-n_bodies = [4^i for i in 5:11]
+# println("===== begin benchmark: $(Threads.nthreads()) threads =====")
+# ts = zeros(7)
+# println("n = 1024")
+# bm_fmm_1024()
+# ts[1] = @elapsed bm_fmm_1024()
+# @show ts[1]
+# println("n = 4096")
+# bm_fmm_4096()
+# ts[2] = @elapsed bm_fmm_4096()
+# @show ts[2]
+# println("n = 16384")
+# bm_fmm_16384()
+# ts[3] = @elapsed bm_fmm_16384()
+# @show ts[3]
+# println("n = 65536")
+# bm_fmm_65536()
+# ts[4] = @elapsed bm_fmm_65536()
+# @show ts[4]
+# println("n = 262144")
+# bm_fmm_262144()
+# ts[5] = @elapsed bm_fmm_262144()
+# @show ts[5]
+# println("n = 1048576")
+# bm_fmm_1048576()
+# ts[6] = @elapsed bm_fmm_1048576()
+# @show ts[6]
+# println("n = 4194304")
+# bm_fmm_4194304()
+# ts[7] = @elapsed bm_fmm_4194304()
+# @show ts[7]
 
-BSON.@save "benchmark_$(Threads.nthreads()).bson" ts n_bodies
+# n_bodies = [4^i for i in 5:11]
+
+# BSON.@save "benchmark_$(Threads.nthreads()).bson" ts n_bodies
 
 # # using BenchmarkTools
 
