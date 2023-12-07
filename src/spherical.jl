@@ -440,21 +440,23 @@ function M2M_loop!(BM,CM,h,P)
                     lm = l * l + l - m + 1
                     ipow = ipow2l(m)
                     oddeven = odd_or_even(l)
+                    #C_tmp = harmonics[lm] * ipow * oddeven
                     for dim in 1:4
-                        M[dim] += CM[dim,jlkms] * h[lm] * ipow * oddeven
+                        @inbounds M[dim] += CM[dim,jlkms] * h[lm] * ipow * oddeven
                     end
                 end
                 for m in k:min(l,j+k-l)
                     jlkms = (((j-l) * (j-l+1)) >> 1) - k + m + 1
                     lm = l * l + l - m + 1
                     oddeven = odd_or_even(k + l + m)
+                    C_tmp = harmonics[lm] * oddeven
                     for dim in 1:4
-                        M[dim] += conj(CM[dim,jlkms]) * h[lm] * oddeven
+                        @inbounds M[dim] += conj(CM[dim,jlkms]) * h[lm] * oddeven
                     end
                 end
             end
             for dim in 1:4
-                BM[dim,i_jk] += M[dim]
+                @inbounds BM[dim,i_jk] += M[dim]
             end
         end
     end
@@ -472,17 +474,18 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
                     nms = (n * (n+1)) >> 1 - m + 1
                     jnkm = (j + n)^2 + j + n + m - k + 1
                     # jnkm_max = (P + P)^2 + P + P + -1 - 0 + 1 = (2P)^2 + 2P = 2P(2P+1)
+                    Cnm_tmp = Cnm * harmonics[jnkm]
                     for dim in 1:4
-                        L[dim] += conj(multipole_expansion[dim,nms]) * Cnm * harmonics[jnkm]
+                        @inbounds L[dim] += conj(multipole_expansion[dim,nms]) * Cnm_tmp
                     end
                 end
                 for m in 0:n
                     nms = (n * (n+1)) >> 1 + m + 1
                     jnkm = (j + n) * (j + n) + j + n + m - k + 1
                     # jnkm_max = 2P * 2P + 2P + P + P - 0 + 1 = (2P)^2 + 2P + 2P + 1 = 4P^2 + 4P + 1 = (2P + 1)^2
-                    Cnm2 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m)
+                    Cnm_tmp = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m) * harmonics[jnkm]
                     for dim in 1:4
-                        L[dim] += multipole_expansion[dim,nms] * Cnm2 * harmonics[jnkm]
+                        @inbounds L[dim] += multipole_expansion[dim,nms] * Cnm_tmp
                     end
                 end
             end
@@ -492,7 +495,7 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
     return local_expansion
 end
 
-function M2L!(target_branch, source_branch, harmonics, expansion_order)
+function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
     twice_expansion_order = expansion_order << 1
     #l = length(ReverseDiff.tape(target_branch.center))
     #harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
@@ -501,17 +504,18 @@ function M2L!(target_branch, source_branch, harmonics, expansion_order)
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    #@show length(ReverseDiff.tape(target_branch.center)) - l
-    #l = length(ReverseDiff.tape(target_branch.center))
-    harmonics .= irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order) # remaining tape allocations to reduce come from here... 1071 each time this is run
-    L = zeros(eltype(target_branch.multipole_expansion), 4)
-    #@show length(ReverseDiff.tape(target_branch.center)) - l
-    #l = length(ReverseDiff.tape(target_branch.center))
-    target_branch.local_expansion .= M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
-    #@show length(ReverseDiff.tape(target_branch.center)) - l
+    irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
+    M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
-# currently, this function never runs.
+function M2L!(target_branch, source_branch, expansion_order)
+    twice_expansion_order = expansion_order << 1
+    dx, dy, dz = target_branch.center - source_branch.center
+    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
+    irregular_harmonic!(source_branch.harmonics, r, theta, phi, twice_expansion_order)
+    M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
+end
+
 function B2L!(tree, i_branch, source_position, source_strength)
     branch = tree.branches[i_branch]
     irregular_harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (tree.expansion_order+1)^2)
@@ -553,8 +557,9 @@ end
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
                     nms = (n * (n + 1)) >> 1 - m + 1
                     oddeven = odd_or_even(k)
+                    #C_tmp = regular_harmonics[jnkm] * oddeven
                     for dim in 1:4
-                        L[dim] += conj(BLE[dim,nms]) * h[jnkm] * oddeven
+                        @inbounds L[dim] += conj(BLE[dim,nms]) * h[jnkm] * oddeven
                     end
                 end
                 for m in 0:n
@@ -562,9 +567,8 @@ end
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
-                        for dim in 1:4
-                            L[dim] += BLE[dim,nms] * h[jnkm] * oddeven
-                        end
+                        C_tmp = regular_harmonics[jnkm] * oddeven
+                        L .+= view(BLE,:,nms) .* C_tmp
                     end
                 end
             end
