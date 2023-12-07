@@ -66,29 +66,24 @@ function s2c_jac!(potential_jacobian, workspace, rho, theta, phi)
 
 end
 
-function s2c_hess!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
+#=function s2c_hess!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
 
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
 
     R = get_drjdxi(rho,s_theta,s_phi,c_theta,c_phi)
-    # we only need to evaluate these functions once instead of 4 times
-    Rr = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,1)
-    Rt = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,2)
-    Rp = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,3)
-
-    # convert Hessian to cartesian coordinates
+    RR = get_RR(rho,theta,phi)
     workspace3x3 = view(workspace,:,1:3)
     for ind in 1:4
         workspace3x3 .= potential_hessian[:,:,ind]
         potential_hessian[:,:,ind] .= R * workspace3x3 * transpose(R)
-        potential_hessian[:,:,ind] .+= Rr * potential_jacobian[1,ind]
-        potential_hessian[:,:,ind] .+= Rt * potential_jacobian[2,ind]
-        potential_hessian[:,:,ind] .+= Rp * potential_jacobian[3,ind]
+        for ν in 1:3
+            potential_hessian[:,:,ind] .+= RR[:,:,ν] * potential_jacobian[ν,ind]
+        end
     end
     return potential_hessian
 
-end
+end=#
 
 # I split these so that I could add custom reverse diff rules to each part separately. Doing it with one function is an enormous headache; it should be possible but there is no documentation on how to handle functions that return tuples.
 function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
@@ -100,8 +95,7 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
 end
 
 # will need to make use of this for more efficient computations, but that will wait until I tackle rrules for functions with multiple returned objects.
-#=function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
-    a = 0
+function s2c_hess!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
     # get partial derivatives of the coordinates
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
@@ -143,13 +137,8 @@ end
         end
     end
     
-    workspace .= potential_jacobian
-    # for some reason mul! allocates for nonsquare matrix matrix products
-    mul!(view(potential_jacobian,:,1),drjdxi,view(workspace,1:3,1))
-    mul!(view(potential_jacobian,:,2:4),drjdxi,view(workspace,1:3,2:4))
-    
-    return nothing
-end=#
+    return potential_hessian
+end
 
 function flatten_jacobian!(jacobian)
     jacobian[1,1] = -jacobian[1,1] + jacobian[2,4] - jacobian[3,3]
@@ -279,7 +268,7 @@ end
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi, P)
+function regular_harmonic_derivs!(harmonics, rho, theta, phi, P)
     y,x = sincos(theta)
     invY = y == 0 ? 0 : 1 / y
     fact = 1.0
@@ -292,12 +281,12 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
         lpl = (m * (m + 1)) >> 1 + m + 1
         # lpl = m * m + 2 * m + 1
         # lml = m * m + 1
-        harmonics[lpl] = rhom * p * eim
+        harmonics[1,lpl] = rhom * p * eim
         # harmonics[lml] = conj(harmonics[lpl])
         p1 = p
         p = x * (2 * m + 1) * p1
-        harmonics_theta[lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
-        harmonics_theta_2[lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim
+        harmonics[2,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
+        harmonics[3,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim
 
         rhom *= rho
         rhol = rhom
@@ -306,13 +295,13 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
             # lpm = l * l + l + m + 1
             # lmm = l * l + l - m + 1
             rhol /= -(l + m)
-            harmonics[lpm] = rhol * p * eim
+            harmonics[1,lpm] = rhol * p * eim
             # harmonics[lmm] = conj(harmonics[lpm])
             p2 = p1
             p1 = p
             p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
-            harmonics_theta[lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
-            harmonics_theta_2[lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
+            harmonics[2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
+            harmonics[3,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
             rhol *= rho
         end
         rhom /= -(2 * m + 2) * (2 * m + 1)
@@ -321,9 +310,11 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
         eim *= ei
 
     end
+    return harmonics
 end
 
 function regular_harmonic!(harmonics, rho, theta, phi, P)
+    harmonics .= zero(eltype(harmonics)) # temp
     y,x = sincos(theta)
     fact = 1.0
     pl = 1.0
@@ -359,7 +350,6 @@ function regular_harmonic!(harmonics, rho, theta, phi, P)
     return harmonics
 end
 
-# same changes as before
 function irregular_harmonic!(harmonics, rho, theta, phi, P)
     y, x = sincos(theta)
     fact = 1
@@ -505,14 +495,15 @@ end
 function M2L!(target_branch, source_branch, harmonics, expansion_order)
     twice_expansion_order = expansion_order << 1
     #l = length(ReverseDiff.tape(target_branch.center))
-    harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
+    #harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
+    harmonics = zeros(eltype(target_branch.multipole_expansion),(twice_expansion_order + 1)*(twice_expansion_order + 1))
     dx, dy, dz = target_branch.center - source_branch.center
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
-    irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order) # remaining tape allocations to reduce come from here... 1071 each time this is run
+    harmonics .= irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order) # remaining tape allocations to reduce come from here... 1071 each time this is run
     L = zeros(eltype(target_branch.multipole_expansion), 4)
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
@@ -540,14 +531,23 @@ end
 function L2L!(branch, child, harmonics, L, expansion_order) # 15-50k tape entries from this, also only in the loop.
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
+    r0 = 0.0*r + 0.0*im*r
+    if !(ReverseDiff.hastape(child.local_expansion))
+        child.local_expansion .+= r0
+    end
     harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
-    #@show typeof(child.local_expansion) typeof(branch.local_expansion) typeof(harmonics) typeof(L) typeof(expansion_order)
-    child.local_expansion .= L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
+    #child.local_expansion .= L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
+    #@show sum(child.local_expansion)
+    #child.local_expansion = L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
+    L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
+    #@show sum(child.local_expansion)
+    return nothing
 end
-function L2L_loop!(CLE,BLE,h,L,P)
+@inline function L2L_loop!(CLE,BLE,h,L,P)
     for j in 0:P
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
+            L .= zero(eltype(L))
             for n in j:P
                 for m in j+k-n:-1
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
@@ -562,7 +562,9 @@ function L2L_loop!(CLE,BLE,h,L,P)
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
-                        L .+= view(branch.local_expansion,:,nms) .* (regular_harmonics[jnkm] * oddeven)
+                        for dim in 1:4
+                            L[dim] += BLE[dim,nms] * h[jnkm] * oddeven
+                        end
                     end
                 end
             end
@@ -572,59 +574,81 @@ function L2L_loop!(CLE,BLE,h,L,P)
     return CLE
 end
 
-# function L2L!(branches, j_source, expansion_order)
-#     # expose branch
-#     branch = branches[j_source]
-
-#     #initialize memory TODO: do this beforehand?
-#     harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (expansion_order+1)^2)
-
-#     # iterate over children
-#     for i_child in branch.branch_index
-#         child = branches[i_child]
-#         L2L!(branch, child, harmonics, expansion_order)
-#     end
-# end
-
-function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
     for (i_system, system) in enumerate(systems)
-        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
     end
 end
 
-function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
-    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
+    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
 end
 
-function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
     for i_body in bodies_index
-        vector_potential .= zero(eltype(vector_potential))
-        potential_jacobian .= zero(eltype(potential_jacobian))
-        potential_hessian .= zero(eltype(potential_hessian))
+        #l = length(ReverseDiff.tape(system.bodies[1].position[2]))
+        vector_potential = zeros(eltype(vector_potential), size(vector_potential))
+        potential_jacobian = zeros(eltype(potential_jacobian), size(potential_jacobian))
+        potential_hessian = zeros(eltype(potential_hessian), size(potential_hessian))
+        #vector_potential .= zero(eltype(vector_potential))
+        #potential_jacobian .= zero(eltype(potential_jacobian))
+        #potential_hessian .= zero(eltype(potential_hessian))
         body_position = system[i_body,POSITION]
-        scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
+        #println("tape entries before L2B loop: $(length(ReverseDiff.tape(system.bodies[1].position[2])) - l)")
+        #l = length(ReverseDiff.tape(system.bodies[1].position[2]))
+        scalar_potential, vector_potential, potential_jacobian, potential_hessian = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, expansion_order, workspace)
+        #println("tape entries from L2B loop: $(length(ReverseDiff.tape(system.bodies[1].position[2])) - l)")
+        #l = length(ReverseDiff.tape(system.bodies[1].position[2]))
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
         # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
         system[i_body,VECTOR_POTENTIAL] .+= vector_potential
         system[i_body,VELOCITY] .+= view(potential_jacobian,:,1)
         system[i_body,VELOCITY_GRADIENT] .+= view(potential_hessian,:,:,1)
+        #println("tape entries after L2B loop: $(length(ReverseDiff.tape(system.bodies[1].position[2])) - l)")
     end
 end
 
-function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
+function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, expansion_order, workspace)
+    #l = length(ReverseDiff.tape(body_position[2]))
     dx, dy, dz = body_position - expansion_center
+    #println("tape entries from first line: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, expansion_order)
-    scalar_potential = update_scalar_potential(zero(eltype(vector_potential)),local_expansion,harmonics,expansion_order)
-    vector_potential .= update_vector_potential!(vector_potential,local_expansion,harmonics,expansion_order)
-    potential_jacobian .= update_potential_jacobian!(potential_jacobian,local_expansion,harmonics,harmonics_theta,expansion_order,r)
-    potential_hessian .= update_potential_hessian!(potential_hessian,local_expansion,harmonics,harmonics_theta,harmonics_theta_2,expansion_order,r)
+    #println("tape entries from cartesian_2_spherical: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
+    #harmonics = regular_harmonic_derivs!(harmonics, r, theta, phi, expansion_order)
+    #@show typeof(harmonics)
+    #harmonics .= regular_harmonic_derivs!(harmonics, r, theta, phi, expansion_order)
+    harmonics = regular_harmonic_derivs!(harmonics, r, theta, phi, expansion_order) # 447423 tape entries vs. 368273 tape entries vs. 487023 tape entries
+    #@show sum(harmonics)
+    #@show typeof(harmonics)
+    #println("tape entries from regular_harmonic_derivs!: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
+    scalar_potential = update_scalar_potential(0.0,local_expansion,harmonics[1,:],expansion_order)
+    #println("tape entries from scalar update: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
+    #vector_potential .= update_vector_potential!(vector_potential,local_expansion,harmonics[1,:],expansion_order)
+    vector_potential = update_vector_potential!(vector_potential,local_expansion,harmonics[1,:],expansion_order)
+    #update_vector_potential!(vector_potential,local_expansion,harmonics[1,:],expansion_order)
+    #println("tape entries from vector update: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
+    potential_jacobian = update_potential_jacobian!(potential_jacobian,local_expansion,harmonics[1,:],harmonics[2,:],expansion_order,r)
+    #println("tape entries from jacobian update: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
+    potential_hessian = update_potential_hessian!(potential_hessian,local_expansion,harmonics[1,:],harmonics[2,:],harmonics[3,:],expansion_order,r)
+    #println("tape entries from hessian updates: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
     #@show size(potential_hessian) size(local_expansion) size(harmonics) size(harmonics_theta) size(harmonics_theta_2)
     #spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
-    potential_hessian .= s2c_hess!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
-    potential_jacobian .= s2c_jac!(potential_jacobian, workspace, r, theta, phi)
-    potential_jacobian .= flatten_jacobian!(potential_jacobian)
-    potential_hessian .= flatten_hessian!(potential_hessian)
+    potential_hessian = s2c_hess!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
+    potential_jacobian = s2c_jac!(potential_jacobian, workspace, r, theta, phi)
+    #println("tape entries from potential s2c: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
+    potential_jacobian = flatten_jacobian!(potential_jacobian)
+    potential_hessian = flatten_hessian!(potential_hessian)
+    #non_elementify(potential_hessian,flatten_hessian!,potential_hessian)
+    #println("tape entries from flattening jacobian and hessian: $(length(ReverseDiff.tape(body_position[2])) - l)")
+    #l = length(ReverseDiff.tape(body_position[2]))
     #flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient
-    return scalar_potential
+    return scalar_potential, vector_potential, potential_jacobian, potential_hessian
 end

@@ -4,122 +4,224 @@ tracked_type = Union{ReverseDiff.TrackedReal,ReverseDiff.TrackedArray} # tracked
 """
 function regular_harmonic!(harmonics, rho, theta, phi, P)
 """
-# wrong results
-function ChainRulesCore.rrule(::typeof(regular_harmonic!), _harmonics, rho, theta, phi, P)
-
-    harmonics = copy(_harmonics)
-    y,x = sincos(theta)
-    fact = 1.0
-    pl = 1.0
-    p = 0.0
-    rhom = 1.0 # rho^l / (l+m)! * (-1)^l
-    ei = exp(im*phi)
-    eim = 1.0
-
-    pl = 1.0
-    lpl = 1
-    lpm = 1
-    p1 = 1.0
-    #_p = zeros(eltype(theta),P+1) # used in recurrance relation for derivatives
-    #_pl = zeros(eltype(theta),P+1) # used in recurrance relation for derivatives
-    for m=0:P # l=m up here
-        p = pl
-        lpl = m * m + 2 * m + 1
-        lml = m * m + 1
-
-        harmonics[lpl] = rhom*p*eim
-        harmonics[lml] = conj(harmonics[lpl])
-
-        p1 = p
-        p = x * (2 * m + 1) * p1
-        #_pl[m+1] = pl # m starts at zero so I have to adjust these indices
-        #_p[m+1] = p
-        rhom *= rho
-        rhol = rhom
-        for l=m+1:P # l>m in here
-            lpm = l * l + l + m + 1
-            lmm = l * l + l - m + 1
-            rhol /= -(l + m)
-            
-            harmonics[lpm] = rhol*p*eim
-            harmonics[lmm] = conj(harmonics[lpm])
-            p2 = p1
-            p1 = p
-            p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
-            rhol *= rho
-        end
-        rhom /= -(2 * m + 2) * (2 * m + 1)
-        pl = -pl * fact * y
-        fact += 2
-        eim *= ei
-    end
-
+# passes tests
+function ChainRulesCore.rrule(::typeof(regular_harmonic!), harmonics, rho, theta, phi, P)
+    regular_harmonic!(harmonics,rho,theta,phi,P)
     function harmonics_pullback(h̄)
 
-        #@show h̄
-        #y,x = sincos(theta)
-        ydx = tan(theta)
+        y,x = sincos(theta)
         xdy = cot(theta)
         r̄ho = zero(eltype(rho))
         t̄heta = zero(eltype(theta))
         p̄hi = zero(eltype(phi))
-        H̄conjH = zero(eltype(_harmonics))
-        _pm2 = zero(eltype(theta))
-        _pm1 = zero(eltype(theta))
-        _pm0 = zero(eltype(theta)) # used in updating _pm1 and _pm2
+        plp1 = 1.0
+        pl = 1.0
+        plm1 = 1.0
+        pm = 1.0
 
         for m=0:P
             lpl = m * m + 2 * m + 1
-            # Precomputing conj(H[lpl])*H̄[lpl] since it shows up everywhere.
-            H̄conjH = conj(h̄[lpl])*_harmonics[lpl]
-            # r̄ho[lpl] = (m/rho)*conj(H[lpl])*H̄[lpl]
-            r̄ho += 2*m/rho*H̄conjH
+            lml = m * m + 1
+            # save a few multiplications by only computing these products once
+            h̄conjh_lpl = h̄[lpl]*conj(harmonics[lpl])
+            h̄conjh_lml = h̄[lml]*conj(harmonics[lml])
+            r̄ho += h̄conjh_lpl*m/rho
+            r̄ho += h̄conjh_lml*m/rho
+            t̄heta += h̄conjh_lpl*m*xdy
+            t̄heta += h̄conjh_lml*m*xdy
+            p̄hi += -h̄conjh_lpl*im*m
+            p̄hi += h̄conjh_lml*im*m
 
-            # t̄heta[lpl] = (-tan(theta) + m*cot(theta))*conj(H[lpl])*H̄[lpl]
-            t̄heta += 2*(ydx + m*xdy)*H̄conjH
-
-            # p̄hi[lpl] = -i*m*conj(H[lpl])*H̄[lpl]
-            p̄hi += -im*m*H̄conjH
-
-            # _pl is pre-recorded.
-            _pm2 = x*(2*m+1)*pl#_p[m+1]
-            _pm1 = (_pm2*x*(4*m+5) - (2*m+2))*pl/3 # offset indexing by 1 because m starts at zero
-
+            # initialize these values
+            plm1 = pm
+            pl = x*(2*m+1)*pm
             for l=m+1:P
                 lpm = l * l + l + m + 1
-                # again, precompute this because it gets used several times.
-                H̄conjH = conj(h̄[lpm])*_harmonics[lpm]
+                lmm = l * l + l - m + 1
+                
+                h̄conjh_lpm = h̄[lpm]*conj(harmonics[lpm])
+                h̄conjh_lmm = h̄[lmm]*conj(harmonics[lmm])
 
-                # r̄ho[lpm] = ((P-2)/rho)*conj(H[lpm])*H̄[lpm]
-                r̄ho += 2*(P-2)/rho*H̄conjH
+                r̄ho += h̄conjh_lpm*l/rho
+                t̄heta += h̄conjh_lpm*(l*xdy - (l+m)*plm1/(y*pl))
+                p̄hi += -h̄conjh_lpm*im*m
+                if lpm !== lmm # this avoids double-counting rho, phi, and theta contributions when lpm == lmm.
+                    r̄ho += h̄conjh_lmm*l/rho
+                    t̄heta += h̄conjh_lmm*(l*xdy - (l+m)*plm1/(y*pl))
+                    p̄hi += h̄conjh_lmm*im*m
 
-                # t̄heta[lpm] = ∂p/∂θ * 1/p * conj(H[lpm])*H̄[lpm]      
-                # ∂p/∂θ * 1/p = (l - m + 1)/sin(θ) - (l+1)*(_pm1/_pm0)*cot(θ)
-                _pm0 = (x * (2 * l + 1) * _pm1 - (l + m) * _pm2) / (l - m + 1)
-                _pm2 = _pm1
-                _pm1 = _pm0
-                t̄heta += 2*((l - m + 1) / y - (l + 1) * (_pm1 / _pm0) * xdy) * H̄conjH
-
-                #p̄hi[lpm] = -i*m*conj(H[lpm])*H̄[lpm]
-                p̄hi += -2*m*H̄conjH
+                end
+                plp1 = (x*(2*l+1)*pl - (l+m)*plm1) / (l-m+1)
+                plm1 = pl
+                pl = plp1
 
             end
-            pl = -1*(2*m+1)*y*pl
+            pm *= -1*y*(2*m+1)
         end
-        h̄armonics = h̄ # harmonics is completely overwritten.
+        h̄armonics = zeros(eltype(harmonics), size(harmonics)) # harmonics is completely overwritten.
         s̄elf = NoTangent() # not a closure
         P̄ = NoTangent() # P is the multipole expansion order
-        return s̄elf, h̄armonics, r̄ho, t̄heta, p̄hi, P̄ # complex values are returned where they should be real...
+        return s̄elf, h̄armonics, real(r̄ho), real(t̄heta), real(p̄hi), P̄
     end
     return harmonics, harmonics_pullback
 
 end
-#ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
-#ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
+ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
 
-"""
-function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
-"""
+# all correct except for an incredibly painful third derivative with respect to θ. also accounts for ~15% of tape entries, so it will need to be done eventually.
+# update: I think this works? It produces the right answer in practice but fails tests.
+function ChainRulesCore.rrule(::typeof(regular_harmonic_derivs!),harmonics,rho,theta,phi,P)
+
+    #@show typeof(harmonics)
+    harmonics = regular_harmonic_derivs!(harmonics,rho,theta,phi,P)
+    
+    function h_pullback(h̄)
+
+        # h̄[1,:] -> harmonics
+        # h̄[2,:] -> dhdθ
+        # h̄[3,:] -> d2hdθ2
+        h̄armonics = zeros(eltype(harmonics), size(harmonics)) # completely overwritten -> just set to zeros.
+        h̄armonics .= h̄ # for testing purposes
+        r̄ho = zero(eltype(rho))
+        t̄heta = zero(eltype(theta))
+        p̄hi = zero(eltype(phi))
+        
+        y,x = sincos(theta)
+        x2 = x^2
+        x3 = x^3
+        xdy = cot(theta)
+        #xdy2 = xdy^2
+        invY = y == 0 ? 0 : 1 / y
+        #invY2 = invY^2
+        #invY3 = invY^3
+        #y2 = y^2
+        pl = 1.0
+        a = 0.0
+        #rhom = 1.0
+        #ei = exp(im * phi)
+        #eim = 1.0
+        for m=0:P
+            p = pl
+            lpl = (m * (m + 1)) >> 1 + m + 1
+            h̄armonics[1:3,lpl] .= zero(eltype(h̄armonics))
+            # derivatives of harmonics with respect to rho and phi do not depend on the first index
+            for σ=1:3
+                r̄ho += real(h̄[σ,lpl]*conj(m/rho*harmonics[σ,lpl]))
+                p̄hi += real(h̄[σ,lpl]*conj(im*m*harmonics[σ,lpl]))
+            end
+            p1 = p
+            p = x * (2 * m + 1) * p1
+            t̄heta += real(h̄[1,lpl]*conj(m*xdy*harmonics[1,lpl]))
+            t̄heta += (-m*invY^2 + m^2*xdy^2)*real(h̄[2,lpl]*conj(harmonics[1,lpl]))
+            t̄heta += (-m^2*xdy + m*(m-1)*(-2*xdy*invY^2 + m*xdy^3))*real(h̄[3,lpl]*conj(harmonics[1,lpl]))
+            # lpl = m * m + 2 * m + 1
+            # lml = m * m + 1
+
+
+            for l=m+1:P
+                lpm = (l * (l + 1)) >> 1 + m + 1
+                h̄armonics[1:3,lpm] .= zero(eltype(h̄armonics))
+                # lpm = l * l + l + m + 1
+                # lmm = l * l + l - m + 1
+                for σ=1:3
+                    r̄ho += real(h̄[σ,lpm]*conj(l/rho*harmonics[σ,lpm]))
+                    p̄hi += real(h̄[σ,lpm]*conj(im*m*harmonics[σ,lpm]))
+                end
+                #harmonics[1,lpm] = rhol * p * eim
+                # harmonics[lmm] = conj(harmonics[lpm])
+                t̄heta += real(h̄[1,lpm]*conj(harmonics[1,lpm]))*(l*xdy*p - (l+m)*invY*p1)/p
+                p2 = p1
+                p1 = p
+                p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
+                #harmonics[2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
+                #harmonics[3,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
+                t̄heta += real(h̄[2,lpm]*conj(harmonics[2,lpm]))*(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)/(((l - m + 1) * p - (l + 1) * x * p1) * invY) # not the most elegant solution but it works.
+                a = ((8*x + 9*l*x - 5*m^2*x - l^3*x + l*m^2*x - l*x3 + l^3*x3)*p + (3*l + 4*l^2 + 3*l*m - m^2 - 8*x2 + l^3 + l^2*m - l*m^2 - 11*l*x2 - m^3 - 8*m*x2 - 4*l^2*x2 - 3*l*m*x2 - l^3*x2 - l^2*m*x2)*p1)*(invY/(2*x2+1))
+                t̄heta += real(h̄[3,lpm]*conj(harmonics[3,lpm]))*a/(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)
+
+                #t̄heta += real(h̄[3,lpm]*conj(harmonics[3,lpm]))*a/(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)
+            end
+            pl = -pl * (2m+1) * y
+    
+        end
+
+        return NoTangent(),h̄armonics,r̄ho,t̄heta,p̄hi,NoTangent()
+
+    end
+    #@show sum(harmonics)
+    return harmonics, h_pullback
+    #return nothing, h_pullback
+
+end
+ReverseDiff.@grad_from_chainrules regular_harmonic_derivs!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
+#@grad_from_chainrules_extended (1,) regular_harmonic_derivs!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
+
+# passes tests
+function ChainRulesCore.rrule(::typeof(irregular_harmonic!),harmonics, rho, theta, phi, P)
+
+    function h_pullback(h̄)
+        h̄armonics = zeros(eltype(harmonics),size(harmonics))
+        r̄ho = zero(eltype(rho))
+        t̄heta = zero(eltype(rho))
+        p̄hi = zero(eltype(phi))
+        plp1 = 1.0
+        pl = 1.0
+        plm1 = 1.0
+        pm = 1.0
+        y,x = sincos(theta)
+        xdy = cot(theta)
+        h̄conjh_npl = zero(eltype(harmonics))
+        h̄conjh_nml = zero(eltype(harmonics))
+
+        for m=0:P
+            npl = m * m + 2 * m + 1
+            nml = m * m + 1
+
+            h̄conjh_npl = h̄[npl]*conj(harmonics[npl])
+            r̄ho += h̄conjh_npl*(-m-1)/rho
+            t̄heta += h̄conjh_npl*m*xdy
+            p̄hi += -h̄conjh_npl*im*m
+            if npl !== nml # this avoids double-counting rho, phi, and theta contributions when npl == nml.
+                h̄conjh_nml = h̄[nml]*conj(harmonics[nml])
+                r̄ho += h̄conjh_nml*(-m-1)/rho
+                t̄heta += h̄conjh_nml*m*xdy
+                p̄hi += h̄conjh_nml*im*m
+            end
+
+            plm1 = pm
+            pl = x*(2*m+1)*pm
+
+            for l=m+1:P
+                npm = l * l + l + m + 1
+                nmm = l * l + l - m + 1
+
+                h̄conjh_npm = h̄[npm]*conj(harmonics[npm])
+                h̄conjh_nmm = h̄[nmm]*conj(harmonics[nmm])
+
+                r̄ho += h̄conjh_npm*(-l-1)/rho
+                t̄heta += h̄conjh_npm*(l*xdy - (l+m)*plm1/(y*pl))
+                p̄hi += -h̄conjh_npm*im*m
+                if npm !== nmm # this avoids double-counting rho, phi, and theta contributions when npm == nmm.
+                    r̄ho += h̄conjh_nmm*(-l-1)/rho
+                    t̄heta += h̄conjh_nmm*(l*xdy - (l+m)*plm1/(y*pl))
+                    p̄hi += h̄conjh_nmm*im*m
+
+                end
+                plp1 = (x*(2*l+1)*pl - (l+m)*plm1) / (l-m+1)
+                plm1 = pl
+                pl = plp1
+            end
+            pm *= -1*y*(2*m+1)
+        end
+        
+        s̄elf = NoTangent()
+        P̄ = NoTangent()
+        return s̄elf, h̄armonics, real(r̄ho), real(t̄heta), real(p̄hi), P̄
+    end
+    return irregular_harmonic!(harmonics, rho, theta, phi, P), h_pullback
+
+end
+ReverseDiff.@grad_from_chainrules irregular_harmonic!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
 
 function get_drjdxi(rho,theta,phi)
     s_theta,c_theta = sincos(theta)
@@ -346,8 +448,7 @@ ReverseDiff.@grad_from_chainrules flatten_jacobian!(jacobian::AbstractArray{<:Re
 
 # not fully checked, but should work as long as there are no typos
 function ChainRulesCore.rrule(::typeof(flatten_hessian!),hessian)
-
-    hessian = flatten_hessian!(hessian)
+    flatten_hessian!(hessian)
     
     function h_pullback(H̄)
 
@@ -412,11 +513,11 @@ function ChainRulesCore.rrule(::typeof(update_scalar_potential),scalar_potential
         return s̄elf, p̄otential, L̄E, h̄, P̄
 
     end
-    return update_scalar_potential(copy(scalar_potential),LE,h,P),potential_pullback
+    return update_scalar_potential(scalar_potential,LE,h,P),potential_pullback
 
 end
 
-ReverseDiff.@grad_from_chainrules update_scalar_potential!(scalar_potential::ReverseDiff.TrackedReal,
+ReverseDiff.@grad_from_chainrules update_scalar_potential(scalar_potential,
                                                            LE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                                            P)
@@ -704,12 +805,16 @@ ReverseDiff.@grad_from_chainrules M2M_loop!(BM::AbstractArray{<:Complex{<:Revers
                                             CM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             P)
+#=@grad_from_chainrules_extended (1,) M2M_loop!(BM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            CM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            P)=#
 
-# incorrect results
 function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,P)
 
     function CLE_pullback(C̄LE2)
         s̄elf = NoTangent()
+        C̄LE = zeros(eltype(CLE),size(CLE))
         C̄LE = C̄LE2
         B̄LE = zeros(eltype(BLE),size(BLE))
         h̄ = zeros(eltype(h),size(h))
@@ -751,10 +856,18 @@ function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,P)
         return s̄elf, C̄LE, B̄LE, h̄, L̄, P̄
 
     end
-    return L2L_loop!(copy(CLE),BLE,h,L,P),CLE_pullback
+    #return L2L_loop!(copy(CLE),BLE,h,L,P),CLE_pullback
+    L2L_loop!(CLE,BLE,h,L,P)
+    #@show sum(CLE)
+    return nothing, CLE_pullback
     
 end
-ReverseDiff.@grad_from_chainrules L2L_loop!(CLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+#=ReverseDiff.@grad_from_chainrules L2L_loop!(CLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            BLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            L::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
+                                            P)=#
+@grad_from_chainrules_extended (1,) L2L_loop!(CLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             BLE::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             L::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},

@@ -159,11 +159,13 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
 end
 
 function Branch(bodies_index::UnitRange, n_branches, branch_index, center, radius, expansion_order)
-    return SingleBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), ReentrantLock())
+    return SingleBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, radius), initialize_expansion(expansion_order, radius), ReentrantLock())
+    #return SingleBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 function Branch(bodies_index, n_branches, branch_index, center, radius, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), ReentrantLock())
+    return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, radius), initialize_expansion(expansion_order, radius), ReentrantLock())
+    #return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -668,14 +670,26 @@ end
 #####
 ##### helper function
 #####
-function initialize_expansion(expansion_order, type=Float64)
+#=function initialize_expansion(expansion_order, type=Float64)
+    return zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
+end=#
+
+function initialize_expansion(expansion_order, radius)
+    
+    #=if ReverseDiff.istracked(radius)
+        type = eltype(ReverseDiff.value(radius))
+        @show type radius
+        out = zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
+        return ReverseDiff.track(out,ReverseDiff.tape(radius))
+    end=#
+    type = eltype(radius)
     return zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function reset_expansions!(tree)
-    T = eltype(tree.branches[1].multipole_expansion)
+    #T = eltype(tree.branches[1].multipole_expansion)
     for branch in tree.branches
-        branch.multipole_expansion .= zero(T)
-        branch.local_expansion .= zero(T)
+        branch.multipole_expansion .= zero(eltype(branch.multipole_expansion))
+        branch.local_expansion .= zero(eltype(branch.local_expansion))
     end
 end

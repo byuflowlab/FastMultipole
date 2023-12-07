@@ -18,10 +18,18 @@
 @inline ReverseDiff.derivtype(::Type{Complex{ReverseDiff.TrackedReal{V,D,O}}}) where {V,D,O} = D
 @inline ReverseDiff.derivtype(::Complex{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = D
 @inline ReverseDiff.origintype(::Complex{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = O
-@inline ReverseDiff.origintype(::Complex{Type{ReverseDiff.TrackedReal{V,D,O}}}) where {V,D,O} = O
+@inline ReverseDiff.origintype(::Type{Complex{ReverseDiff.TrackedReal{V,D,O}}}) where {V,D,O} = O
 @inline ReverseDiff.hasorigin(z::Complex{<:ReverseDiff.TrackedReal}) = real(z).index === imag(z).index && real(z).index !== ReverseDiff.NULL_INDEX
 @inline ReverseDiff.hastape(z::Complex{<:ReverseDiff.TrackedReal}) = ReverseDiff.tape(z) !== ReverseDiff.NULL_TAPE
-@inline ReverseDiff.tape(z::Complex{<:ReverseDiff.TrackedReal}) = real(z).tape
+@inline function ReverseDiff.tape(z::Complex{<:ReverseDiff.TrackedReal})
+    if ReverseDiff.istracked(real(z))
+        ReverseDiff.hastape(real(z)) && return ReverseDiff.tape(real(z))
+    end
+    if ReverseDiff.istracked(imag(z))
+        ReverseDiff.hastape(imag(z)) && return ReverseDiff.tape(imag(z))
+    end
+    return ReverseDiff.NULL_TAPE
+end
 
 # additional getters for Complex{TrackedReal} in an array
 @inline ReverseDiff.istracked(::AbstractArray{<:Complex{T}}) where {T} = T <: ReverseDiff.TrackedReal || !(isconcretetype(T))
@@ -29,23 +37,56 @@
 @inline ReverseDiff.deriv(t::AbstractArray{<:Complex}) = ReverseDiff.istracked(t) ? map(ReverseDiff.deriv, t) : t
 
 # setters
-@inline ReverseDiff.value!(t::Complex{<:ReverseDiff.TrackedReal}, v::Real) = (real(t).value = v; t.imag.value = zero(typeof(v)); nothing)
-@inline ReverseDiff.value!(t::Complex{<:ReverseDiff.TrackedReal}, z::Complex) = (t.real.value = real(z); t.imag.value = imag(z); nothing) # not 100% sure this won't break.
-@inline ReverseDiff.deriv!(t::Complex{<:ReverseDiff.TrackedReal}, v::Real) = (real(t).deriv = v; t.imag.deriv = zero(typeof(v)); nothing)
-@inline ReverseDiff.deriv!(t::Complex{<:ReverseDiff.TrackedReal}, z::Complex) = (t.real.deriv = real(z); t.imag.deriv = imag(z); nothing) # not 100% sure this won't break.
+@inline ReverseDiff.value!(t::Complex{<:ReverseDiff.TrackedReal}, v::Real) = (t.re.value = v; t.im.value = zero(typeof(v)); nothing)
+#@inline ReverseDiff.value!(t::Complex{<:ReverseDiff.TrackedReal}, z::Complex) = (real(t).value = real(z); imag(t).value = imag(z); nothing) # not 100% sure this won't break.
+@inline function ReverseDiff.value!(t::Complex{T}, z::Complex) where {T <: ReverseDiff.TrackedReal}
+    #=temp = Complex{T}(real(t),imag(t))
+    real(temp).value = real(z)
+    imag(temp).value = imag(z)
+    #real(temp).deriv = real(t).deriv
+    #imag(temp).deriv = imag(t).deriv
+    @show t temp z
+    t = temp
+    @show t temp z
+    error(" ")=#
+    t.re.value = real(z)
+    t.im.value = imag(z)
+    nothing # not 100% sure this won't break.
+end
+@inline ReverseDiff.deriv!(t::Complex{<:ReverseDiff.TrackedReal}, v::Real) = (t.re.deriv = v; t.im.deriv = zero(typeof(v)); nothing)
+@inline ReverseDiff.deriv!(t::Complex{<:ReverseDiff.TrackedReal}, z::Complex) = (t.re.deriv = real(z); t.im.deriv = imag(z); nothing) # not 100% sure this won't break.
 
 # additional setters for Complex{TrackedReal} in an array
 #@inline ReverseDiff.value!(t::Complex{<:ReverseDiff.TrackedReal})
 @inline function ReverseDiff.value!(t::AbstractArray{<:Complex},v::AbstractArray{<:Complex})
-
-    (copyto!(ReverseDiff.value(t), v); nothing)
+    if ReverseDiff.istracked(t)
+        for i=1:length(t)
+            t[i].re.value = real(v[i])
+            t[i].im.value = imag(v[i])
+            #(copyto!(value(t), v); nothing)
+        end
+    end
+    #(copyto!(ReverseDiff.value(t), v); nothing)
+    return nothing
 
 end
-@inline function ReverseDiff.value!(t::Vector{<:Complex}, v::Vector{ComplexF64})
+
+@inline function ReverseDiff.deriv!(t::AbstractArray{<:Complex},v::AbstractArray{<:Complex})
+
     for i=1:length(t)
         t[i].re.value = real(v[i])
         t[i].im.value = imag(v[i])
-        #(copyto!(value(t), v); nothing)
+    end
+
+end
+
+@inline function ReverseDiff.value!(t::Vector{<:Complex}, v::Vector{ComplexF64})
+    if ReverseDiff.istracked(t)
+        for i=1:length(t)
+            t[i].re.value = real(v[i])
+            t[i].im.value = imag(v[i])
+            #(copyto!(value(t), v); nothing)
+        end
     end
     return nothing
 end
@@ -59,13 +100,21 @@ end
 end
 
 
-ReverseDiff.pull_value!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && ReverseDiff.value!(t, ReverseDiff.value(t.origin)[t.index]); nothing)
-ReverseDiff.pull_deriv!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && ReverseDiff.deriv!(t, ReverseDiff.deriv(t.origin)[t.index]); nothing)
-ReverseDiff.push_deriv!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && (t.origin.deriv[t.index] = ReverseDiff.deriv(t)); nothing)
+_get_origin(t::T) where T = T <: ReverseDiff.TrackedReal ? t.origin : T <: Complex ? t.re.origin : nothing
+_get_index(t::T) where T = T <: ReverseDiff.TrackedReal ? t.index : T <: Complex ? t.re.index : nothing
+
+ReverseDiff.pull_value!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && ReverseDiff.value!(t, ReverseDiff.value(_get_origin(t))[_get_index(t)]); nothing)
+ReverseDiff.pull_deriv!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && ReverseDiff.deriv!(t, ReverseDiff.deriv(_get_origin(t))[_get_index(t)]); nothing)
+ReverseDiff.push_deriv!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && (_get_origin(t).deriv[_get_index(t)] = ReverseDiff.deriv(t)); nothing)
+
+#ReverseDiff.pull_value!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && ReverseDiff.value!(t, ReverseDiff.value(t.origin)[t.index]); nothing)
+#ReverseDiff.pull_deriv!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && ReverseDiff.deriv!(t, ReverseDiff.deriv(t.origin)[t.index]); nothing)
+#ReverseDiff.push_deriv!(t::Complex{<:ReverseDiff.TrackedReal}) = (ReverseDiff.hasorigin(t) && (t.origin.deriv[t.index] = ReverseDiff.deriv(t)); nothing)
 
 
 # seed/unseed... I don't think these are ever called, though.
 function ReverseDiff.seed!(t::Complex{<:ReverseDiff.TrackedReal},i)
+    error(" ")
     if i == 1
         (t.real.deriv[i] = one(ReverseDiff.derivtype(t)); nothing)
     elseif i == 2
@@ -77,61 +126,110 @@ end
 
 ReverseDiff.seed!(z::Complex,i) = i == 1 ? seed!(z.real) : seed!(z.imag)
 ReverseDiff.seed!(z::Complex) = error("there should be an index here...")
+function ReverseDiff.seed!(t::Complex{<:ReverseDiff.TrackedReal})
+    error(" ")
+end
+function ReverseDiff.seed!(t::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}})
+    error(" ")
+end
+function ReverseDiff.seed!(t::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},i)
+    error(" ")
+end
 
 function ReverseDiff.unseed!(t::Complex{<:ReverseDiff.TrackedReal})
-    real(t).deriv = zero(ReverseDiff.derivtype(t)); ReverseDiff.push_deriv!(t)
-    imag(t).deriv = zero(ReverseDiff.derivtype(t)); ReverseDiff.push_deriv!(t)
+    t.re.deriv = zero(ReverseDiff.derivtype(t)); ReverseDiff.push_deriv!(t.re)
+    t.im.deriv = zero(ReverseDiff.derivtype(t)); ReverseDiff.push_deriv!(t.im)
     return nothing
 end
 
-ReverseDiff.capture(t::Complex) = ReverseDiff.istracked(t) ?  map!(ReverseDiff.capture, similar(t), t) : copy(t)
-ReverseDiff.capture(t::Complex{<:ReverseDiff.TrackedReal}) = ifelse(ReverseDiff.hastape(t), t, ReverseDiff.value(t))
+#ReverseDiff.capture(t::Complex) = ReverseDiff.istracked(t) ?  map!(ReverseDiff.capture, similar(t), t) : copy(t)
+#ReverseDiff.capture(t::Complex) = t
+#ReverseDiff.capture(t::Complex{<:ReverseDiff.TrackedReal}) = ifelse(ReverseDiff.hastape(t), t, ReverseDiff.value(t))
 function Base.similar(z::Complex{TR}) where TR <: ReverseDiff.TrackedReal
-    Complex{TR}(zero(realtype(z)),zero(realtype(z)))
-end
-
-# track/track! functions. These are pretty central to unpacking larger structures and propegating derivatives.
-function ReverseDiff.track!(t::Complex{<:ReverseDiff.TrackedReal{D,D,Nothing}}, x::Complex, tp::ReverseDiff.InstructionTape) where D
-    t.real = ReverseDiff.track(real(x),D,tp)
-    t.imag = ReverseDiff.track(imag(x),D,tp)
-    return t
-end
-realtype(::ComplexF64) = Float64 # because eltype(ComplexF64) == ComplexF64 rather than Float64
-ReverseDiff.track(x::Complex, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) = ReverseDiff.track(x, realtype(x), tp)
-ReverseDiff.track(x::Complex, ::Type{D}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) where D = Complex(ReverseDiff.TrackedReal(real(x), zero(D), tp),ReverseDiff.TrackedReal(imag(x), zero(D), tp))
-ReverseDiff.track(x::AbstractArray{ComplexF64}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) = ReverseDiff.track(x, ComplexF64, tp)
-function ReverseDiff.track(x::AbstractArray{ComplexF64}, ::Type{ComplexF64}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape())
-    t = Array{Complex{ReverseDiff.TrackedReal{Float64,Float64,nothing}}}(undef,size(x))
-    for i=1:length(x)
-        t[i] = ReverseDiff.track(x[i],Float64,tp)
-    end
-    return t
-end
-# track(x::AbstractArray, tp::InstructionTape = InstructionTape()) = track(x, eltype(x), tp)
-# track(x::AbstractArray, ::Type{D}, tp::InstructionTape = InstructionTape()) where {D} = TrackedArray(x, fill!(similar(x, D), zero(D)), tp)
-
-
-# these catch errors but should never be called.
-#=function ReverseDiff.track(a::Float64,b::Bool)
-    @show a b
     error(" ")
-end=#
-#=
-function Base.convert(::Type{T1}, t::T2) where {T1<:Complex{ReverseDiff.TrackedReal},T2<:ReverseDiff.TrackedReal}
-    error(" ")
+    zero(Complex{TR})
+    #Complex{TR}(zero(Float64(z)),zero(Float64(z)))
+end
+
+# track/track! functions. These are pretty central to unpacking larger structures and propagating derivatives.
+
+ReverseDiff.track(x::Complex, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) = ReverseDiff.track(x, typeof(x), tp)
+ReverseDiff.track(x::AbstractArray{<:Complex}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) = ReverseDiff.track(x, eltype(x), tp)
+ReverseDiff.track(x::Complex, ::Type{Complex{D}}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) where {D} = Complex{ReverseDiff.TrackedReal(real(x), zero(D), tp), ReverseDiff.TrackedReal(imag(x), zero(D), tp)}
+ReverseDiff.track(x::Complex, ::Type{D}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) where {D} = Complex{ReverseDiff.TrackedReal(real(x), zero(D), tp), ReverseDiff.TrackedReal(imag(x), zero(D), tp)}
+ReverseDiff.track(x::AbstractArray{<:Complex}, ::Type{Complex{D}}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) where {D} = ReverseDiff.TrackedArray(x, fill!(similar(x,Complex{D}), zero(Complex{D})), tp)
+ReverseDiff.track(x::AbstractArray{<:Complex}, ::Type{D}, tp::ReverseDiff.InstructionTape = ReverseDiff.InstructionTape()) where {D} = ReverseDiff.TrackedArray(x, fill!(similar(x,D), zero(Complex{D})), tp)
+
+#ReverseDiff.track!(t::ReverseDiff.TrackedArray{Complex{<:ReverseDiff.TrackedReal}}, x::AbstractArray) = (ReverseDiff.value!(t,x); ReverseDiff.unseed!(t); t)
+#ReverseDiff.track!(t::Complex{<:ReverseDiff.TrackedReal}, x::Real) = (ReverseDiff.value!(t,x); ReverseDiff.unseed!(t); t)
+#ReverseDiff.track!(t::Complex{<:ReverseDiff.TrackedReal}, x::Complex) = (ReverseDiff.value!(t,x); ReverseDiff.unseed!(t); t)
+#function ReverseDiff.track!(t::AbstractArray{Complex{ReverseDiff.TrackedReal{D,D,Nothing}}}, x::AbstractArray, tp::ReverseDiff.InstructionTape) where D
+#    for i in eachindex(t)
+#        t[i] = track(x[i], D, tp)
+#    end
+#    return t
+#end
+
+function Base.convert(::Type{Complex{T1}}, t::T2) where {T1<:ReverseDiff.TrackedReal, T2<:ReverseDiff.TrackedReal}
     V1, D1, O1 = ReverseDiff.valtype(T1), ReverseDiff.derivtype(T1), ReverseDiff.origintype(T1)
     tp = ReverseDiff.tape(t)
-    out = ReverseDiff.TrackedReal{V1,D1,O1}(_convert(V1, ReverseDiff.value(t)), _convert(D1, ReverseDiff.deriv(t)), tp)
+    #out = Complex(ReverseDiff.TrackedReal{V1,D1,O1}(zero(V1), zero(D1), tp), ReverseDiff.TrackedReal{V1,D1,O1}(zero(V1), zero(D1), tp))
+    #out = Complex(ReverseDiff.TrackedReal{V1,D1,O1}(ReverseDiff._convert(V1, ReverseDiff.value(t)), ReverseDiff._convert(D1, ReverseDiff.deriv(t)), tp), ReverseDiff.TrackedReal{V1,D1,O1}(zero(V1), zero(D1), tp))
+    #out = ReverseDiff.TrackedReal{V1,D1,O1}(ReverseDiff._convert(V1, ReverseDiff.value(t)), ReverseDiff._convert(D1, ReverseDiff.deriv(t)), tp)
+    #@show V1 D1
+    imag_tracked_zero = ReverseDiff.TrackedReal{V1,D1,O1}(convert(V1,0.0),convert(D1,0.0),tp,t.index,t.origin)
+    out = Complex(convert(T1,t),convert(T1,imag_tracked_zero))
+    #out.re.index = 1
+    #out.im.value = zero(V1)
+    #out.im.deriv = zero(D1)
     ReverseDiff.record!(tp, ReverseDiff.SpecialInstruction, convert, t, out)
+    #ReverseDiff.record!(tp, ReverseDiff.SpecialInstruction, convert, imag_tracked_zero, out.im)
+    #@show t out.im real(t) imag(t) convert(T1,imag(t)) imag_tracked_zero
+    #println("Converting $t to $T1 (real to complex)\nV1: $V1\tD1: $D1\tO1: $O1")
+    #@show t out
+    #println("\n")
     return out
 end
-function Base.convert(::Type{T},z::C) where {T <: Complex{ReverseDiff.TrackedReal}, C}
+
+function Base.convert(::Type{Complex{T1}},t::Complex{T2}) where {T1 <: ReverseDiff.TrackedReal, T2 <: ReverseDiff.TrackedReal}
+    #V1,D1,O1 = ReverseDiff.valtype(T1), ReverseDiff.derivtype(T1), ReverseDiff.origintype(T1)
+    tp = ReverseDiff.tape(t)
+    out = Complex(ReverseDiff._convert(T1,t.re),ReverseDiff._convert(T1,t.im))
+    #ReverseDiff.record!(tp, ReverseDiff.SpecialInstruction, convert, t, out)
+    ReverseDiff.record!(tp, ReverseDiff.SpecialInstruction, convert, t.re, out.re)
+    ReverseDiff.record!(tp, ReverseDiff.SpecialInstruction, convert, t.im, out.im)
+    #println("Converting $t to $T1 (complex to complex)\nV1: $V1\tD1: $D1\tO1: $O1")
+    #@show t out
+    #println("\n")
+    return out
+
+end
+
+function Base.convert(::Type{Complex{T1}},t::C) where {T1 <: ReverseDiff.TrackedReal, C <: Complex}
     error(" ")
 end
-function Base.convert(::Type{C},z::T) where {T <: ReverseDiff.TrackedReal, C}
-    error(" ")
-end=#
 
+
+function Base.convert(::Type{Complex{T1}},t::R) where {T1 <: ReverseDiff.TrackedReal, R <: Real}
+    error(" ")
+end
+
+Base.convert(::Type{Complex{T}}, t::Complex{T}) where {T <: ReverseDiff.TrackedReal} = t
+Base.promote_rule(::Type{Complex{ReverseDiff.TrackedReal{V1,D1,O1}}}, ::Type{Complex{ReverseDiff.TrackedReal{V2,D2,O2}}}) where {V1,V2,D1,D2,O1,O2} = Complex{ReverseDiff.TrackedReal{promote_type(V1,V2),promote_type(D1,D2),nothing},ReverseDiff.TrackedReal{promote_type(V1,V2),promote_type(D1,D2),nothing}}
+
+Base.one(::Type{Complex{ReverseDiff.TrackedReal{V,D,O}}}) where {V,D,O} = error(" ")
+Base.zero(::Type{Complex{ReverseDiff.TrackedReal{V,D,O}}}) where {V,D,O} = Complex(ReverseDiff.TrackedReal{V,D,O}(zero(V)),ReverseDiff.TrackedReal{V,D,O}(zero(V)))
+
+function ReverseDiff.capture(t::Complex{<:ReverseDiff.TrackedReal})
+    
+    #@show t
+    if ReverseDiff.hastape(t)
+        return Complex(ReverseDiff.capture(t.re),ReverseDiff.capture(t.im))
+    else
+        return t
+    end
+
+end
 
 # these next functions make sure derivatives get propagated. Unimplemented ones still return an error so that I know if one of them is needed.
 function ReverseDiff.increment_deriv!(t::Complex,x)
@@ -141,6 +239,13 @@ function ReverseDiff.increment_deriv!(t::Complex,x)
 end
 function ReverseDiff.increment_deriv!(t::Complex,x,i)
     error("t: $t\tx: $x\ti: $i")
+end
+
+@inline function ReverseDiff.increment_deriv!(t::ReverseDiff.TrackedReal,x::Complex)
+
+    t.deriv += real(x)
+    #error("$t\n$x")
+
 end
 
 function ReverseDiff._add_to_deriv!(a::Complex,b)
@@ -203,4 +308,3 @@ function test_complex_multiplication()
     return fc,dfdc
 
 end
-

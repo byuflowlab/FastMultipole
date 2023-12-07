@@ -79,8 +79,9 @@ function nearfield!(target_system, target_branches, source_system, source_branch
 end
 
 function horizontal_pass_single_thread!(branches, m2l_list, expansion_order)
+    # length(ReverseDiff.tape(branches[1].center))
     harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-    for (i_target, j_source) in m2l_list
+    for (i_target, j_source) in m2l_list # loop contributes all 29416 tape entries
         M2L!(branches[i_target], branches[j_source], harmonics, expansion_order)
     end
 end
@@ -96,21 +97,35 @@ end
 ##### downward pass
 #####
 function downward_pass_single_thread!(branches, systems, expansion_order)
+    r0 = branches[1].radius*0.0 + branches[1].radius*0.0*im
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
     vector_potential = zeros(eltype(branches[1]),3)
     potential_jacobian = zeros(eltype(branches[1]),3,4)
     potential_hessian = zeros(eltype(branches[1]),3,3,4)
-    derivative_harmonics = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics = zeros(eltype(branches[1].multipole_expansion), 3, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    # 447819
+    #=if ReverseDiff.istracked(derivative_harmonics)
+        for h in derivative_harmonics
+            h.re.tape = ReverseDiff.tape(branches[1].radius)
+            h.im.tape = ReverseDiff.tape(branches[1].radius)
+            @show length(ReverseDiff.tape(branches[1].radius))
+        end
+    end=#
+    #derivative_harmonics = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    #derivative_harmonics_theta = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
+    #derivative_harmonics_theta_2 = zeros(eltype(branches[1].multipole_expansion), ((expansion_order+1) * (expansion_order+2)) >> 1)
     workspace = zeros(eltype(branches[1]),3,4)
     L = zeros(eltype(branches[1].multipole_expansion),4)
     for branch in branches
         if branch.n_branches == 0 # leaf level
-            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            #l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
+            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace)
+            #println("L2B tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)")
         else
             for child_branch in view(branches,branch.branch_index)
+                #l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
                 L2L!(branch, child_branch, regular_harmonics, L, expansion_order)
+                #println("L2L tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)")
             end
         end
     end
@@ -138,7 +153,7 @@ function build_interaction_lists(branches, theta, farfield, nearfield)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
     build_interaction_lists!(m2l_list, direct_list, 1, 1, branches, theta, farfield, nearfield)
-    
+    #@show m2l_list
     return m2l_list, direct_list
 end
 
