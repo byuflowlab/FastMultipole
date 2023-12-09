@@ -7,8 +7,6 @@ end
 using Test
 import Statistics
 S = Statistics
-import Symbolics
-sym = Symbolics
 using StaticArrays, Random, LegendrePolynomials
 
 import FLOWFMM
