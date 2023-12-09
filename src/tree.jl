@@ -1,5 +1,6 @@
-const BRANCH_TYPE = Float64
-global SHRINKING_OFFSET = .000001
+# const BRANCH_TYPE = Float64
+# global SHRINKING_OFFSET = .000001
+# away_from_center! is a bandaid fix
 
 #####
 ##### tree constructor
@@ -567,14 +568,22 @@ end
     y_max = y_min
     z_max = z_min
     x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, system, bodies_index)
-    if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
-        # TODO with a smarter local expansion evaluation, we could get rid of this provision
-        center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-    else
+    # if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
+    #     # TODO with a smarter local expansion evaluation, we could get rid of this provision
+    #     center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
+    # else
         center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-    end
+    # end
+    away_from_center!(center, system, bodies_index)
     
     return center
+end
+
+@inline function get_distance_leaf(x, y, z, center)
+    dx = x - center[1]
+    dy = y - center[2]
+    dz = z - center[3]
+    return dx, dy, dz #sqrt(dx*dx + dy*dy + dz*dz)
 end
 
 @inline function get_distance(x, y, z, center)
@@ -588,9 +597,35 @@ end
     for i_body in bodies_index
         x, y, z = system[i_body,POSITION]
         body_radius = system[i_body,RADIUS]
-        radius = max(radius, get_distance(x, y, z, center) + body_radius)
+        distance_2_body_center = get_distance(x, y, z, center)
+        if distance_2_body_center < 1e-7
+            system[i_body,POSITION] .+= 1e-6
+            distance_2_body_center = get_distance(x, y, z, center)
+        end
+        radius = max(radius, distance_2_body_center + body_radius)
     end
+
     return radius
+end
+
+@inline function away_from_center!(center, systems::Tuple, bodies_indices)
+    for (system,bodies_index) in zip(systems, bodies_indices)
+        away_from_center!(center, system, bodies_index)
+    end
+
+    return nothing
+end
+
+@inline function away_from_center!(center, system, bodies_index)
+    for i_body in bodies_index
+        x, y, z = system[i_body,POSITION]
+        distance_2_body_center = get_distance(x, y, z, center)
+        if distance_2_body_center < 1e-7
+            system[i_body,POSITION] .+= 1e-6
+        end
+    end
+
+    return nothing
 end
 
 @inline function shrink_radius(radius, center, systems::Tuple, bodies_indices)
