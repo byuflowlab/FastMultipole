@@ -90,9 +90,15 @@ end
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[2,i_compressed] += harmonics[i_solid_harmonic] * qx * ONE_OVER_4PI
-                branch.multipole_expansion[3,i_compressed] += harmonics[i_solid_harmonic] * qy * ONE_OVER_4PI
-                branch.multipole_expansion[4,i_compressed] += harmonics[i_solid_harmonic] * qz * ONE_OVER_4PI
+                #branch.multipole_expansion[2,i_compressed] += harmonics[i_solid_harmonic] * qx * ONE_OVER_4PI
+                #branch.multipole_expansion[3,i_compressed] += harmonics[i_solid_harmonic] * qy * ONE_OVER_4PI
+                #branch.multipole_expansion[4,i_compressed] += harmonics[i_solid_harmonic] * qz * ONE_OVER_4PI
+                branch.multipole_expansion[1,2,i_compressed] += harmonics[1,i_solid_harmonic] * qx * ONE_OVER_4PI
+                branch.multipole_expansion[2,2,i_compressed] += harmonics[2,i_solid_harmonic] * qx * ONE_OVER_4PI
+                branch.multipole_expansion[1,3,i_compressed] += harmonics[1,i_solid_harmonic] * qy * ONE_OVER_4PI
+                branch.multipole_expansion[2,3,i_compressed] += harmonics[2,i_solid_harmonic] * qy * ONE_OVER_4PI
+                branch.multipole_expansion[1,4,i_compressed] += harmonics[1,i_solid_harmonic] * qz * ONE_OVER_4PI
+                branch.multipole_expansion[2,4,i_compressed] += harmonics[2,i_solid_harmonic] * qz * ONE_OVER_4PI
             end
         end
     end
@@ -114,7 +120,9 @@ end
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[1,i_compressed] += harmonics[i_solid_harmonic] * q
+                #branch.multipole_expansion[1,i_compressed] += harmonics[i_solid_harmonic] * q
+                branch.multipole_expansion[1,1,i_compressed] += harmonics[1,i_solid_harmonic] * q
+                branch.multipole_expansion[2,1,i_compressed] += harmonics[2,i_solid_harmonic] * q
             end
         end
         #@show length(ReverseDiff.tape(r)) - l # 451 allocations (per particle)

@@ -240,7 +240,7 @@ tree = fmm.Tree((system,); expansion_order, n_per_branch, shrink_recenter=false)
 i_mass = 1
 i_branch = 5 # use the first mass
 
-harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
+harmonics = zeros(Float64,2,(expansion_order+1)^2)
 fmm.B2M!(system, tree.branches[i_branch], new_order_index[i_mass]:new_order_index[i_mass], harmonics, tree.expansion_order)
 
 center = tree.branches[i_branch].center
@@ -310,8 +310,8 @@ tree = fmm.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=fa
 i_branch = 2 # contains 4th and 5th elements
 i_branch_4 = 6 # use the fourth mass
 # i_branch_5 = 7 # use the fifth mass
-harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-M = zeros(Complex{Float64},4)
+harmonics = zeros(Float64,2,(expansion_order+1)^2)
+M = zeros(Float64,2,4)
 # using only the 4th mass: (note it has been reordered)
 fmm.B2M!(elements, tree.branches[i_branch_4], new_order_index[4]:new_order_index[4], harmonics, tree.expansion_order) # evaluate multipole coefficients
 for child_branch in view(tree.branches, tree.branches[i_branch].branch_index) # translate coefficients to the center of branch 2
@@ -370,19 +370,19 @@ source_i = new_order_index[1] # just needs to be farther away than the target to
 dx_source = fmm.cartesian_2_spherical(elements[source_i,fmm.POSITION] - tree.branches[branch_i].center)
 dx_target = fmm.cartesian_2_spherical(elements[target_i,fmm.POSITION] - tree.branches[branch_i].center)
 
-local_coefficients_theta = zeros(Complex{Float64}, ((expansion_order+1)*(expansion_order+2))>>1)
-local_coefficients_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
-local_coefficients_expanded_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
+local_coefficients_theta = zeros(Float64, 2, ((expansion_order+1)*(expansion_order+2))>>1)
+local_coefficients_expanded = zeros(Float64, 2, (expansion_order+1)^2)
+local_coefficients_expanded_theta = zeros(Float64, 2, (expansion_order+1)^2)
 fmm.irregular_harmonic!(local_coefficients_expanded, dx_source..., expansion_order)
 local_coefficients_expanded .*= ms[1]
-regular_harmonics_expanded = zeros(Complex{Float64}, (expansion_order+1)^2)
+regular_harmonics_expanded = zeros(Float64, 2, (expansion_order+1)^2)
 fmm.regular_harmonic!(regular_harmonics_expanded, dx_target..., expansion_order)
 
 fmm.B2L!(tree, branch_i, elements[source_i,fmm.POSITION], elements.bodies[source_i].strength)
 
-harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
-harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
+harmonics = zeros(Float64, 2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64, 2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64, 2, (expansion_order+1)^2)
 workspace = zeros(3,4)
 fmm.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, expansion_order, tree.branches[branch_i].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,target_i]
@@ -391,7 +391,8 @@ dx_direct = xs[4,:] - xs[1,:]
 u_check = 1 / sqrt(dx_direct' * dx_direct)
 u_check *= ms[1]
 
-u_man = real(sum(regular_harmonics_expanded' * local_coefficients_expanded)) # appears to work
+u_man = sum(regular_harmonics_expanded[1,:].*local_coefficients_expanded[1,:] .+ regular_harmonics_expanded[2,:].*local_coefficients_expanded[2,:])
+#u_man = real(sum(regular_harmonics_expanded' * local_coefficients_expanded)) # appears to work
 
 @test isapprox(u_check, u_fmm; atol=1e-12)
 @test isapprox(u_check, u_man; atol=1e-12)
@@ -430,9 +431,9 @@ fmm.B2L!(tree, 2, elements[new_order_index[1],fmm.POSITION], elements.bodies[new
 # local_2 = deepcopy(tree.branches[2].local_expansion)
 
 # check L2P now:
-harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
-harmonics_theta = zeros(Complex{Float64},(expansion_order+1)^2)
-harmonics_theta_2 = zeros(Complex{Float64},(expansion_order+1)^2)
+harmonics = zeros(Float64,2,(expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2,(expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2,(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(52)
 fmm.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, expansion_order, tree.branches[2].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
@@ -440,9 +441,9 @@ u_fmm_no_x = elements.potential[1,new_order_index[5]]
 elements.potential[1,new_order_index[5]] *= 0
 
 # translate local expansion to branch 7 (mass 5)
-fmm.L2L!(tree.branches[2], tree.branches[7], harmonics, zeros(eltype(tree.branches[1].multipole_expansion),4), tree.expansion_order)
+fmm.L2L!(tree.branches[2], tree.branches[7], harmonics, zeros(eltype(tree.branches[1].multipole_expansion),2,4), tree.expansion_order)
 
-local_coefficients_check = zeros(Complex{Float64}, (expansion_order+1)^2)
+local_coefficients_check = zeros(Float64,2, (expansion_order+1)^2)
 dx_check, dy_check, dz_check = fmm.cartesian_2_spherical(elements[new_order_index[1],fmm.POSITION] - tree.branches[7].center)
 fmm.irregular_harmonic!(local_coefficients_check, dx_check, dy_check, dz_check, expansion_order)
 local_coefficients_check .*= ms[1]
@@ -454,10 +455,11 @@ u_fmm = elements.potential[1,new_order_index[5]]
 dx_direct = elements[new_order_index[5],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
 u_check = ms[1] / sqrt(dx_direct' * dx_direct)
 
-regular_harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
+regular_harmonics = zeros(Float64,2, (expansion_order+1)^2)
 dx_target = fmm.cartesian_2_spherical(elements[new_order_index[5],fmm.POSITION] - tree.branches[7].center)
 fmm.regular_harmonic!(regular_harmonics, dx_target..., expansion_order)
-u_man = real(sum(regular_harmonics' * local_coefficients_check))
+#u_man = real(sum(regular_harmonics' * local_coefficients_check))
+u_man = sum(regular_harmonics[1,:].*local_coefficients_check[1,:] .+ regular_harmonics[2,:].*local_coefficients_check[2,:])
 
 @test isapprox(u_check, u_man; atol=1e-12)
 @test isapprox(u_check, u_fmm_no_x; atol=1e-12)
@@ -494,9 +496,9 @@ tree = fmm.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=fa
 
 i_branch_multipole = 7 # mass 5
 i_branch_local = 5 # mass 1
-harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
-harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
-harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
 
 fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_order_index[5], harmonics, tree.expansion_order)
@@ -513,8 +515,8 @@ fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_ord
 
 # @show tree.branches[i_branch_multipole].multipole_expansion[1][1:10] multipole_check[1:10]
 # ###
-m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-L = zeros(eltype(tree.branches[1].local_expansion), 4)
+m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), 2, (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+L = zeros(eltype(tree.branches[1].local_expansion), 2, 4)
 fmm.M2L!(tree.branches[i_branch_local], tree.branches[i_branch_multipole], m2l_harmonics, L, expansion_order)
 fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, expansion_order, tree.branches[i_branch_local].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,new_order_index[1]]
@@ -611,9 +613,9 @@ u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx
 u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
 # M2L is performed from branches 6, 7 to branch 3 (containing mass 2)
-harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
-harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
-harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
 fmm.L2B!((elements,), tree.branches[3], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
@@ -626,6 +628,7 @@ u_direct_52 = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_52' * dx
 u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
 
 @test isapprox(u_direct_123, u_fmm_123; atol=1e-12)
+
 @test isapprox(u_direct_12345, u_fmm_12345; atol=1e-12)
 
 # reset potentials
@@ -984,19 +987,19 @@ dummy_index = (zeros(Int64,length(vortexparticles)),)
 dummy_leaf_index = collect(1:3)
 dummy_cost_parameter = fmm.dummy_direct_cost_estimate((vortexparticles,), n_per_branch)
 tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), expansion_order, n_per_branch, dummy_cost_parameter)
-harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
+harmonics = zeros(Float64,2,(expansion_order+1)^2)
 fmm.B2M!(branch_2, (vortexparticles,), harmonics, expansion_order)
 fmm.B2M!(branch_3, (vortexparticles,), harmonics, expansion_order)
 # @show tree.branches[2].multipole_expansion[2:4,:] # checks out
 
-m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-L = zeros(eltype(tree.branches[1].local_expansion), 4)
+m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), 2, (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
+L = zeros(eltype(tree.branches[1].local_expansion), 2, 4)
 fmm.M2L!(tree.branches[2], tree.branches[3], m2l_harmonics, L, expansion_order)
 fmm.M2L!(tree.branches[3], tree.branches[2], m2l_harmonics, L, expansion_order)
 # @show tree.branches[2].local_expansion
-harmonics = zeros(Complex{Float64}, (expansion_order+1)^2)
-harmonics_theta = zeros(Complex{Float64}, (expansion_order+1)^2)
-harmonics_theta_2 = zeros(Complex{Float64}, (expansion_order+1)^2)
+harmonics = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
 fmm.L2B!((vortexparticles,), tree.branches[2], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 fmm.L2B!((vortexparticles,), tree.branches[3], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)

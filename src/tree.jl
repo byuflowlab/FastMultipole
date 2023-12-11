@@ -568,12 +568,12 @@ end
     y_max = y_min
     z_max = z_min
     x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, system, bodies_index)
-    # if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
-    #     # TODO with a smarter local expansion evaluation, we could get rid of this provision
-    #     center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-    # else
+    #if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
+    #    # TODO with a smarter local expansion evaluation, we could get rid of this provision
+    #    center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
+    #else
         center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-    # end
+    #end
     away_from_center!(center, system, bodies_index)
     
     return center
@@ -597,6 +597,7 @@ end
     for i_body in bodies_index
         x, y, z = system[i_body,POSITION]
         body_radius = system[i_body,RADIUS]
+        #radius = max(radius, get_distance(x, y, z, center) + body_radius)
         distance_2_body_center = get_distance(x, y, z, center)
         if distance_2_body_center < 1e-7
             system[i_body,POSITION] .+= 1e-6
@@ -726,29 +727,17 @@ end
 #####
 ##### helper function
 #####
-#=function initialize_expansion(expansion_order, type=Float64)
-    return zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
-end=#
-
-function initialize_expansion(expansion_order, radius)
-    
-    #=if ReverseDiff.istracked(radius)
-        type = eltype(ReverseDiff.value(radius))
-        @show type radius
-        out = zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
-        return ReverseDiff.track(out,ReverseDiff.tape(radius))
-    end=#
-    type = eltype(radius)
-    return zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
+function initialize_expansion(expansion_order, type=Float64)
+    return zeros(type, 2, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function initialize_harmonics(expansion_order, type=Float64)
     root_n = expansion_order<<1 + 1
-    return zeros(Complex{type}, root_n * root_n)
+    return zeros(type, 2, 2 * root_n * root_n)
 end
 
 function initialize_ML(expansion_order, type=Float64)
-    return MVector{4, Complex{type}}(0.0,0.0,0.0,0.0)
+    return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
 end
 
 function reset_expansions!(tree)
