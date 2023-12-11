@@ -449,9 +449,9 @@ function M2M_loop!(BM,CM,h,P)
                     jlkms = (((j-l) * (j-l+1)) >> 1) - k + m + 1
                     lm = l * l + l - m + 1
                     oddeven = odd_or_even(k + l + m)
-                    C_tmp = harmonics[lm] * oddeven
+                    C_tmp = h[lm] * oddeven
                     for dim in 1:4
-                        @inbounds M[dim] += conj(CM[dim,jlkms]) * h[lm] * oddeven
+                        @inbounds M[dim] += conj(CM[dim,jlkms]) * C_tmp
                     end
                 end
             end
@@ -567,7 +567,7 @@ end
                         jnkm = (n - j) * (n - j) + n - j + m - k + 1
                         nms = (n * (n + 1)) >> 1 + m + 1
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
-                        C_tmp = regular_harmonics[jnkm] * oddeven
+                        C_tmp = h[jnkm] * oddeven
                         L .+= view(BLE,:,nms) .* C_tmp
                     end
                 end

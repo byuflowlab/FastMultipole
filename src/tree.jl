@@ -84,7 +84,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     end
 
     # # cost parameters
-    # if estimate_cost
+    # if estimate_costs
     #     params, errors, nearfield_params, nearfield_errors = estimate_tau(system; read_cost_file=read_cost_file, write_cost_file=write_cost_file)
     #     cost_parameters = CostParameters(params..., nearfield_params)
     # else
