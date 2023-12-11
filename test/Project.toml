@@ -1,6 +1,4 @@
 [deps]
 LegendrePolynomials = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"

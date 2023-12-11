@@ -275,7 +275,7 @@ function regular_harmonic_derivs!(harmonics, rho, theta, phi, P)
     pl = 1.0
     rhom = 1.0
     ei = exp(im * phi)
-    eim = 1.0
+    eim = 1.0+0.0im
     for m=0:P
         p = pl
         lpl = (m * (m + 1)) >> 1 + m + 1
