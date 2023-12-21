@@ -2,7 +2,7 @@ using Pkg
 this_dir = @__DIR__
 Pkg.activate(normpath(this_dir,".."))
 include("../test/gravitational.jl")
-using BenchmarkTools
+# using BenchmarkTools
 using Random
 using WriteVTK
 using BSON
@@ -193,8 +193,8 @@ end
 
 # shrink_recenter = false
 # farfield=nearfield=true
-expansion_order, n_per_branch, theta = 4, 100, 0.4
-n_bodies = 100_000
+expansion_order, n_per_branch, theta = 4, 500, 0.6
+n_bodies = 10_000
 
 shrink_recenter, ndivisions = true, 15
 # println("create system...")
@@ -205,6 +205,7 @@ shrink_recenter, ndivisions = true, 15
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
+println("===== nthreads: $(Threads.nthreads()) =====")
 err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 @show err
 err_ns, sys_ns, tree_ns, sys2_ns = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, false)

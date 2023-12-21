@@ -181,8 +181,8 @@ end
 
 function estimate_cost(n_targets, source_bodies_indices, source_cost_parameters)
     t = 0.0
-    for (cost_parameter, bodies_index) in zip(source_cost_parameters,source_bodies_indices)
-        t += cost_parameter * length(bodies_index) * n_targets
+    for (cost_parameter, bodies_index, n) in zip(source_cost_parameters,source_bodies_indices, n_targets)
+        t += cost_parameter * length(bodies_index) * n
     end
     return t
 end
@@ -227,7 +227,7 @@ function nearfield_multi_thread!(target_system, target_branches, source_system, 
 
     # assign tasks
     tasks = map(chunks) do chunk
-        Threads.@spawn nearfield_single_thread!(target_system, target_branches, source_system, source_branches, view(direct_list,chunk))
+        Threads.@spawn nearfield_lock!(target_system, target_branches, source_system, source_branches, view(direct_list,chunk))
     end
 
     # synchronize
@@ -236,12 +236,28 @@ function nearfield_multi_thread!(target_system, target_branches, source_system, 
     return nothing
 end
 
+function nearfield_lock!(target_system, target_branches, source_system, source_branches, direct_list)
+    for (i_target, j_source) in direct_list
+        Threads.lock(target_branches[i_target].lock) do
+            P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
+        end
+    end
+end
+
 function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
     # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     # L = zeros(eltype(target_branches[1].local_expansion), 4)
     for (i_target, j_source) in m2l_list
         M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
         # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
+    end
+end
+
+function horizontal_pass_lock!(target_branches, source_branches, m2l_list, expansion_order)
+    for (i_target, j_source) in m2l_list
+        Threads.lock(target_branches[i_target].lock) do
+            M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
+        end
     end
 end
 
@@ -278,12 +294,12 @@ function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_lis
 
     # assign tasks
     tasks_1 = map(range_1) do i_start
-    # tasks_1 = map(range_1, containers_1) do i_start, containers
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
+        # tasks_1 = map(range_1, containers_1) do i_start, containers
+        Threads.@spawn horizontal_pass_lock!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
     end
     tasks_2 = map(range_2) do i_start
-    # tasks_2 = map(range_2, containers_2) do i_start, containers
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
+        # tasks_2 = map(range_2, containers_2) do i_start, containers
+        Threads.@spawn horizontal_pass_lock!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
     end
 
     # synchronize
@@ -473,7 +489,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
 
     # run FMM
-    if Threads.nthreads() == 1
+    if true#Threads.nthreads() == 1
         # println("nearfield")
         nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
@@ -486,13 +502,14 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         end
     else # multithread
         # println("nearfield")
-        nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, source_tree.cost_parameters, direct_list))
+        # nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, source_tree.cost_parameters, direct_list))
+        nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             # println("upward pass:")
             upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)#, source_tree.levels_index, source_tree.leaf_index)
             # upward_pass_multi_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
             # println("horizontal pass:")
-            horizontal_pass_multi_thread!(target_tree.branches, source_tree.branches, m2l_list, target_tree.expansion_order)
+            horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             # downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
             # println("downward pass:")
             downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)#, target_tree.levels_index, target_tree.leaf_index)

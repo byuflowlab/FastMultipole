@@ -158,7 +158,6 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
     
     # cumsum
     update_octant_accumulator!(octant_container)
-
     # number of child branches
     n_children = get_n_children(octant_container, n_per_branch)
     
@@ -248,10 +247,12 @@ end
 @inline update_octant_accumulator!(octant_population::AbstractVector) = cumsum!(octant_population, octant_population)
 
 @inline function octant_beginning_index!(cumulative_octant_census::AbstractVector, bodies_index::UnitRange)
-    for i_octant in 8:-1:2
-        cumulative_octant_census[i_octant] = cumulative_octant_census[i_octant-1] + bodies_index[1]
+    if length(bodies_index) > 0
+        for i_octant in 8:-1:2
+            cumulative_octant_census[i_octant] = cumulative_octant_census[i_octant-1] + bodies_index[1]
+        end
+        cumulative_octant_census[1] = bodies_index[1]
     end
-    cumulative_octant_census[1] = bodies_index[1]
     return cumulative_octant_census
 end
 
@@ -263,8 +264,12 @@ end
 end
 
 @inline function get_bodies_index(cumulative_octant_census::AbstractVector, parent_bodies_index::UnitRange, i_octant)
-    first_offset = i_octant == 1 ? 0 : cumulative_octant_census[i_octant-1]
-    bodies_index = parent_bodies_index[1] + first_offset : parent_bodies_index[1] + cumulative_octant_census[i_octant] - 1
+    if length(parent_bodies_index) > 0
+        first_offset = i_octant == 1 ? 0 : cumulative_octant_census[i_octant-1]
+        bodies_index = parent_bodies_index[1] + first_offset : parent_bodies_index[1] + cumulative_octant_census[i_octant] - 1
+    else
+        bodies_index = 1:0
+    end
     return bodies_index
 end
 
@@ -574,9 +579,9 @@ end
     # else
         center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
     # end
-    away_from_center!(center, system, bodies_index)
+    delta = away_from_center!(center, system, bodies_index)
     
-    return center
+    return center + delta
 end
 
 @inline function get_distance_leaf(x, y, z, center)
@@ -598,10 +603,10 @@ end
         x, y, z = system[i_body,POSITION]
         body_radius = system[i_body,RADIUS]
         distance_2_body_center = get_distance(x, y, z, center)
-        if distance_2_body_center < 1e-7
-            system[i_body,POSITION] .+= 1e-6
-            distance_2_body_center = get_distance(x, y, z, center)
-        end
+        # if distance_2_body_center < 1e-7
+        #     system[i_body,POSITION] .+= 1e-6
+        #     distance_2_body_center = get_distance(x, y, z, center)
+        # end
         radius = max(radius, distance_2_body_center + body_radius)
     end
 
@@ -609,11 +614,12 @@ end
 end
 
 @inline function away_from_center!(center, systems::Tuple, bodies_indices)
+    delta = @SVector zeros(3)
     for (system,bodies_index) in zip(systems, bodies_indices)
-        away_from_center!(center, system, bodies_index)
+        delta += away_from_center!(center, system, bodies_index)
     end
 
-    return nothing
+    return delta
 end
 
 @inline function away_from_center!(center, system, bodies_index)
@@ -621,11 +627,11 @@ end
         x, y, z = system[i_body,POSITION]
         distance_2_body_center = get_distance(x, y, z, center)
         if distance_2_body_center < 1e-7
-            system[i_body,POSITION] .+= 1e-6
+            return SVector{3}(1e-6,1e-6,1e-6)
         end
     end
 
-    return nothing
+    return @SVector zeros(3)
 end
 
 @inline function shrink_radius(radius, center, systems::Tuple, bodies_indices)
