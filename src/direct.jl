@@ -25,19 +25,55 @@ Direct calculation of induced potential (no FMM acceleration).
 function direct!(systems::Tuple)
     for source_system in systems
         for target_system in systems
-            direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
-        end
-    end
-end
-
-function direct!(systems::Tuple, targets_index, sources_index)
-    for source_system in systems[sources_index]
-        for target_system in systems[targets_index]
-            direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
+            _direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
         end
     end
 end
 
 function direct!(system)
-    direct!(system, 1:length(system), system, 1:length(system))
+    direct!(system, system)
 end
+
+@inline function direct!(target_system, source_system)
+    _direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
+end
+
+function direct!(target_systems::Tuple, source_systems::Tuple)
+    for source_system in source_systems
+        for target_system in target_systems
+            direct!(target_system, source_system)
+        end
+    end
+end
+
+function direct!(target_systems::Tuple, source_system)
+    for target_system in target_systems
+        direct!(target_system, source_system)
+    end
+end
+
+function direct!(target_systems, source_system::Tuple)
+    for source_system in source_systems
+        direct!(target_system, source_system)
+    end
+end
+
+#####
+##### private methods for dispatch
+#####
+@inline function _direct!(target_system, target_bodies_index, source_system, source_bodies_index)
+    direct!(target_system, target_bodies_index, source_system, source_bodies_index)
+end
+
+@inline function _direct!(target_system::SortWrapper, target_bodies_index, source_system, source_bodies_index)
+    direct!(target_system.system, target_system.index[target_bodies_index], source_system, source_bodies_index)
+end
+
+@inline function _direct!(target_system, target_bodies_index, source_system::SortWrapper, source_bodies_index)
+    direct!(target_system, target_bodies_index, source_system.system, source_system.index[source_bodies_index])
+end
+
+@inline function _direct!(target_system::SortWrapper, target_bodies_index, source_system::SortWrapper, source_bodies_index)
+    direct!(target_system.system, target_system.index[target_bodies_index], source_system.system, source_system.index[source_bodies_index])
+end
+

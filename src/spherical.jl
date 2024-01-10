@@ -402,9 +402,28 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
         scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
         # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
+<<<<<<< Updated upstream
         system[i_body,VECTOR_POTENTIAL] += vector_potential
         system[i_body,VELOCITY] += view(potential_jacobian,:,1)
         system[i_body,VELOCITY_GRADIENT] += view(potential_hessian,:,:,1)
+=======
+        vpx, vpy, vpz = system[i_body,VECTOR_POTENTIAL]
+        system[i_body,VECTOR_POTENTIAL] = SVector{3}(vpx+vector_potential[1],vpy+vector_potential[2],vpz+vector_potential[3])
+        vpx, vpy, vpz = system[i_body,VELOCITY]
+        system[i_body,VELOCITY] = SVector{3}(potential_jacobian[1,1]+vpx, potential_jacobian[2,1]+vpy, potential_jacobian[3,1]+vpz)
+        v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
+        system[i_body,VELOCITY_GRADIENT] = SMatrix{3,3}(
+            potential_hessian[1] + v1,
+            potential_hessian[2] + v2,
+            potential_hessian[3] + v3,
+            potential_hessian[4] + v4,
+            potential_hessian[5] + v5,
+            potential_hessian[6] + v6,
+            potential_hessian[7] + v7,
+            potential_hessian[8] + v8,
+            potential_hessian[9] + v9
+        )
+>>>>>>> Stashed changes
     end
 end
 

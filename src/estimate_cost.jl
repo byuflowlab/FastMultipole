@@ -327,8 +327,8 @@ function get_t(coefficients::AbstractVector{<:AbstractVector}, expansion_order)
 end
 
 =#
-get_n_bodies(branch::SingleBranch) = length(branch.bodies_index)
-get_n_bodies(branch::MultiBranch) = SVector{length(branch.bodies_index)}(length(index) for index in branch.bodies_index)
+# get_n_bodies(branch::SingleBranch) = length(branch.bodies_index)
+# get_n_bodies(branch::MultiBranch) = SVector{length(branch.bodies_index)}(length(index) for index in branch.bodies_index)
 #=
 function get_t_nearfield(direct_list, branches::Vector{<:SingleBranch}, C_nearfield)
     t = 0.0
@@ -418,10 +418,10 @@ end
 
 function direct_cost_estimate(system, n_per_branch; n_iter=10)
     # store original states
-    original_states = [system[1]]
+    original_states = [deepcopy(system[1])]
     resize!(original_states, n_per_branch)
     for i in 2:n_per_branch
-        original_states[i] = system[i]
+        original_states[i] = deepcopy(system[i])
     end
 
     # benchmark

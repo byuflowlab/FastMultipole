@@ -132,6 +132,8 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
             # count bodies per octant
             census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
             update_octant_accumulator!(cumulative_octant_census)
+
+            # @show cumulative_octant_census parents_index get_population(cumulative_octant_census)
             
             # number of child branches
             if get_population(cumulative_octant_census) > n_per_branch
@@ -554,7 +556,9 @@ end
 end
 
 @inline function first_body_position(systems::Tuple, bodies_indices)
-    return systems[1][bodies_indices[1][1],POSITION]
+    for (system, bodies_index) in zip(systems, bodies_indices)
+        length(bodies_index) > 0 && (return system[bodies_index[1],POSITION])
+    end
 end
 
 @inline get_n_bodies(bodies_index::UnitRange) = length(bodies_index)
@@ -566,6 +570,13 @@ end
     end
     return n_bodies
 end
+
+@inline get_n_bodies(branch::Branch) = get_n_bodies(branch.bodies_index)
+
+@inline get_n_bodies_vec(branch::SingleBranch) = length(branch.bodies_index)
+
+@inline get_n_bodies_vec(branch::MultiBranch) = SVector{Int}(length(bodies_index) for bodies_index in branch.bodies_index)
+
 
 @inline function center_nonzero_radius(system, bodies_index)
     x_min, y_min, z_min = first_body_position(system, bodies_index)
@@ -660,8 +671,9 @@ function shrink_leaf!(branch, system)
     # unpack
     bodies_index = branch[].bodies_index
     
-    # recenter
-    new_center = center_nonzero_radius(system, bodies_index)
+    # recenter # turn this off for now- only shrink/expand radius
+    # new_center = center_nonzero_radius(system, bodies_index)
+    new_center = branch[].center
     
     # shrink radius 
     new_radius = zero(branch[].radius)
@@ -704,8 +716,9 @@ end
 end
 
 function shrink_branch!(branch, child_branches)
-    # recenter
-    new_center = center_nonzero_radius(branch[], child_branches)
+    # recenter # turn this off for now
+    # new_center = center_nonzero_radius(branch[], child_branches)
+    new_center = branch[].center
 
     # shrink radius
     new_radius = zero(branch[].radius)

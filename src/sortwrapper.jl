@@ -22,6 +22,3 @@ Base.eltype(sys::SortWrapper) = Base.eltype(sys.system)
 
 B2M!(system::SortWrapper, branch, bodies_index, harmonics, expansion_order) =
     B2M!(system.system, branch, system.index[bodies_index], harmonics, expansion_order)
-
-direct!(target_system, target_index, source_system::SortWrapper, source_index) =
-    direct!(target_system, target_index, source_system.system, source_system.index[source_index])
