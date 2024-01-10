@@ -11,7 +11,7 @@ S = Statistics
 import FLOWFMM
 fmm = FLOWFMM
 
-using fmm.StaticArrays, Random, LegendrePolynomials
+using FLOWFMM.StaticArrays, Random, LegendrePolynomials
 
 test_dir = @__DIR__
 
