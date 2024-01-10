@@ -173,17 +173,8 @@ end
     return 0
 end
 
-<<<<<<< Updated upstream
-function estimate_cost(n_targets, source_bodies_indices, source_cost_parameters)
-    t = 0.0
-    for (cost_parameter, bodies_index, n) in zip(source_cost_parameters,source_bodies_indices, n_targets)
-        t += cost_parameter * length(bodies_index) * n
-    end
-    return t
-=======
 @inline function initialize_cost(source_branches::Vector{MultiBranch{<:Any,N}}) where N
     return SVector{N,Int64}(0 for _ in 1:N)
->>>>>>> Stashed changes
 end
 
 @inline function branch_cost(branch::SingleBranch)
