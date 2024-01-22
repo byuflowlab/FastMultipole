@@ -2,10 +2,10 @@ using Pkg
 this_dir = @__DIR__
 Pkg.activate(normpath(this_dir,".."))
 include("../test/gravitational.jl")
-using BenchmarkTools
+# using BenchmarkTools
 using Random
 using WriteVTK
-using BSON
+# using BSON
 
 function generate_gravitational(seed, n_bodies; radius_factor=0.1)
     Random.seed!(123)
@@ -125,6 +125,117 @@ function bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodie
     return maximum(abs.(phi2 - phi)), system, source_tree, target_tree, system2
 end
 
+function bm_fmm_accuracy_dual_tree_wrapped(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    println("Create systems")
+    source_system = generate_gravitational(123, n_bodies)
+    target_system = fmm.SortWrapper(source_system)
+    
+    println("Create trees")
+    @time source_tree = fmm.Tree(source_system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    @time target_tree = fmm.Tree(target_system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    
+    println("Run fmm")
+    @time fmm.fmm!(target_tree, target_system, source_tree, source_system; theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    
+    println("BEGIN DIRECT")
+    system2 = generate_gravitational(123, n_bodies)
+    @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
+    phi = target_system.system.potential[1,:]
+    phi2 = system2.potential[1,:]
+    
+    return maximum(abs.(phi2 - phi)), source_system, source_tree, target_system, target_tree, system2
+end
+
+function bm_fmm_accuracy_dual_tree_wrapped_multiple(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    println("Create systems")
+    source_system1 = generate_gravitational(123, n_bodies)
+    source_system2 = generate_gravitational(456, n_bodies)
+    target_system1 = generate_gravitational(789, n_bodies)
+    target_system2 = fmm.SortWrapper(source_system1)
+    
+    println("Create trees")
+    @time source_tree = fmm.Tree((source_system1, source_system2); expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    @time target_tree = fmm.Tree((target_system1, target_system2); expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    
+    println("Run fmm")
+    @time fmm.fmm!(target_tree, (target_system1, target_system2), source_tree, (source_system1, source_system2); theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    
+    println("BEGIN DIRECT")
+    source_system_direct = (generate_gravitational(123, n_bodies), generate_gravitational(456, n_bodies))
+    target_system_direct = (generate_gravitational(789, n_bodies), source_system_direct[1])
+    @time fmm.direct!(target_system_direct, source_system_direct)
+    phi = target_system2.system.potential[1,:]
+    phi2 = target_system_direct[2].potential[1,:]
+    
+    return maximum(abs.(phi2 - phi)), source_system, source_tree, target_system, target_tree, system2
+end
+
+function bm_fmm_accuracy_dual_tree_wrapped_multiple_nested(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    println("Create systems")
+    source_system1 = fmm.SortWrapper(generate_gravitational(123, n_bodies))
+    source_system2 = generate_gravitational(456, n_bodies)
+    target_system1 = generate_gravitational(789, n_bodies)
+    target_system2 = fmm.SortWrapper(source_system1)
+    
+    println("Create trees")
+    @time source_tree = fmm.Tree((source_system1, source_system2); expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    @time target_tree = fmm.Tree((target_system1, target_system2); expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
+    
+    println("Run fmm")
+    @time fmm.fmm!(target_tree, (target_system1, target_system2), source_tree, (source_system1, source_system2); theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    
+    println("BEGIN DIRECT")
+    source_system_direct = (generate_gravitational(123, n_bodies), generate_gravitational(456, n_bodies))
+    target_system_direct = (generate_gravitational(789, n_bodies), source_system_direct[1])
+    @time fmm.direct!(target_system_direct, source_system_direct)
+    phi = target_system2.system.system.potential[1,:]
+    phi2 = target_system_direct[2].potential[1,:]
+    
+    return maximum(abs.(phi2 - phi)), source_system, source_tree, target_system, target_tree, system2
+end
+
+function bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    println("Create systems")
+    source_system1 = fmm.SortWrapper(generate_gravitational(123, n_bodies))
+    source_system2 = generate_gravitational(456, n_bodies)
+    target_system1 = generate_gravitational(789, n_bodies)
+    target_system2 = fmm.SortWrapper(source_system1)
+    
+    println("Run fmm")
+    @time fmm.fmm!((target_system1, target_system2), (source_system1, source_system2); expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    
+    println("BEGIN DIRECT")
+    source_system_direct = (generate_gravitational(123, n_bodies), generate_gravitational(456, n_bodies))
+    target_system_direct = (generate_gravitational(789, n_bodies), source_system_direct[1])
+    @time fmm.direct!(target_system_direct, source_system_direct)
+    phi = target_system2.system.system.potential[1,:]
+    phi2 = target_system_direct[2].potential[1,:]
+    
+    return maximum(abs.(phi2 - phi)), source_system, source_tree, target_system, target_tree, system2
+end
+
+function bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api_twice(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+    println("Create systems")
+    source_system1 = fmm.SortWrapper(generate_gravitational(123, n_bodies))
+    source_system2 = generate_gravitational(456, n_bodies)
+    target_system1 = generate_gravitational(789, n_bodies)
+    target_system2 = fmm.SortWrapper(source_system1)
+    
+    println("Run fmm")
+    @time fmm.fmm!((target_system1, target_system2), (source_system1, source_system2); expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    @time fmm.fmm!((target_system1, target_system2), (source_system1, source_system2); expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+    
+    println("BEGIN DIRECT")
+    source_system_direct = (generate_gravitational(123, n_bodies), generate_gravitational(456, n_bodies))
+    target_system_direct = (generate_gravitational(789, n_bodies), source_system_direct[1])
+    @time fmm.direct!(target_system_direct, source_system_direct)
+    @time fmm.direct!(target_system_direct, source_system_direct)
+    phi = target_system2.system.system.potential[1,:]
+    phi2 = target_system_direct[2].potential[1,:]
+    
+    return maximum(abs.(phi2 - phi)), source_system, source_tree, target_system, target_tree, system2
+end
+
 function visualize_tree(name, system, tree; probe_indices=[])
     #####
     ##### branches
@@ -193,8 +304,12 @@ end
 
 # shrink_recenter = false
 # farfield=nearfield=true
-expansion_order, n_per_branch, theta = 4, 100, 0.4
-n_bodies = 100_000
+<<<<<<< Updated upstream
+expansion_order, n_per_branch, theta = 4, 500, 0.6
+=======
+expansion_order, n_per_branch, theta = 10, 500, 0.4
+>>>>>>> Stashed changes
+n_bodies = 10_000
 
 shrink_recenter, ndivisions = true, 15
 # println("create system...")
@@ -205,10 +320,28 @@ shrink_recenter, ndivisions = true, 15
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
+<<<<<<< Updated upstream
+println("===== nthreads: $(Threads.nthreads()) =====")
 err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+=======
+# println("===== nthreads: $(Threads.nthreads()) =====")
+# err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
+# err_ns, sys_ns, tree_ns, sys2_ns = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, false)
+# @show err_ns
+
+err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+>>>>>>> Stashed changes
 @show err
-err_ns, sys_ns, tree_ns, sys2_ns = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, false)
-@show err_ns
+err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+@show err
+err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+@show err
+err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+@show err
+err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api_twice(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+@show err
+
 # bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 
 # println("===== begin benchmark: $(Threads.nthreads()) threads =====")

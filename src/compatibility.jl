@@ -2,65 +2,42 @@
 ##### functions that should be overloaded for use in the FMM
 #####
 
-# Base.getindex(sys, i, ::Position) =
-# Base.getindex(sys, i, ::Radius) =
-# Base.getindex(sys, i, ::Potential) =
-# Base.getindex(sys, i, ::ScalarPotential) =
-# Base.getindex(sys, i, ::Velocity) =
-# Base.getindex(sys, i, ::VelocityGradient) =
-# Base.getindex(sys, i) =
-Base.getindex(sys, i, ::ScalarStrength) = 0.0
-Base.getindex(sys, i, ::VectorStrength) = SVector{3}(0.0,0.0,0.0)
-function Base.setindex!(sys, val, i)
-    @warn "setindex! not overloaded for type $(typeof(sys)); octree will have errors"
-    return nothing
+Base.getindex(sys, i, ::Position) = @error "getindex! not overloaded for `FLOWFMM.Position` for type $(typeof(sys)); cannot run FMM"
+function Base.getindex(sys, i, ::Radius)
+    @warn "getindex! not overloaded for `FLOWFMM.Radius` for type $(typeof(sys)); zero radius assumed"
+    return 0.0
 end
-function Base.setindex!(sys, val, i, ::ScalarPotential)
-    # @warn "setindex! (ScalarPotential) not overloaded for type $(typeof(sys))"
-    return nothing
+function Base.getindex(sys, i, ::ScalarPotential)
+    @warn "getindex! not overloaded for `FLOWFMM.ScalarPotential` for type $(typeof(sys)); zero assumed"
+    return 0.0
 end
-function Base.setindex!(sys, val, i, ::VectorPotential)
-    # @warn "setindex! (Potential) not overloaded for type $(typeof(sys))"
-    return nothing
+function Base.getindex(sys, i, ::Velocity)
+    @warn "getindex! not overloaded for `FLOWFMM.Velocity` for type $(typeof(sys)); zero assumed"
+    return zero(SVector{3,Float64})
 end
-function Base.setindex!(sys, val, i, ::Velocity)
-    # @warn "setindex! (Velocity) not overloaded for type $(typeof(sys))"
-    return nothing
+function Base.getindex(sys, i, ::VelocityGradient)
+    @warn "getindex! not overloaded for `FLOWFMM.VelocityGradient` for type $(typeof(sys)); zero assumed"
+    return zero(SMatrix{3,3,Float64,9})
 end
-function Base.setindex!(sys, val, i, ::VelocityGradient)
-    # @warn "setindex! (VelocityGradient) not overloaded for type $(typeof(sys))"
-    return nothing
+function Base.getindex(sys, i, ::ScalarStrength)
+    @warn "getindex! not overloaded for `FLOWFMM.ScalarStrength` for type $(typeof(sys)); zero assumed"
+    return 0.0
 end
-function Base.length(sys)
-    @error "Base.length() not overloaded for type $(typeof(sys))"
+function Base.getindex(sys, i, ::VectorStrength)
+    @warn "getindex! not overloaded for `FLOWFMM.VectorStrength` for type $(typeof(sys)); zero assumed"
+    return zero(SVector{3,Float64})
 end
+Base.getindex(sys, i, ::Vertex, i_vertex) = @error "`getindex!` not overloaded for `FLOWFMM.Vertex` for type $(typeof(sys)); cannot run FMM"
+
+Base.setindex!(sys, val, i) = @warn "setindex! not overloaded for type $(typeof(sys)); octree will have errors"
+Base.setindex!(sys, val, i, ::ScalarPotential) = nothing
+Base.setindex!(sys, val, i, ::VectorPotential) = nothing
+Base.setindex!(sys, val, i, ::Velocity) = nothing
+Base.setindex!(sys, val, i, ::VelocityGradient) = nothing
+
+Base.length(sys) = @error "Base.length() not overloaded for type $(typeof(sys))"
 # Base.eltype(::SystemType) = 
-
-function buffer_element(system)
-    @error "`buffer_element` not overloaded for system type $(typeof(system))"
-end
-
-# function buffer_element(system)
-#     this_buffer = deepcopy(system[1])
-#     view_free = true
-#     view_free = buffer_element(this_buffer, view_free)
-#     !view_free && (error("`buffer_element` overloaded to return a `view` for system type $(typeof(system)); errors will occur in the `unsort!` function\n\tTo fix this error, overload `buffer_element(system::$(typeof(system)))` to contain arrays rather than views"))
-#     return this_buffer
-# end
-
-# function buffer_element(member, view_free)
-#     try
-#         for submember in member
-#             view_free *= buffer_element(submember, view_free)
-#         end
-#     finally
-#         return view_free
-#     end
-# end
-
-# function buffer_element(member::SubArray, view_free)
-#     return false
-# end
+buffer_element(system) = @error "`buffer_element` not overloaded for `system::`$(typeof(system)); try using `SortWrapper(system)`"
 
 function B2M!(system, branch, bodies_index, harmonics, expansion_order)
     @warn "B2M! function not overloaded for type $(typeof(system)); interaction ignored"
@@ -71,6 +48,7 @@ function direct!(target_system, target_index, source_system, source_index)
     @warn "direct! function not overloaded for type $(typeof(source_system)); interaction ignored"
     return nothing
 end
+<<<<<<< HEAD
 
 #####
 ##### multipole generation convenience functions
@@ -128,3 +106,5 @@ end
         #@show length(ReverseDiff.tape(r)) - l # 451 allocations (per particle)
     end
 end
+=======
+>>>>>>> main

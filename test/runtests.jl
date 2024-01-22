@@ -7,10 +7,11 @@ end
 using Test
 import Statistics
 S = Statistics
-using StaticArrays, Random, LegendrePolynomials
 
 import FLOWFMM
 fmm = FLOWFMM
+
+using FLOWFMM.StaticArrays, Random, LegendrePolynomials
 
 test_dir = @__DIR__
 

@@ -1,43 +1,36 @@
 #####
 ##### dispatch for common interface for external packages
 #####
-struct Body end
+abstract type Indexable end
+
+struct Body <: Indexable end
 const BODY = Body()
 
-struct Position end
+struct Position <: Indexable end
 const POSITION = Position()
 
-struct Radius end
+struct Radius <: Indexable end
 const RADIUS = Radius()
 
-struct ScalarPotential end
+struct ScalarPotential <: Indexable end
 const SCALAR_POTENTIAL = ScalarPotential()
 
-struct VectorPotential end
+struct VectorPotential <: Indexable end
 const VECTOR_POTENTIAL = VectorPotential()
 
-struct Velocity end
+struct Velocity <: Indexable end
 const VELOCITY = Velocity()
 
-struct VelocityGradient end
+struct VelocityGradient <: Indexable end
 const VELOCITY_GRADIENT = VelocityGradient()
 
-struct Vertex1 end
-const VERTEX1 = Vertex1()
+struct Vertex <: Indexable end
+const VERTEX = Vertex()
 
-struct Vertex2 end
-const VERTEX2 = Vertex2()
-
-struct Vertex3 end
-const VERTEX3 = Vertex3()
-
-struct Vertex4 end
-const VERTEX4 = Vertex4()
-
-struct ScalarStrength end
+struct ScalarStrength <: Indexable end
 const SCALAR_STRENGTH = ScalarStrength()
 
-struct VectorStrength end
+struct VectorStrength <: Indexable end
 const VECTOR_STRENGTH = VectorStrength()
 
 ##### 

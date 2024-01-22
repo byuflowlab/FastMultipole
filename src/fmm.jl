@@ -2,31 +2,25 @@
 ##### direct interactions
 #####
 function P2P!(target_system, target_branch::SingleBranch, source_system, source_branch::SingleBranch)
-    direct!(target_system, target_branch.bodies_index, source_system, source_branch.bodies_index)
+    _direct!(target_system, target_branch.bodies_index, source_system, source_branch.bodies_index)
 end
 
 function P2P!(target_system, target_branch::SingleBranch, source_systems, source_branch::MultiBranch)
-    target_indices = target_branch.bodies_index
-    for (i,source_system) in enumerate(source_systems)
-        source_indices = source_branch.bodies_index[i]
-        direct!(target_system, target_indices, source_system, source_indices)
+    for (source_system, source_bodies_index) in zip(source_systems, source_branch.bodies_index)
+        _direct!(target_system, target_branch.bodies_index, source_system, source_bodies_index)
     end
 end
 
 function P2P!(target_systems, target_branch::MultiBranch, source_system, source_branch::SingleBranch)
-    source_indices = source_branch.bodies_index
-    for (j,target_system) in enumerate(target_systems)
-        target_indices = target_branch.bodies_index[j]
-        direct!(target_system, target_indices, source_system, source_indices)
+    for (target_system, target_bodies_index) in zip(target_systems, target_branch.bodies_index)
+        _direct!(target_system, target_bodies_index, source_system, source_branch.bodies_index)
     end
 end
 
 function P2P!(target_systems, target_branch::MultiBranch, source_systems, source_branch::MultiBranch)
-    for (i,source_system) in enumerate(source_systems)
-        source_indices = source_branch.bodies_index[i]
-        for (j,target_system) in enumerate(target_systems)
-            target_indices = target_branch.bodies_index[j]
-            direct!(target_system, target_indices, source_system, source_indices)
+    for (source_system, source_bodies_index) in zip(source_systems, source_branch.bodies_index)
+        for (target_system, target_bodies_index) in zip(target_systems, target_branch.bodies_index)
+            _direct!(target_system, target_bodies_index, source_system, source_bodies_index)
         end
     end
 end
@@ -40,7 +34,7 @@ function upward_pass_single_thread!(branches, systems, expansion_order)
     M = zeros(eltype(branches[1].multipole_expansion), 4)
 
     # loop over branches
-    for branch in view(branches,length(branches):-1:2) # no need to create a multipole expansion at the very top level
+    for branch in view(branches,length(branches):-1:1) # no need to create a multipole expansion at the very top level
         if branch.n_branches == 0 # branch is a leaf
             B2M!(branch, systems, harmonics, expansion_order)
         else # not a leaf
@@ -175,28 +169,32 @@ function nearfield_single_thread!(target_system, target_branches, source_system,
     end
 end
 
-function estimate_cost(n_targets, source_bodies_index::UnitRange, source_cost_parameter)
-    return n_targets * source_cost_parameter * get_n_bodies(source_bodies_index)
+@inline function initialize_cost(source_branches::Vector{<:SingleBranch})
+    return 0
 end
 
-function estimate_cost(n_targets, source_bodies_indices, source_cost_parameters)
-    t = 0.0
-    for (cost_parameter, bodies_index) in zip(source_cost_parameters,source_bodies_indices)
-        t += cost_parameter * length(bodies_index) * n_targets
-    end
-    return t
+@inline function initialize_cost(source_branches::Vector{MultiBranch{<:Any,N}}) where N
+    return SVector{N,Int64}(0 for _ in 1:N)
 end
 
-function estimate_cost(target_branches, source_branches, source_cost_parameters, direct_list)
-    t = 0.0
+@inline function branch_cost(branch::SingleBranch)
+    return length(branch.bodies_index)
+end
+
+@inline function branch_cost(branch::MultiBranch{<:Any,N}) where N
+    return SVector{N,Float64}(Float64(length(bodies_index)) for bodies_index in branch.bodies_index)
+end
+
+@inline function total_cost(target_branches, source_branches, direct_list)
+    t = initialize_cost(source_branches)
     for (i_target, j_source) in direct_list
         n_targets = get_n_bodies(target_branches[i_target])
-        t += estimate_cost(n_targets, source_branches[j_source].bodies_index, source_cost_parameters)
+        t += n_targets * get_n_bodies_vec(source_branches[j_source])
     end
     return t
 end
 
-function nearfield_create_chunks!(chunks, target_branches, source_branches, source_cost_parameters, direct_list, cost_per_chunk)
+@inline function nearfield_create_chunks(target_branches, source_branches, direct_list, cost_per_chunk)
     cost = 0.0
     i_thread = 1
     i_start = 1
@@ -214,20 +212,18 @@ function nearfield_create_chunks!(chunks, target_branches, source_branches, sour
     resize!(chunks,i_thread-1)
 end
 
-function nearfield_multi_thread!(target_system, target_branches, source_system, source_branches, source_cost_parameters, direct_list)
+function nearfield_multi_thread!(target_system, target_branches, source_system, source_branches, direct_list)
     # divide chunks
     n_threads = Threads.nthreads()
-    total_cost = estimate_cost(target_branches, source_branches, source_cost_parameters, direct_list)
+    total_cost = total_cost(target_branches, source_branches, direct_list)
     cost_per_chunk = total_cost / n_threads
     
     # create chunk map (first_direct_list_index, last_index)
-    chunks = Vector{UnitRange{Int}}(undef,0)
-    resize!(chunks, n_threads)
-    nearfield_create_chunks!(chunks, target_branches, source_branches, source_cost_parameters, direct_list, cost_per_chunk)
+    chunks = nearfield_create_chunks(target_branches, source_branches, direct_list, cost_per_chunk)
 
     # assign tasks
     tasks = map(chunks) do chunk
-        Threads.@spawn nearfield_single_thread!(target_system, target_branches, source_system, source_branches, view(direct_list,chunk))
+        Threads.@spawn nearfield_lock!(target_system, target_branches, source_system, source_branches, view(direct_list,chunk))
     end
 
     # synchronize
@@ -236,12 +232,28 @@ function nearfield_multi_thread!(target_system, target_branches, source_system, 
     return nothing
 end
 
+function nearfield_lock!(target_system, target_branches, source_system, source_branches, direct_list)
+    for (i_target, j_source) in direct_list
+        Threads.lock(target_branches[i_target].lock) do
+            P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
+        end
+    end
+end
+
 function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
     # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     # L = zeros(eltype(target_branches[1].local_expansion), 4)
     for (i_target, j_source) in m2l_list
         M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
         # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
+    end
+end
+
+function horizontal_pass_lock!(target_branches, source_branches, m2l_list, expansion_order)
+    for (i_target, j_source) in m2l_list
+        Threads.lock(target_branches[i_target].lock) do
+            M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
+        end
     end
 end
 
@@ -278,12 +290,12 @@ function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_lis
 
     # assign tasks
     tasks_1 = map(range_1) do i_start
-    # tasks_1 = map(range_1, containers_1) do i_start, containers
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
+        # tasks_1 = map(range_1, containers_1) do i_start, containers
+        Threads.@spawn horizontal_pass_lock!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
     end
     tasks_2 = map(range_2) do i_start
-    # tasks_2 = map(range_2, containers_2) do i_start, containers
-        Threads.@spawn horizontal_pass_single_thread!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
+        # tasks_2 = map(range_2, containers_2) do i_start, containers
+        Threads.@spawn horizontal_pass_lock!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
     end
 
     # synchronize
@@ -442,7 +454,6 @@ function build_interaction_lists(target_branches, source_branches, theta, farfie
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
     build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield)
-    
     return m2l_list, direct_list
 end
 
@@ -485,7 +496,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
 
     # run FMM
-    if Threads.nthreads() == 1
+    if true#Threads.nthreads() == 1
         # println("nearfield")
         nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
@@ -498,13 +509,14 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         end
     else # multithread
         # println("nearfield")
-        nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, source_tree.cost_parameters, direct_list))
+        # nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, source_tree.cost_parameters, direct_list))
+        nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             # println("upward pass:")
             upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)#, source_tree.levels_index, source_tree.leaf_index)
             # upward_pass_multi_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
             # println("horizontal pass:")
-            horizontal_pass_multi_thread!(target_tree.branches, source_tree.branches, m2l_list, target_tree.expansion_order)
+            horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             # downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
             # println("downward pass:")
             downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)#, target_tree.levels_index, target_tree.leaf_index)
@@ -517,16 +529,39 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 end
 
 function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
+    # create tree
     tree = Tree(systems; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
+    
+    # perform fmm
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
+    
+    # visualize
     save_tree && (visualize(save_name, systems, tree))
+
     return tree
 end
 
+@inline wrap_duplicates(target_systems::Tuple, source_systems::Tuple) = Tuple(target_system in source_systems ? SortWrapper(target_system) : target_system for target_system in target_systems)
+
+@inline wrap_duplicates(target_system, source_system) = target_system == source_system ? SortWrapper(target_system) : target_system
+
+@inline wrap_duplicates(target_system, source_systems::Tuple) = target_system in source_systems ? SortWrapper(target_system) : target_system
+
+@inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
+
 function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
+    # check for duplicate systems
+    target_systems = wrap_duplicates(target_systems, source_systems)
+
+    # create trees
     source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter, ndivisions=ndivisions_source)
     target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
+
+    # perform fmm
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
+
+    # visualize
     save_tree && (visualize(save_name, systems, tree))
+    
     return source_tree, target_tree
 end

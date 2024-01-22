@@ -1,7 +1,7 @@
 import FLOWFMM as fmm
 using WriteVTK
 import Base: getindex, setindex!
-using StaticArrays
+using FLOWFMM.StaticArrays
 const i_POSITION = 1:3
 const i_RADIUS = 4
 const i_STRENGTH = 5:8
