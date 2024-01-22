@@ -300,21 +300,25 @@ function preallocate_l2b(float_type, expansion_type, expansion_order)
     vector_potential = zeros(float_type,3)
     potential_jacobian = zeros(float_type,3,4)
     potential_hessian = zeros(float_type,3,3,4)
-    derivative_harmonics = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    #derivative_harmonics = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    #derivative_harmonics_theta = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    #derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics = zeros(expansion_type, 2, 3, ((expansion_order+1) * (expansion_order+2)) >> 1)
     workspace = zeros(float_type,3,4)
-    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
+    #return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
+    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace
 end
 
 function downward_pass_single_thread!(branches, systems, expansion_order)
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
     L = zeros(eltype(branches[1].multipole_expansion),2,4)
-    vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+    #vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+    vector_potential, potential_jacobian, potential_hessian, harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     for branch in branches
         if branch.n_branches == 0 # leaf level
             #l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
-            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
+            #L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
+            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
             #println("L2B tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)")
         else
             for child_branch in view(branches,branch.branch_index)
@@ -388,10 +392,12 @@ function local_2_body_multi_thread!(branches, systems, expansion_order, leaf_ind
 
     # spread remainder across rem chunks
     Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+        #vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
         chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
         for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
-            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            #L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace)
         end
     end
 end
@@ -407,10 +413,12 @@ function local_2_body_single_thread!(branches, systems, expansion_order, leaf_in
 
     # spread remainder across rem chunks
     for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+        #vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
         chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
         for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
-            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            #L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace)
         end
     end
 end

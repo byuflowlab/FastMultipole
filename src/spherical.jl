@@ -88,8 +88,8 @@ end=#
 # I split these so that I could add custom reverse diff rules to each part separately. Doing it with one function is an enormous headache; it should be possible but there is no documentation on how to handle functions that return tuples.
 function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
     # the order of these two matters, since the hessian needs to use the original jacobian.
-    potential_hessian = s2c_hess!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
-    potential_jacobian = s2c_jac!(potential_jacobian, workspace, rho, theta, phi)
+    potential_hessian .= s2c_hess!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
+    potential_jacobian .= s2c_jac!(potential_jacobian, workspace, rho, theta, phi)
 
     return potential_jacobian,potential_hessian
 end
@@ -167,31 +167,31 @@ function flatten_derivatives!(jacobian, hessian)
     hessian .= flatten_hessian!(hessian)
 end
 
-function update_potentials!(scalar_potential, vector_potential, potential_jacobian, potential_hessian, local_expansion, harmonics,  harmonics_theta, harmonics_theta_2, expansion_order, r, theta, phi)
+function update_potentials_deprecated!(scalar_potential, vector_potential, potential_jacobian, potential_hessian, local_expansion, harmonics, expansion_order, r, theta, phi)
 
     for n in 0:expansion_order
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
         #scalar_potential += real(local_expansion[1,nms] * harmonics[nms])
-        scalar_potential += local_expansion[1,1,nms] * harmonics[1,nms] - local_expansion[2,1,nms] * harmonics[2,nms]
+        scalar_potential += local_expansion[1,1,nms] * harmonics[1,1,nms] - local_expansion[2,1,nms] * harmonics[2,1,nms]
         #vector_potential[1] += real(local_expansion[2,nms] * harmonics[nms])
         #vector_potential[2] += real(local_expansion[3,nms] * harmonics[nms])
         #vector_potential[3] += real(local_expansion[4,nms] * harmonics[nms])
-        vector_potential[1] += local_expansion[1,2,nms]*harmonics[1,nms] - local_expansion[2,2,nms]*harmonics[2,nms]
-        vector_potential[2] += local_expansion[1,3,nms]*harmonics[1,nms] - local_expansion[2,3,nms]*harmonics[2,nms]
-        vector_potential[3] += local_expansion[1,4,nms]*harmonics[1,nms] - local_expansion[2,4,nms]*harmonics[2,nms]
+        vector_potential[1] += local_expansion[1,2,nms]*harmonics[1,1,nms] - local_expansion[2,2,nms]*harmonics[2,1,nms]
+        vector_potential[2] += local_expansion[1,3,nms]*harmonics[1,1,nms] - local_expansion[2,3,nms]*harmonics[2,1,nms]
+        vector_potential[3] += local_expansion[1,4,nms]*harmonics[1,1,nms] - local_expansion[2,4,nms]*harmonics[2,1,nms]
         for ind in 1:4
             # store derivatives of the potential in spherical coordinates here
             #potential_jacobian[1,ind] += n/r * real(local_expansion[ind,nms] * harmonics[nms]) # dPsi/dr
             #potential_jacobian[2,ind] += real(local_expansion[ind,nms] * harmonics_theta[nms]) # dPsi/dtheta
-            potential_jacobian[1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # dPsi/dr
-            potential_jacobian[2,ind] += local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms] # dPsi/dtheta
+            potential_jacobian[1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics[1,1,nms] - local_expansion[2,ind,nms] * harmonics[2,1,nms]) # dPsi/dr
+            potential_jacobian[2,ind] += local_expansion[1,ind,nms] * harmonics[1,2,nms] - local_expansion[2,ind,nms] * harmonics[2,2,nms] # dPsi/dtheta
             # dJ_potential[3,ind] += 0 # dPsi/dphi
-            potential_hessian[1,1,ind] += n * (n-1) / r^2 * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # d2Psi/dr2
-            potential_hessian[2,1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dtheta dr
+            potential_hessian[1,1,ind] += n * (n-1) / r^2 * (local_expansion[1,ind,nms] * harmonics[1,1,nms] - local_expansion[2,ind,nms] * harmonics[2,1,nms]) # d2Psi/dr2
+            potential_hessian[2,1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics[1,2,nms] - local_expansion[2,ind,nms] * harmonics[2,2,nms]) # d2Psi/dtheta dr
             # potential_hessian[3,1,ind] += 0 # d2Psi/dphi dr
-            potential_hessian[1,2,ind] += n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dr dtheta
-            potential_hessian[2,2,ind] += local_expansion[1,ind,nms] * harmonics_theta_2[1,nms] - local_expansion[2,ind,nms] * harmonics_theta_2[2,nms] # d2Psi/dtheta2
+            potential_hessian[1,2,ind] += n/r * (local_expansion[1,ind,nms] * harmonics[1,2,nms] - local_expansion[2,ind,nms] * harmonics[2,2,nms]) # d2Psi/dr dtheta
+            potential_hessian[2,2,ind] += local_expansion[1,ind,nms] * harmonics[1,3,nms] - local_expansion[2,ind,nms] * harmonics[2,3,nms] # d2Psi/dtheta2
             # potential_hessian[3,2,ind] += 0 # d2Psi/dphi dtheta
             # potential_hessian[1,3,ind] += 0 # d2Psi/dr dphi
             # potential_hessian[2,3,ind] += 0 # d2Psi/dtheta dphi
@@ -201,29 +201,38 @@ function update_potentials!(scalar_potential, vector_potential, potential_jacobi
         for m in 1:n # m > 0
             # nm = n * n + n + m + 1
             nms = (n * (n + 1)) >> 1 + m + 1
-            scalar_potential += 2 * (local_expansion[1,1,nms] * harmonics[1,nms] - local_expansion[2,1,nms] * harmonics[2,nms])
-            vector_potential[1] += 2 * (local_expansion[1,2,nms] * harmonics[1,nms] - local_expansion[2,2,nms] * harmonics[2,nms])
-            vector_potential[2] += 2 * (local_expansion[1,3,nms] * harmonics[1,nms] - local_expansion[2,3,nms] * harmonics[2,nms])
-            vector_potential[3] += 2 * (local_expansion[1,4,nms] * harmonics[1,nms] - local_expansion[2,4,nms] * harmonics[2,nms])
+            scalar_potential += 2 * (local_expansion[1,1,nms] * harmonics[1,1,nms] - local_expansion[2,1,nms] * harmonics[2,1,nms])
+            vector_potential[1] += 2 * (local_expansion[1,2,nms] * harmonics[1,1,nms] - local_expansion[2,2,nms] * harmonics[2,1,nms])
+            vector_potential[2] += 2 * (local_expansion[1,3,nms] * harmonics[1,1,nms] - local_expansion[2,3,nms] * harmonics[2,1,nms])
+            vector_potential[3] += 2 * (local_expansion[1,4,nms] * harmonics[1,1,nms] - local_expansion[2,4,nms] * harmonics[2,1,nms])
             for ind in 1:4
                 # store derivatives of the potential in spherical harmonics here
-                potential_jacobian[1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # dPsi/dr
-                potential_jacobian[2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # dPsi/dtheta
+                potential_jacobian[1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics[1,1,nms] - local_expansion[2,ind,nms] * harmonics[2,1,nms]) # dPsi/dr
+                potential_jacobian[2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics[1,2,nms] - local_expansion[2,ind,nms] * harmonics[2,2,nms]) # dPsi/dtheta
                 #potential_jacobian[3,ind] += 2 * m * real(im * local_expansion[ind,nms] * harmonics[nms]) # dPsi/dphi
-                potential_jacobian[3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics[2,nms] + local_expansion[2,ind,nms] * harmonics[1,nms]) # dPsi/dphi
-                potential_hessian[1,1,ind] += 2 * n * (n-1) / r^2 * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # d2Psi/dr2
-                potential_hessian[2,1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dtheta dr
-                potential_hessian[3,1,ind] += -2 * n * m / r * (local_expansion[1,ind,nms] * harmonics[2,nms] + local_expansion[2,ind,nms] * harmonics[1,nms]) # d2Psi/dphi dr
-                potential_hessian[1,2,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dr dtheta
-                potential_hessian[2,2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics_theta_2[1,nms] - local_expansion[2,ind,nms] * harmonics_theta_2[2,nms]) # d2Psi/dtheta2
-                potential_hessian[3,2,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics_theta[2,nms] + local_expansion[2,ind,nms] * harmonics_theta[1,nms]) # d2Psi/dphi dtheta
-                potential_hessian[1,3,ind] += -2 * n * m / r * (local_expansion[1,ind,nms] * harmonics[2,nms] + local_expansion[2,ind,nms] * harmonics[1,nms]) # d2Psi/dr dphi
-                potential_hessian[2,3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics_theta[2,nms] + local_expansion[2,ind,nms] * harmonics_theta[1,nms]) # d2Psi/dtheta dphi
-                potential_hessian[3,3,ind] += 2 * -m^2 * (local_expansion[1,ind,nms] * harmonics[2,nms] - local_expansion[2,ind,nms] * harmonics[1,nms]) # d2Psi/dphi2
+                potential_jacobian[3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics[2,1,nms] + local_expansion[2,ind,nms] * harmonics[1,1,nms]) # dPsi/dphi
+                potential_hessian[1,1,ind] += 2 * n * (n-1) / r^2 * (local_expansion[1,ind,nms] * harmonics[1,1,nms] - local_expansion[2,ind,nms] * harmonics[2,1,nms]) # d2Psi/dr2
+                potential_hessian[2,1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics[1,2,nms] - local_expansion[2,ind,nms] * harmonics[2,2,nms]) # d2Psi/dtheta dr
+                potential_hessian[3,1,ind] += -2 * n * m / r * (local_expansion[1,ind,nms] * harmonics[2,1,nms] + local_expansion[2,ind,nms] * harmonics[1,1,nms]) # d2Psi/dphi dr
+                potential_hessian[1,2,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics[1,2,nms] - local_expansion[2,ind,nms] * harmonics[2,2,nms]) # d2Psi/dr dtheta
+                potential_hessian[2,2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics[1,3,nms] - local_expansion[2,ind,nms] * harmonics[2,3,nms]) # d2Psi/dtheta2
+                potential_hessian[3,2,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics[2,2,nms] + local_expansion[2,ind,nms] * harmonics[1,2,nms]) # d2Psi/dphi dtheta
+                potential_hessian[1,3,ind] += -2 * n * m / r * (local_expansion[1,ind,nms] * harmonics[2,1,nms] + local_expansion[2,ind,nms] * harmonics[1,1,nms]) # d2Psi/dr dphi
+                potential_hessian[2,3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics[2,2,nms] + local_expansion[2,ind,nms] * harmonics[1,2,nms]) # d2Psi/dtheta dphi
+                potential_hessian[3,3,ind] += 2 * -m^2 * (local_expansion[1,ind,nms] * harmonics[1,1,nms] - local_expansion[2,ind,nms] * harmonics[2,1,nms]) # d2Psi/dphi2
             end
         end
     end
     return scalar_potential
+end
+
+function update_potentials!(scalar_potential, vector_potential, potential_jacobian, potential_hessian, local_expansion, harmonics, expansion_order, r, theta, phi)
+
+    vector_potential .= update_vector_potential!(vector_potential, local_expansion, harmonics, expansion_order)
+    potential_jacobian .= update_potential_jacobian!(potential_jacobian, local_expansion, harmonics, expansion_order, r)
+    potential_hessian .= update_potential_hessian!(potential_hessian, local_expansion, harmonics, expansion_order, r)
+    return update_scalar_potential(scalar_potential, local_expansion, harmonics, expansion_order)
+
 end
 
 @inline function update_scalar_potential(scalar_potential,LE,h,P)
@@ -231,11 +240,13 @@ end
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
-        scalar_potential += real(LE[1,nms] * h[nms])
+        #scalar_potential += real(LE[1,nms] * h[nms])
+        scalar_potential += LE[1,1,nms]*h[1,1,nms] - LE[2,1,nms]*h[2,1,nms]
         for m in 1:n # m > 0
             # nm = n * n + n + m + 1
             nms = (n * (n + 1)) >> 1 + m + 1
-            scalar_potential += 2 * real(LE[1,nms] * h[nms])
+            #scalar_potential += 2 * real(LE[1,nms] * h[nms])
+            scalar_potential += 2 * (LE[1,1,nms]*h[1,1,nms] - LE[2,1,nms]*h[2,1,nms])
         end
     end
     return scalar_potential
@@ -247,29 +258,37 @@ end
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
-        vector_potential[1] += real(LE[2,nms] * h[nms])
-        vector_potential[2] += real(LE[3,nms] * h[nms])
-        vector_potential[3] += real(LE[4,nms] * h[nms])
+        #vector_potential[1] += real(LE[2,nms] * h[nms])
+        #vector_potential[2] += real(LE[3,nms] * h[nms])
+        #vector_potential[3] += real(LE[4,nms] * h[nms])
+        for ν=1:3
+            vector_potential[ν] += LE[1,ν+1,nms]*h[1,1,nms] - LE[2,ν+1,nms]*h[2,1,nms]
+        end
         for m in 1:n # m > 0
             # nm = n * n + n + m + 1
             nms = (n * (n + 1)) >> 1 + m + 1
-            vector_potential[1] += 2 * real(LE[2,nms] * h[nms])
-            vector_potential[2] += 2 * real(LE[3,nms] * h[nms])
-            vector_potential[3] += 2 * real(LE[4,nms] * h[nms])
+            #vector_potential[1] += 2 * real(LE[2,nms] * h[nms])
+            #vector_potential[2] += 2 * real(LE[3,nms] * h[nms])
+            #vector_potential[3] += 2 * real(LE[4,nms] * h[nms])
+            for ν=1:3
+                vector_potential[ν] += 2 * (LE[1,ν+1,nms]*h[1,1,nms] - LE[2,ν+1,nms]*h[2,1,nms])
+            end
         end
     end
     return vector_potential
 end
 
-@inline function update_potential_jacobian!(potential_jacobian,LE,h,ht,P,r)
+@inline function update_potential_jacobian!(potential_jacobian,LE,h,P,r)
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
         for ind in 1:4
             # store derivatives of the potential in spherical coordinates here
-            potential_jacobian[1,ind] += n/r * real(LE[ind,nms] * h[nms]) # dPsi/dr
-            potential_jacobian[2,ind] += real(LE[ind,nms] * ht[nms]) # dPsi/dtheta
+            #potential_jacobian[1,ind] += n/r * real(LE[ind,nms] * h[nms]) # dPsi/dr
+            #potential_jacobian[2,ind] += real(LE[ind,nms] * ht[nms]) # dPsi/dtheta
+            potential_jacobian[1,ind] += n/r * (LE[1,ind,nms]*h[1,1,nms] - LE[2,ind,nms]*h[2,1,nms])
+            potential_jacobian[2,ind] += LE[1,ind,nms]*h[1,2,nms] - LE[2,ind,nms]*h[2,2,nms]
             # dJ_potential[3,ind] += 0 # dPsi/dphi
         end
         for m in 1:n # m > 0
@@ -277,27 +296,34 @@ end
             nms = (n * (n + 1)) >> 1 + m + 1
             for ind in 1:4
                 # store derivatives of the potential in spherical harmonics here
-                potential_jacobian[1,ind] += 2 * n/r * real(LE[ind,nms] * h[nms]) # dPsi/dr
-                potential_jacobian[2,ind] += 2 * real(LE[ind,nms] * ht[nms]) # dPsi/dtheta
-                potential_jacobian[3,ind] += 2 * m * real(im * LE[ind,nms] * h[nms]) # dPsi/dphi
+                #potential_jacobian[1,ind] += 2 * n/r * real(LE[ind,nms] * h[nms]) # dPsi/dr
+                #potential_jacobian[2,ind] += 2 * real(LE[ind,nms] * ht[nms]) # dPsi/dtheta
+                #potential_jacobian[3,ind] += 2 * m * real(im * LE[ind,nms] * h[nms]) # dPsi/dphi
+                potential_jacobian[1,ind] += 2 * n/r * (LE[1,ind,nms]*h[1,1,nms] - LE[2,ind,nms]*h[2,1,nms])
+                potential_jacobian[2,ind] += 2 * (LE[1,ind,nms]*h[1,2,nms] - LE[2,ind,nms]*h[2,2,nms])
+                potential_jacobian[3,ind] -= 2 * m * (LE[1,ind,nms]*h[2,1,nms] + LE[2,ind,nms]*h[1,1,nms])
             end
         end
     end
     return potential_jacobian
 end
 
-@inline function update_potential_hessian!(potential_hessian,LE,h,ht,ht2,P,r)
+@inline function update_potential_hessian!(potential_hessian,LE,h,P,r)
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
         for ind in 1:4
             # store derivatives of the potential in spherical coordinates here
-            potential_hessian[1,1,ind] += n * (n-1) / r^2 * real(LE[ind,nms] * h[nms]) # d2Psi/dr2
-            potential_hessian[2,1,ind] += n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dtheta dr
+            #potential_hessian[1,1,ind] += n * (n-1) / r^2 * real(LE[ind,nms] * h[nms]) # d2Psi/dr2
+            #potential_hessian[2,1,ind] += n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dtheta dr
+            potential_hessian[1,1,ind] += n * (n-1) / r^2 * (LE[1,ind,nms]*h[1,1,nms] - LE[2,ind,nms]*h[2,1,nms])
+            potential_hessian[2,1,ind] += n/r * (LE[1,ind,nms]*h[1,2,nms] - LE[2,ind,nms]*h[2,2,nms])
             # potential_hessian[3,1,ind] += 0 # d2Psi/dphi dr
-            potential_hessian[1,2,ind] += n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dr dtheta
-            potential_hessian[2,2,ind] += real(LE[ind,nms] * ht2[nms]) # d2Psi/dtheta2
+            #potential_hessian[1,2,ind] += n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dr dtheta
+            #potential_hessian[2,2,ind] += real(LE[ind,nms] * ht2[nms]) # d2Psi/dtheta2
+            potential_hessian[1,2,ind] += n/r * (LE[1,ind,nms]*h[1,2,nms] - LE[2,ind,nms]*h[2,2,nms])
+            potential_hessian[2,2,ind] += LE[1,ind,nms]*h[1,3,nms] - LE[2,ind,nms]*h[2,3,nms]
             # potential_hessian[3,2,ind] += 0 # d2Psi/dphi dtheta
             # potential_hessian[1,3,ind] += 0 # d2Psi/dr dphi
             # potential_hessian[2,3,ind] += 0 # d2Psi/dtheta dphi
@@ -308,15 +334,25 @@ end
             nms = (n * (n + 1)) >> 1 + m + 1
             for ind in 1:4
                 # store derivatives of the potential in spherical harmonics here
-                potential_hessian[1,1,ind] += 2 * n * (n-1) / r^2 * real(LE[ind,nms] * h[nms]) # d2Psi/dr2
-                potential_hessian[2,1,ind] += 2 * n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dtheta dr
-                potential_hessian[3,1,ind] += 2 * n * m / r * real(im * LE[ind,nms] * h[nms]) # d2Psi/dphi dr
-                potential_hessian[1,2,ind] += 2 * n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dr dtheta
-                potential_hessian[2,2,ind] += 2 * real(LE[ind,nms] * ht2[nms]) # d2Psi/dtheta2
-                potential_hessian[3,2,ind] += 2 * m * real(im * LE[ind,nms] * ht[nms]) # d2Psi/dphi dtheta
-                potential_hessian[1,3,ind] += 2 * n * m / r * real(im * LE[ind,nms] * h[nms]) # d2Psi/dr dphi
-                potential_hessian[2,3,ind] += 2 * m * real(im * LE[ind,nms] * ht[nms]) # d2Psi/dtheta dphi
-                potential_hessian[3,3,ind] += 2 * -m^2 * real(LE[ind,nms] * h[nms]) # d2Psi/dphi2
+                #potential_hessian[1,1,ind] += 2 * n * (n-1) / r^2 * real(LE[ind,nms] * h[nms]) # d2Psi/dr2
+                #potential_hessian[2,1,ind] += 2 * n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dtheta dr
+                #potential_hessian[3,1,ind] += 2 * n * m / r * real(im * LE[ind,nms] * h[nms]) # d2Psi/dphi dr
+                #potential_hessian[1,2,ind] += 2 * n/r * real(LE[ind,nms] * ht[nms]) # d2Psi/dr dtheta
+                #potential_hessian[2,2,ind] += 2 * real(LE[ind,nms] * ht2[nms]) # d2Psi/dtheta2
+                #potential_hessian[3,2,ind] += 2 * m * real(im * LE[ind,nms] * ht[nms]) # d2Psi/dphi dtheta
+                #potential_hessian[1,3,ind] += 2 * n * m / r * real(im * LE[ind,nms] * h[nms]) # d2Psi/dr dphi
+                #potential_hessian[2,3,ind] += 2 * m * real(im * LE[ind,nms] * ht[nms]) # d2Psi/dtheta dphi
+                #potential_hessian[3,3,ind] += 2 * -m^2 * real(LE[ind,nms] * h[nms]) # d2Psi/dphi2
+                potential_hessian[1,1,ind] += 2 * n * (n-1) / r^2 * (LE[1,ind,nms]*h[1,1,nms] - LE[2,ind,nms]*h[2,1,nms])
+                potential_hessian[2,1,ind] += 2 * n/r * (LE[1,ind,nms]*h[1,2,nms] - LE[2,ind,nms]*h[2,2,nms])
+                potential_hessian[3,1,ind] -= 2 * n * m / r * (LE[1,ind,nms]*h[2,1,nms] + LE[2,ind,nms]*h[1,1,nms])
+                potential_hessian[1,2,ind] += 2 * n/r * (LE[1,ind,nms]*h[1,2,nms] - LE[2,ind,nms]*h[2,2,nms])
+                potential_hessian[2,2,ind] += 2 * (LE[1,ind,nms]*h[1,3,nms] - LE[2,ind,nms]*h[2,3,nms])
+                potential_hessian[3,2,ind] -= 2 * m * (LE[1,ind,nms]*h[2,2,nms] + LE[2,ind,nms]*h[1,2,nms])
+                potential_hessian[1,3,ind] -= 2 * n * m / r * (LE[1,ind,nms]*h[2,1,nms] + LE[2,ind,nms]*h[1,1,nms])
+                potential_hessian[2,3,ind] -= 2 * m * (LE[1,ind,nms]*h[2,2,nms] + LE[2,ind,nms]*h[1,2,nms])
+                potential_hessian[3,3,ind] -= 2 * m^2 * (LE[1,ind,nms]*h[1,1,nms] - LE[2,ind,nms]*h[2,1,nms])#real(LE[ind,nms] * h[nms]) # d2Psi/dphi2
+                
             end
         end
     end
@@ -327,7 +363,7 @@ end
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi, P)
+function regular_harmonic_derivs!(harmonics, rho, theta, phi, P)
     y,x = sincos(theta)
     invY = y == 0 ? 0 : 1 / y
     fact = 1.0
@@ -343,17 +379,17 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
         # lpl = m * m + 2 * m + 1
         # lml = m * m + 1
         #harmonics[lpl] = rhom * p * eim
-        harmonics[1,lpl] = rhom * p * eim[1]
-        harmonics[2,lpl] = rhom * p * eim[2]
+        harmonics[1,1,lpl] = rhom * p * eim[1]
+        harmonics[2,1,lpl] = rhom * p * eim[2]
         # harmonics[lml] = conj(harmonics[lpl])
         p1 = p
         p = x * (2 * m + 1) * p1
         #harmonics_theta[lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
-        harmonics_theta[1,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[1]
-        harmonics_theta[2,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[2]
+        harmonics[1,2,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[1]
+        harmonics[2,2,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[2]
         #harmonics_theta_2[lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim
-        harmonics_theta_2[1,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[1]
-        harmonics_theta_2[2,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[2]
+        harmonics[1,3,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[1]
+        harmonics[2,3,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[2]
         rhom *= rho
         rhol = rhom
         for l=m+1:P
@@ -362,18 +398,18 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
             # lmm = l * l + l - m + 1
             rhol /= -(l + m)
             #harmonics[lpm] = rhol * p * eim
-            harmonics[1,lpm] = rhol * p * eim[1]
-            harmonics[2,lpm] = rhol * p * eim[2]
+            harmonics[1,1,lpm] = rhol * p * eim[1]
+            harmonics[2,1,lpm] = rhol * p * eim[2]
             # harmonics[lmm] = conj(harmonics[lpm])
             p2 = p1
             p1 = p
             p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
             #harmonics_theta[lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
-            harmonics_theta[1,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[1]
-            harmonics_theta[2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[2]
+            harmonics[1,2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[1]
+            harmonics[2,2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[2]
             #harmonics_theta_2[lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
-            harmonics_theta_2[1,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[1]
-            harmonics_theta_2[2,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[2]
+            harmonics[1,3,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[1]
+            harmonics[2,3,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[2]
             rhol *= rho
         end
         rhom /= -(2 * m + 2) * (2 * m + 1)
@@ -516,8 +552,8 @@ function M2M!(branch, child, harmonics, M, expansion_order)
     # get distance vector
     dx, dy, dz = branch.center - child.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, r, theta, phi, expansion_order)
-    M2M_loop!(branch.multipole_expansion,child.multipole_expansion,harmonics,expansion_order)
+    harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
+    branch.multipole_expansion .= M2M_loop!(branch.multipole_expansion,child.multipole_expansion,harmonics,expansion_order)
 end
 
 function M2M_loop!(branch_multipole_expansion,child_multipole_expansion,harmonics,P)
@@ -563,6 +599,7 @@ function M2M_loop!(branch_multipole_expansion,child_multipole_expansion,harmonic
             end
         end
     end
+    return branch_multipole_expansion
 end
 
 function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order)
@@ -571,6 +608,7 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
             L .= zero(eltype(L))
+            #L = zeros(eltype(_L), size(_L))
             for n in 0:expansion_order
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1
@@ -602,6 +640,7 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
             view(local_expansion,:,:,jks) .+= L
         end
     end
+    return local_expansion
 end
 
 function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
@@ -613,23 +652,23 @@ function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
-    M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
+    harmonics = irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
+    target_branch.local_expansion .= M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
 function M2L!(target_branch, source_branch, expansion_order)
     twice_expansion_order = expansion_order << 1
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(source_branch.harmonics, r, theta, phi, twice_expansion_order)
-    M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
+    source_branch.harmonics .= irregular_harmonic!(source_branch.harmonics, r, theta, phi, twice_expansion_order)
+    target_branch.local_expansion .= M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
 end
 
 function B2L!(tree, i_branch, source_position, source_strength)
     branch = tree.branches[i_branch]
     irregular_harmonics = Matrix{eltype(branch.multipole_expansion)}(undef, 2, (tree.expansion_order+1)^2)
     r, theta, phi = cartesian_2_spherical(source_position - branch.center)
-    irregular_harmonic!(irregular_harmonics, r, theta, -phi, tree.expansion_order)
+    irregular_harmonics = irregular_harmonic!(irregular_harmonics, r, theta, -phi, tree.expansion_order)
     for l in 0:tree.expansion_order
         for m in 0:l
             i_abb = (l * (l+1)) >> 1 + m + 1
@@ -647,7 +686,7 @@ function L2L!(branch, child, harmonics, L, expansion_order) # 15-50k tape entrie
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
-    L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
+    child.local_expansion .= L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
     return nothing
 end
 @inline function L2L_loop!(child_local_expansion,branch_local_expansion,regular_harmonics,L,expansion_order)
@@ -686,19 +725,22 @@ end
             view(child_local_expansion,:,:,jks) .+= L
         end
     end
+    return child_local_expansion
 end
 
-function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
+# changed several instances of "harmonics, harmonics_theta, harmonics_theta2" to "harmonics"
+
+function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
     for (i_system, system) in enumerate(systems)
-        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
+        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
     end
 end
 
-function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
-    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
+function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
+    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
 end
 
-function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace)
+function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, workspace)
     for i_body in bodies_index
         vector_potential = zeros(eltype(vector_potential), size(vector_potential))
         potential_jacobian = zeros(eltype(potential_jacobian), size(potential_jacobian))
@@ -707,7 +749,7 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
         #potential_jacobian .= zero(eltype(potential_jacobian))
         #potential_hessian .= zero(eltype(potential_hessian))
         body_position = system[i_body,POSITION]
-        scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta2, expansion_order, workspace)
+        scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
         # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
         system[i_body,VECTOR_POTENTIAL] .+= vector_potential
@@ -716,12 +758,12 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
     end
 end
 
-function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
+function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, expansion_order, workspace)
 
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, expansion_order)
-    scalar_potential = update_potentials!(zero(eltype(vector_potential)), vector_potential, potential_jacobian, potential_hessian, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, r, theta, phi)
+    harmonics .= regular_harmonic_derivs!(harmonics, r, theta, phi, expansion_order)
+    scalar_potential = update_potentials!(zero(eltype(vector_potential)), vector_potential, potential_jacobian, potential_hessian, local_expansion, harmonics, expansion_order, r, theta, phi)
     spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
     flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient
     return scalar_potential

@@ -102,10 +102,3 @@ macro grad_from_chainrules_extended(iip_inds, fcall)
         end
     end
 end
-
-# used to add a tape to a tracked array. I should probably write a similar function for a single tracked real.
-function ReverseDiff.track!(t::AbstractArray{<:ReverseDiff.TrackedReal},tp::ReverseDiff.InstructionTape)
-    for ti in t
-        ti = ReverseDiff.track(ti,Float64,tp)
-    end
-end
