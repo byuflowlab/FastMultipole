@@ -26,7 +26,7 @@ end
 function Gravitational(bodies::Matrix)
     nbodies = size(bodies)[2]
     bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],SVector{4}(bodies[5:8,i])) for i in 1:nbodies]
-    potential = zeros(52,nbodies)
+    potential = zeros(eltype(bodies),52,nbodies)
     return Gravitational(bodies2,potential)
 end
 
@@ -73,10 +73,11 @@ function fmm.direct!(target_system, target_index, source_system::Gravitational, 
             dx = target_x - source_x
             dy = target_y - source_y
             dz = target_z - source_z
-            r = sqrt(dx*dx + dy*dy + dz*dz)
+            #r = sqrt(dx*dx + dy*dy + dz*dz)
+            r2 = dx*dx + dy*dy + dz*dz
             # te = @elapsed begin
-            if r > 0
-                dV = source_strength / r
+            if r2 > 0
+                dV = source_strength / sqrt(r2)
                 target_system[j_target,fmm.SCALAR_POTENTIAL] += dV
             end
         # end

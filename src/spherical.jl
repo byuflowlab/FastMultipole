@@ -646,7 +646,7 @@ function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
     twice_expansion_order = expansion_order << 1
     #l = length(ReverseDiff.tape(target_branch.center))
     #harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
-    harmonics = zeros(eltype(target_branch.multipole_expansion),(twice_expansion_order + 1)*(twice_expansion_order + 1))
+    harmonics = zeros(eltype(target_branch.multipole_expansion), 2, (twice_expansion_order + 1)*(twice_expansion_order + 1))
     dx, dy, dz = target_branch.center - source_branch.center
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
