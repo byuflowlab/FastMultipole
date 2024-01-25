@@ -589,13 +589,8 @@ end
     #    center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
     #else
         center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-<<<<<<< HEAD
-    #end
-    away_from_center!(center, system, bodies_index)
-=======
     # end
     delta = away_from_center!(center, system, bodies_index)
->>>>>>> main
     
     return center + delta
 end

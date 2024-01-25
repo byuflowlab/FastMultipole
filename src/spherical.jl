@@ -608,7 +608,6 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
             L .= zero(eltype(L))
-            #L = zeros(eltype(_L), size(_L))
             for n in 0:expansion_order
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1

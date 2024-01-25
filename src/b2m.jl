@@ -11,15 +11,22 @@
         y = b_y - c_y
         qx, qy, qz = system[i_body,VECTOR_STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r ,theta, -phi, expansion_order) # Ylm^* -> -dx[3]
+        harmonics .= regular_harmonic!(harmonics, r ,theta, -phi, expansion_order) # Ylm^* -> -dx[3]
         # update values
         for l in 0:expansion_order
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[2,i_compressed] += harmonics[i_solid_harmonic] * qx * ONE_OVER_4PI
-                branch.multipole_expansion[3,i_compressed] += harmonics[i_solid_harmonic] * qy * ONE_OVER_4PI
-                branch.multipole_expansion[4,i_compressed] += harmonics[i_solid_harmonic] * qz * ONE_OVER_4PI
+                #branch.multipole_expansion[2,i_compressed] += harmonics[i_solid_harmonic] * qx * ONE_OVER_4PI
+                #branch.multipole_expansion[3,i_compressed] += harmonics[i_solid_harmonic] * qy * ONE_OVER_4PI
+                #branch.multipole_expansion[4,i_compressed] += harmonics[i_solid_harmonic] * qz * ONE_OVER_4PI
+                branch.multipole_expansion[1,2,i_compressed] += harmonics[1,i_solid_harmonic] * qx * ONE_OVER_4PI
+                branch.multipole_expansion[2,2,i_compressed] += harmonics[2,i_solid_harmonic] * qx * ONE_OVER_4PI
+                branch.multipole_expansion[1,3,i_compressed] += harmonics[1,i_solid_harmonic] * qy * ONE_OVER_4PI
+                branch.multipole_expansion[2,3,i_compressed] += harmonics[2,i_solid_harmonic] * qy * ONE_OVER_4PI
+                branch.multipole_expansion[1,4,i_compressed] += harmonics[1,i_solid_harmonic] * qz * ONE_OVER_4PI
+                branch.multipole_expansion[2,4,i_compressed] += harmonics[2,i_solid_harmonic] * qz * ONE_OVER_4PI
+                
             end
         end
     end
@@ -34,19 +41,22 @@ end
         y = b_y - c_y
         q = system[i_body,SCALAR_STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r, theta, -phi, expansion_order) # Ylm^* -> -dx[3]
+        harmonics .= regular_harmonic!(harmonics, r, theta, -phi, expansion_order) # Ylm^* -> -dx[3]
         # update values
         for l in 0:expansion_order
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-                branch.multipole_expansion[1,i_compressed] += harmonics[i_solid_harmonic] * q
+                #branch.multipole_expansion[1,i_compressed] += harmonics[i_solid_harmonic] * q
+                branch.multipole_expansion[1,1,i_compressed] += harmonics[1,i_solid_harmonic] * q
+                branch.multipole_expansion[2,1,i_compressed] += harmonics[2,i_solid_harmonic] * q
             end
         end
     end
 end
 
 function B2M!_sourcequadpanel(system, branch, bodies_index, harmonics, expansion_order)
+    error("needs to be converted to real form!")
     qnm_prev = zeros(Complex{Float64}, expansion_order+2)
     jnm_prev = zeros(Complex{Float64}, expansion_order+2)
     inm_prev = zeros(Complex{Float64}, expansion_order+2)
