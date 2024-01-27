@@ -215,14 +215,14 @@ function B2M!(branch::MultiBranch, systems, harmonics, expansion_order)
     end
 end
 
-function M2B!(target_potential, target, i_branch, tree)
+function M2B!(target_potential, target, i_branch, tree::Tree{P}) where P
     branch = tree.branches[i_branch]
-    irregular_harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (tree.expansion_order+1)^2)
+    irregular_harmonics = Vector{eltype(branch.multipole_expansion[1])}(undef, (P+1)^2)
     dx = target[1:3] - branch.center
     r, theta, phi = cartesian_2_spherical(dx)
-    irregular_harmonic!(irregular_harmonics, r, theta, phi, tree.expansion_order)
+    irregular_harmonic!(irregular_harmonics, r, theta, phi, P)
     d_potential = zeros(4)
-    for l in 0:tree.expansion_order
+    for l in 0:P
         for m in 0:l
             ip = l^2 + l + m + 1
             i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
@@ -235,13 +235,13 @@ function M2B!(target_potential, target, i_branch, tree)
     target_potential .+= d_potential
 end
 
-function M2M!(branch, child, harmonics, M, expansion_order)
+function M2M!(branch, child, harmonics, M, expansion_order::Val{P}) where P
     # get distance vector
     dx, dy, dz = branch.center - child.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, r, theta, phi, expansion_order)
+    regular_harmonic!(harmonics, r, theta, phi, P)
 
-    for j in 0:expansion_order # iterate over new Multipole coefficients B_j^k
+    for j in 0:P # iterate over new Multipole coefficients B_j^k
         for k in 0:j
             i_jk = ((j * (j+1)) >> 1) + k + 1 # current index
             M .= zero(eltype(M))
@@ -273,13 +273,13 @@ function M2M!(branch, child, harmonics, M, expansion_order)
     end
 end
 
-function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order)
-    for j in 0:expansion_order
+function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order::Val{P}) where P
+    for j in 0:P
         Cnm = odd_or_even(j)
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
             L .= zero(eltype(L))
-            for n in 0:expansion_order
+            for n in 0:P
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1
                     jnkm = (j + n)^2 + j + n + m - k + 1
@@ -304,28 +304,26 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
     end
 end
 
-function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
-    twice_expansion_order = expansion_order << 1
+function M2L!(target_branch, source_branch, harmonics, L, expansion_order::Val{P}) where P
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(harmonics, r, theta, phi, twice_expansion_order)
+    irregular_harmonic!(harmonics, r, theta, phi, P<<1)
     M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
-function M2L!(target_branch, source_branch, expansion_order)
-    twice_expansion_order = expansion_order << 1
+function M2L!(target_branch, source_branch, expansion_order::Val{P}) where P
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(source_branch.harmonics, r, theta, phi, twice_expansion_order)
+    irregular_harmonic!(source_branch.harmonics, r, theta, phi, P<<1)
     M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
 end
 
-function B2L!(tree, i_branch, source_position, source_strength)
+function B2L!(tree::Tree{P}, i_branch, source_position, source_strength) where P
     branch = tree.branches[i_branch]
-    irregular_harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (tree.expansion_order+1)^2)
+    irregular_harmonics = Vector{eltype(branch.multipole_expansion)}(undef, (P+1)^2)
     r, theta, phi = cartesian_2_spherical(source_position - branch.center)
-    irregular_harmonic!(irregular_harmonics, r, theta, -phi, tree.expansion_order)
-    for l in 0:tree.expansion_order
+    irregular_harmonic!(irregular_harmonics, r, theta, -phi, P)
+    for l in 0:P
         for m in 0:l
             i_abb = (l * (l+1)) >> 1 + m + 1
             i_exp = l^2 + l + m + 1
@@ -336,15 +334,15 @@ function B2L!(tree, i_branch, source_position, source_strength)
     end
 end
 
-function L2L!(branch, child, regular_harmonics, L, expansion_order)
+function L2L!(branch, child, regular_harmonics, L, expansion_order::Val{P}) where P
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(regular_harmonics, r, theta, phi, expansion_order)
-    for j in 0:expansion_order
+    regular_harmonic!(regular_harmonics, r, theta, phi, P)
+    for j in 0:P
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
             L .= zero(eltype(branch.local_expansion[1]))
-            for n in j:expansion_order
+            for n in j:P
                 for m in j+k-n:-1
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
                     nms = (n * (n + 1)) >> 1 - m + 1
@@ -421,13 +419,12 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
     end
 end
 
-function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
-    a = 0
+function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order::Val{P}, workspace) where P
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, expansion_order)
+    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, P)
     scalar_potential = zero(eltype(vector_potential))
-    for n in 0:expansion_order
+    for n in 0:P
         # nm = n * n + n + 1 # m = 0
         nms = (n * (n+1)) >> 1 + 1 # m = 0
         scalar_potential += real(local_expansion[1,nms] * harmonics[nms])

@@ -94,7 +94,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
 
     # assemble tree
-    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
+    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch, cost_parameters)
 
     return tree
 end

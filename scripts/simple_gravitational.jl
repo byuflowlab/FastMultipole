@@ -304,11 +304,7 @@ end
 
 # shrink_recenter = false
 # farfield=nearfield=true
-<<<<<<< Updated upstream
-expansion_order, n_per_branch, theta = 4, 500, 0.6
-=======
 expansion_order, n_per_branch, theta = 10, 500, 0.4
->>>>>>> Stashed changes
 n_bodies = 10_000
 
 shrink_recenter, ndivisions = true, 15
@@ -320,10 +316,8 @@ shrink_recenter, ndivisions = true, 15
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-<<<<<<< Updated upstream
 println("===== nthreads: $(Threads.nthreads()) =====")
 err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-=======
 # println("===== nthreads: $(Threads.nthreads()) =====")
 # err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
@@ -331,7 +325,6 @@ err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_b
 # @show err_ns
 
 err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
->>>>>>> Stashed changes
 @show err
 err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 @show err

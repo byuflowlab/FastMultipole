@@ -145,33 +145,33 @@ end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
 
-abstract type Tree end
+abstract type Tree{P} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB} <: Tree
+struct MultiTree{TF,N,TB,P} <: Tree{P}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
-    expansion_order::Int64
+    expansion_order::Val{P}
     n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB} <: Tree
+struct SingleTree{TF,TB,P} <: Tree{P}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index::Vector{Int64}
     inverse_sort_index::Vector{Int64}
     buffer::TB
-    expansion_order::Int64
+    expansion_order::Val{P}
     n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
     cost_parameters::Float64

@@ -28,9 +28,9 @@ end
 #####
 ##### upward pass
 #####
-function upward_pass_single_thread!(branches, systems, expansion_order)
+function upward_pass_single_thread!(branches, systems, expansion_order::Val{P}) where P
     # initialize memory
-    harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+    harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
     M = zeros(eltype(branches[1].multipole_expansion), 4)
 
     # loop over branches
@@ -46,7 +46,7 @@ function upward_pass_single_thread!(branches, systems, expansion_order)
     end
 end
 
-function body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
+function body_2_multipole_multi_thread!(branches, systems, expansion_order::Val{P}, leaf_index) where P
     # divide chunks
     n_threads = Threads.nthreads()
     n_per_chunk, rem = divrem(length(leaf_index),n_threads)
@@ -57,7 +57,7 @@ function body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf
 
     # spread remainder across rem chunks
     Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+        harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
         chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
         for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
             B2M!(leaf, systems, harmonics, expansion_order)
@@ -65,7 +65,7 @@ function body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf
     end
 end
 
-function body_2_multipole_single_thread!(branches, systems, expansion_order, leaf_index)
+function body_2_multipole_single_thread!(branches, systems, expansion_order::Val{P}, leaf_index) where P
     # divide chunks
     n_threads = Threads.nthreads()
     n_per_chunk, rem = divrem(length(leaf_index),n_threads)
@@ -76,7 +76,7 @@ function body_2_multipole_single_thread!(branches, systems, expansion_order, lea
 
     # spread remainder across rem chunks
     for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+        harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
         chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
         for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
             B2M!(leaf, systems, harmonics, expansion_order)
@@ -94,7 +94,7 @@ end
     end
 end
 
-function translate_multipoles_multi_thread!(branches, expansion_order, levels_index)
+function translate_multipoles_multi_thread!(branches, expansion_order::Val{P}, levels_index) where P
     # initialize memory
     n_threads = Threads.nthreads()
     
@@ -116,7 +116,7 @@ function translate_multipoles_multi_thread!(branches, expansion_order, levels_in
                 chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
 
                 # initialize memory
-                harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+                harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
                 M = zeros(eltype(branches[1].multipole_expansion), 4)
 
                 # loop over branches
@@ -125,7 +125,7 @@ function translate_multipoles_multi_thread!(branches, expansion_order, levels_in
                 end
             end
         else
-            harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+            harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
             M = zeros(eltype(branches[1].multipole_expansion), 4)
             for branch in view(branches,level_index)
                 translate_multipoles(branch, branches, harmonics, M, expansion_order)
@@ -135,13 +135,13 @@ function translate_multipoles_multi_thread!(branches, expansion_order, levels_in
     return nothing
 end
 
-function translate_multipoles_single_thread!(branches, expansion_order, levels_index)
+function translate_multipoles_single_thread!(branches, expansion_order::Val{P}, levels_index) where P
     # initialize memory
     n_threads = Threads.nthreads()
     
     # iterate over levels
     for level_index in view(levels_index,length(levels_index):-1:1)
-        harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+        harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
         M = zeros(eltype(branches[1].multipole_expansion), 4)
         for branch in view(branches,level_index)
             translate_multipoles(branch, branches, harmonics, M, expansion_order)
@@ -308,19 +308,19 @@ end
 #####
 ##### downward pass
 #####
-function preallocate_l2b(float_type, expansion_type, expansion_order)
+function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}) where P
     vector_potential = zeros(float_type,3)
     potential_jacobian = zeros(float_type,3,4)
     potential_hessian = zeros(float_type,3,3,4)
-    derivative_harmonics = zeros(expansion_type, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta = zeros(expansion_type, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(expansion_type, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics = zeros(expansion_type, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_theta = zeros(expansion_type, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_theta_2 = zeros(expansion_type, ((P+1) * (P+2)) >> 1)
     workspace = zeros(float_type,3,4)
     return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
 end
 
-function downward_pass_single_thread!(branches, systems, expansion_order)
-    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+function downward_pass_single_thread!(branches, systems, expansion_order::Val{P}) where P
+    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
     L = zeros(eltype(branches[1].multipole_expansion),4)
     vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     for branch in branches
@@ -344,7 +344,7 @@ end
     end
 end
 
-function translate_locals_multi_thread!(branches, expansion_order, levels_index)
+function translate_locals_multi_thread!(branches, expansion_order::Val{P}, levels_index) where P
     # initialize memory
     n_threads = Threads.nthreads()
     
@@ -366,7 +366,7 @@ function translate_locals_multi_thread!(branches, expansion_order, levels_index)
                 chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1 # some chunks are 1 branch longer to evenly spread the remainder in `n_per_chunk, rem = divrem(...)`
 
                 # initialize memory
-                harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+                harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
                 L = zeros(eltype(branches[1].multipole_expansion), 4)
 
                 # loop over branches
@@ -375,7 +375,7 @@ function translate_locals_multi_thread!(branches, expansion_order, levels_index)
                 end
             end
         else
-            harmonics = zeros(eltype(branches[1].multipole_expansion), (expansion_order+1)*(expansion_order+1))
+            harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
             L = zeros(eltype(branches[1].multipole_expansion), 4)
             for branch in view(branches,level_index)
                 translate_locals(branch, branches, harmonics, L, expansion_order)
