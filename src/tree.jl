@@ -56,25 +56,6 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
         shrink_recenter!(branches, levels_index, system)
     end
 
-    # # count leaves
-    # n_leaves = 0
-    # for branch in branches
-    #     branch.n_branches == 0 && (n_leaves += 1)
-    # end
-
-    # # create leaf index and leaf count
-    # cumulative_count = Vector{Int64}(undef,n_leaves)
-    # cumulative_count[1] = 0
-    # leaf_index = zeros(Int,n_leaves)
-    # i_leaf_index = 1
-    # for (i_branch, branch) in enumerate(branches)
-    #     if branch.n_branches == 0
-    #         leaf_index[i_leaf_index] = Int32(i_branch)
-    #         i_leaf_index < n_leaves && (cumulative_count[i_leaf_index+1] = cumulative_count[i_leaf_index] + sum(branch.n_bodies))
-    #         i_leaf_index += 1
-    #     end
-    # end
-    
     # store leaves
     leaf_index = Vector{Int}(undef,0)
     sizehint!(leaf_index, length(levels_index[end]))
@@ -91,19 +72,19 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     # else
     #     cost_parameters = CostParameters(system)
     # end
-    cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
+    # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
 
     # assemble tree
-    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch, cost_parameters)
+    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch)#, cost_parameters)
 
     return tree
 end
 
-Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters) = 
-    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
+Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
-Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters) = 
-    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
+Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
 @inline total_n_bodies(system) = length(system)
 

@@ -991,7 +991,7 @@ branch_3 = fmm.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_3, 1/8, fmm.in
 dummy_index = (zeros(Int64,length(vortexparticles)),)
 dummy_leaf_index = collect(1:3)
 dummy_cost_parameter = fmm.dummy_direct_cost_estimate((vortexparticles,), n_per_branch)
-tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), Val(expansion_order), n_per_branch, dummy_cost_parameter)
+tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), Val(expansion_order), n_per_branch)#, dummy_cost_parameter)
 harmonics = zeros(Complex{Float64},(expansion_order+1)^2)
 fmm.B2M!(branch_2, (vortexparticles,), harmonics, Val(expansion_order))
 fmm.B2M!(branch_3, (vortexparticles,), harmonics, Val(expansion_order))
@@ -1164,7 +1164,7 @@ branch_3 = fmm.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_2, 1/8, fmm.in
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)
 dummy_cost_parameter = fmm.dummy_direct_cost_estimate((vortex_particles,), n_per_branch)
-tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), Val(expansion_order), n_per_branch, dummy_cost_parameter)
+tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), Val(expansion_order), n_per_branch)#, dummy_cost_parameter)
 # fmm.B2M!(tree, vortex_particles, 2)
 # fmm.B2M!(tree, vortex_particles, 3)
 
