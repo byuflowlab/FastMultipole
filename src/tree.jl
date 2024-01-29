@@ -658,7 +658,7 @@ end
     bodies_index = branch[].bodies_index
     n_branches = branch[].n_branches
     branch_index = branch[].branch_index
-    i_parent = brnach[].i_parent
+    i_parent = branch[].i_parent
     center = branch[].center
     radius = branch[].radius
     multipole_expansion = branch[].multipole_expansion
