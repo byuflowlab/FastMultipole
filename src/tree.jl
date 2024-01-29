@@ -654,17 +654,18 @@ end
 end
 
 @inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius) where TB
-    (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, ML, lock) = branch[]
-    # bodies_index = branch[].bodies_index
-    # n_branches = branch[].n_branches
-    # branch_index = branch[].branch_index
-    # center = branch[].center
-    # radius = branch[].radius
-    # multipole_expansion = branch[].multipole_expansion
-    # local_expansion = branch[].local_expansion
-    # harmonics = branch[].harmonics
-    # ML = branch[].ML
-    # lock = branch[].lock
+    # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, ML, lock) = branch[]
+    bodies_index = branch[].bodies_index
+    n_branches = branch[].n_branches
+    branch_index = branch[].branch_index
+    i_parent = brnach[].i_parent
+    center = branch[].center
+    radius = branch[].radius
+    multipole_expansion = branch[].multipole_expansion
+    local_expansion = branch[].local_expansion
+    harmonics = branch[].harmonics
+    ML = branch[].ML
+    lock = branch[].lock
     branch[] = TB(bodies_index, n_branches, branch_index, i_parent, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
 end
 
