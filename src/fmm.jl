@@ -39,18 +39,15 @@ end
 ##### upward pass
 #####
 function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
-    # initialize memory
-    harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
-    M = zeros(eltype(branches[1].multipole_expansion), 4)
 
     # loop over branches
     for branch in view(branches,length(branches):-1:1) # no need to create a multipole expansion at the very top level
         if branch.n_branches == 0 # branch is a leaf
-            B2M!(branch, systems, harmonics, expansion_order)
+            B2M!(branch, systems, branch.harmonics, expansion_order)
         else # not a leaf
             # iterate over children
             for child_branch in view(branches, branch.branch_index)
-                M2M!(branch, child_branch, harmonics, M, expansion_order)
+                M2M!(branch, child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
             end
         end
     end
@@ -93,13 +90,12 @@ function body_2_multipole_multithread!(branches, systems::Tuple, expansion_order
     
     ## compute multipole expansion coefficients
     Threads.@threads for i_thread in 1:n_threads
-        harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
         for (i_system,system) in enumerate(systems)
             leaf_assignment = leaf_assignments[i_system,i_thread]
             for i_branch in view(leaf_index, leaf_assignment)
                 branch = branches[i_branch]
                 Threads.lock(branch.lock) do
-                    B2M!(system, branch, branch.bodies_index[i_system], harmonics, expansion_order)
+                    B2M!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
                 end
             end
         end
@@ -359,15 +355,15 @@ end
     vector_potential = zeros(float_type,3)
     potential_jacobian = zeros(float_type,3,4)
     potential_hessian = zeros(float_type,3,3,4)
-    derivative_harmonics = zeros(expansion_type, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_theta = zeros(expansion_type, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(expansion_type, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_theta = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
     workspace = zeros(float_type,3,4)
     return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
 end
 
 function downward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
-    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), (P+1)*(P+1))
+    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
     # L = zeros(eltype(branches[1].multipole_expansion),4)
     vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     for branch in branches

@@ -729,16 +729,16 @@ end
 ##### helper function
 #####
 function initialize_expansion(expansion_order, type=Float64)
-    return zeros(Complex{type}, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    return zeros(type, 2, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function initialize_harmonics(expansion_order, type=Float64)
     root_n = expansion_order<<1 + 1
-    return zeros(Complex{type}, root_n * root_n)
+    return zeros(type, 2, 2 * root_n * root_n)
 end
 
 function initialize_ML(expansion_order, type=Float64)
-    return MVector{4, Complex{type}}(0.0,0.0,0.0,0.0)
+    return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
 end
 
 function reset_expansions!(tree)

@@ -122,10 +122,10 @@ struct MultiBranch{TF,N} <: Branch
     i_parent::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
-    multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
-    local_expansion::Array{Complex{TF},2}     # local expansion coefficients
-    harmonics::Vector{Complex{TF}}
-    ML::MVector{4,Complex{TF}}
+    multipole_expansion::Array{TF,3} # multipole expansion coefficients
+    local_expansion::Array{TF,3}     # local expansion coefficients
+    harmonics::Array{TF,2}
+    ML::MArray{Tuple{2,4},TF}
     lock::ReentrantLock
 end
 
@@ -138,10 +138,10 @@ struct SingleBranch{TF} <: Branch
     i_parent::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
-    multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
-    local_expansion::Array{Complex{TF},2}     # local expansion coefficients
-    harmonics::Vector{Complex{TF}}
-    ML::MVector{4,Complex{TF}}
+    multipole_expansion::Array{TF,3} # multipole expansion coefficients
+    local_expansion::Array{TF,3}     # local expansion coefficients
+    harmonics::Array{TF,2}
+    ML::MArray{Tuple{2,4},TF}
     lock::ReentrantLock
 end
 
