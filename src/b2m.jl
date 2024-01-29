@@ -2,7 +2,7 @@
 #####
 ##### multipole generation convenience functions
 #####
-@inline function B2M!_vortexpoint(system, branch, bodies_index, harmonics, expansion_order)
+@inline function B2M!_vortexpoint(system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
     c_x, c_y, c_z = branch.center
     for i_body in bodies_index
         b_x, b_y, b_z = system[i_body,POSITION]
@@ -11,9 +11,9 @@
         y = b_y - c_y
         qx, qy, qz = system[i_body,VECTOR_STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r ,theta, -phi, expansion_order) # Ylm^* -> -dx[3]
+        regular_harmonic!(harmonics, r ,theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
-        for l in 0:expansion_order
+        for l in 0:P
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
@@ -25,7 +25,7 @@
     end
 end
 
-@inline function B2M!_sourcepoint(system, branch, bodies_index, harmonics, expansion_order)
+@inline function B2M!_sourcepoint(system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
     c_x, c_y, c_z = branch.center
     for i_body in bodies_index
         b_x, b_y, b_z = system[i_body,POSITION]
@@ -34,9 +34,9 @@ end
         y = b_y - c_y
         q = system[i_body,SCALAR_STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r, theta, -phi, expansion_order) # Ylm^* -> -dx[3]
+        regular_harmonic!(harmonics, r, theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
-        for l in 0:expansion_order
+        for l in 0:P
             for m in 0:l
                 i_solid_harmonic = l*l + l + m + 1
                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)

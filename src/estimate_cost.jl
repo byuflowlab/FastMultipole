@@ -416,28 +416,42 @@ end
 # end
 =#
 
+
+Base.getindex(sys::DummySystem, i, ::Position) = sys.bodies[i].position
+Base.getindex(sys::DummySystem, i, ::Radius) = sys.bodies[i].radius
+Base.getindex(sys::DummySystem, i, ::ScalarPotential) = sys.potential[i]
+Base.getindex(sys::DummySystem, i, ::VectorPotential) = sys.vector_potential[i]
+Base.getindex(sys::DummySystem, i, ::Velocity) = sys.velocity[i]
+Base.getindex(sys::DummySystem, i, ::VelocityGradient) = sys.gradient[i]
+Base.setindex!(sys::DummySystem, val, i, ::ScalarPotential) = sys.potential[i] = val
+Base.setindex!(sys::DummySystem, val, i, ::VectorPotential) = sys.vector_potential[i] = val
+Base.setindex!(sys::DummySystem, val, i, ::Velocity) = sys.velocity[i] = val
+Base.setindex!(sys::DummySystem, val, i, ::VelocityGradient) = sys.gradient[i] = val
+Base.length(sys::DummySystem) = length(sys.bodies)
+
+function DummySystem(n_bodies, TF)
+    bodies = [Dummy(rand(SVector{3,TF}), rand(), rand()) for _ in 1:n_bodies]
+    potential = zeros(TF,n_bodies)
+    vector_potential = zeros(SVector{3,TF},n_bodies)
+    velocity = zeros(SVector{3,TF},n_bodies)
+    gradient = zeros(SMatrix{3,3,TF,9},n_bodies)
+    return DummySystem(bodies, potential, vector_potential, velocity, gradient)
+end
+
 function direct_cost_estimate(system, n_per_branch; n_iter=10)
-    # store original states
-    original_states = [deepcopy(system[1])]
-    resize!(original_states, n_per_branch)
-    for i in 2:n_per_branch
-        original_states[i] = deepcopy(system[i])
-    end
+    # create dummy system
+    # target_system = DummySystem(n_per_branch, eltype(system[1,POSITION]))
 
-    # benchmark
-    t = 0.0
-    for i in 1:n_iter+1 # one for precompilation
-        i > 1 && (t += @elapsed direct!(system, 1:n_per_branch, system, 1:n_per_branch))
-    end
-    t /= n_iter # mean time per iteration
-    t /= n_per_branch^2 # mean time per interaction
+    # # benchmark
+    # t = 0.0
+    # for i in 1:n_iter+1 # one for precompilation
+    #     i > 1 && (t += @elapsed direct!(target_system, 1:n_per_branch, system, 1:n_per_branch))
+    # end
+    # t /= n_iter # mean time per iteration
+    # t /= n_per_branch^2 # mean time per interaction
 
-    # restore original states
-    for i in 1:n_per_branch
-        system[i] = original_states[i]
-    end
-
-    return t
+    # return t
+    return dummy_direct_cost_estimate(system, n_per_branch)
 end
 
 function dummy_direct_cost_estimate(system, n_per_branch)
@@ -445,7 +459,8 @@ function dummy_direct_cost_estimate(system, n_per_branch)
 end
 
 function direct_cost_estimate(systems::Tuple, n_per_branch; n_iter=10)
-    return SVector{length(systems),Float64}(direct_cost_estimate(system, n_per_branch; n_iter=n_iter) for system in systems)
+    # return SVector{length(systems),Float64}(direct_cost_estimate(system, n_per_branch; n_iter=n_iter) for system in systems)
+    return dummy_direct_cost_estimate(systems, n_per_branch)
 end
 
 function dummy_direct_cost_estimate(systems::Tuple, n_per_branch)

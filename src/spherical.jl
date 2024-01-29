@@ -204,14 +204,14 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
     end
 end
 
-@inline function B2M!(branch::SingleBranch, system, harmonics, expansion_order)
+@inline function B2M!(branch, system, harmonics, expansion_order)
     B2M!(system, branch, branch.bodies_index, harmonics, expansion_order)
 end
 
-function B2M!(branch::MultiBranch, systems, harmonics, expansion_order)
+function B2M!(branch, systems::Tuple, harmonics, expansion_order)
     # iterate over systems
-    for (i,system) in enumerate(systems)
-        B2M!(system, branch, branch.bodies_index[i], harmonics, expansion_order)
+    for (system,bodies_index) in zip(systems, branch.bodies_index)
+        B2M!(system, branch, bodies_index, harmonics, expansion_order)
     end
 end
 
@@ -314,8 +314,8 @@ end
 function M2L!(target_branch, source_branch, expansion_order::Val{P}) where P
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(source_branch.harmonics, r, theta, phi, P<<1)
-    M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
+    irregular_harmonic!(target_branch.harmonics, r, theta, phi, P<<1)
+    M2L_loop!(target_branch.local_expansion, target_branch.ML, source_branch.multipole_expansion, target_branch.harmonics, expansion_order)
 end
 
 function B2L!(tree::Tree{P}, i_branch, source_position, source_strength) where P

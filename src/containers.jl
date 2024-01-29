@@ -119,6 +119,7 @@ struct MultiBranch{TF,N} <: Branch
     bodies_index::SVector{N,UnitRange{Int64}}
     n_branches::Int64
     branch_index::UnitRange{Int64}
+    i_parent::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
@@ -134,6 +135,7 @@ struct SingleBranch{TF} <: Branch
     bodies_index::UnitRange{Int64}
     n_branches::Int64
     branch_index::UnitRange{Int64}
+    i_parent::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{Complex{TF},2} # multipole expansion coefficients
@@ -187,4 +189,21 @@ end
 
 function SortWrapper(system)
     return SortWrapper(system,collect(1:length(system)))
+end
+
+#####
+##### dummy system used in estimating cost
+#####
+struct Dummy{TF}
+    position::SVector{3,TF}
+    radius::TF
+    strength::TF
+end
+
+struct DummySystem{TF}
+    bodies::Vector{Dummy{TF}}
+    potential::Vector{TF}
+    vector_potential::Vector{SVector{3,TF}}
+    velocity::Vector{SVector{3,TF}}
+    gradient::Vector{SMatrix{3,3,TF,9}}
 end
