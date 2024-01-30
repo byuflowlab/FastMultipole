@@ -525,7 +525,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
 
     # run FMM
-    if false#Threads.nthreads() == 1
+    if Threads.nthreads() == 1
         nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
