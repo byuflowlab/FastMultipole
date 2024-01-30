@@ -509,29 +509,17 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
     # run FMM
     if Threads.nthreads() == 1
-        # println("nearfield")
         nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
-            # println("upward pass:")
             upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
-            # println("horizontal pass:")
             horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            # println("downward pass:")
             downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
     else # multithread
-        # println("nearfield")
         nearfield && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
-        # nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
-            # println("upward pass:")
             upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-            # upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
-            # println("horizontal pass:")
-            # horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            # downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
-            # println("downward pass:")
             downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
