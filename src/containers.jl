@@ -113,9 +113,9 @@ struct DipolePanel <: AbstractKernel end # not yet implemented
 #####
 ##### octree creation
 #####
-abstract type Branch end
+abstract type Branch{TF} end
 
-struct MultiBranch{TF,N} <: Branch
+struct MultiBranch{TF,N} <: Branch{TF}
     bodies_index::SVector{N,UnitRange{Int64}}
     n_branches::Int64
     branch_index::UnitRange{Int64}
@@ -125,13 +125,13 @@ struct MultiBranch{TF,N} <: Branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,2}
-    ML::MArray{Tuple{2,4},TF}
+    ML::Matrix{TF}
     lock::ReentrantLock
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
 
-struct SingleBranch{TF} <: Branch
+struct SingleBranch{TF} <: Branch{TF}
     bodies_index::UnitRange{Int64}
     n_branches::Int64
     branch_index::UnitRange{Int64}
@@ -141,7 +141,7 @@ struct SingleBranch{TF} <: Branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,2}
-    ML::MArray{Tuple{2,4},TF}
+    ML::Matrix{TF}
     lock::ReentrantLock
 end
 

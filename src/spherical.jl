@@ -92,16 +92,16 @@ end
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi, P)
+function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi::TF, P) where TF
     y,x = sincos(theta)
     invY = y == 0 ? 0 : 1 / y
     fact = 1.0
     pl = 1.0
     rhom = 1.0
     #ei = exp(im * phi)
-    ei = (cos(phi), sin(phi))
+    ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
-    eim = (1.0,0.0) # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
     for m=0:P
         p = pl
         lpl = (m * (m + 1)) >> 1 + m + 1
@@ -145,19 +145,19 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
         pl = -pl * fact * y
         fact += 2
         #eim *= ei
-        eim = (eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
     end
 end
 
-function regular_harmonic!(harmonics, rho, theta, phi, P)
+function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     y,x = sincos(theta)
     fact = 1.0
     pl = 1.0
     rhom = 1.0 # rho^l / (l+m)! * (-1)^l
     #ei = exp(im * phi)
-    ei = [cos(phi), sin(phi)]
+    ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
-    eim = [1.0,0.0] # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
     for m=0:P # l=m up here
         p = pl
         lpl = m * m + 2 * m + 1
@@ -191,20 +191,20 @@ function regular_harmonic!(harmonics, rho, theta, phi, P)
         pl = -pl * fact * y
         fact += 2
         #eim *= ei
-        eim .= [eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1]]
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
     end
 end
 
-function irregular_harmonic!(harmonics, rho, theta, phi, P)
+function irregular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     y, x = sincos(theta)
     fact = 1
     pl = 1
     invR = -1.0 / rho
     rhom = -invR
     #ei = exp(im * phi)
-    ei = [cos(phi), sin(phi)]
+    ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
-    eim = [1.0,0.0] # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
     for m=0:P
         p = pl
         npl = m * m + 2 * m + 1
@@ -237,7 +237,7 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
         pl = -pl * fact * y
         fact += 2
         #eim *= ei
-        eim .= [eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1]]
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
     end
 end
 

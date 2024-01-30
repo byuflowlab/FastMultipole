@@ -325,19 +325,33 @@ end
 #     containers = [preallocate_horizontal_pass(expansion_type, expansion_order) for _ in 1:n]
 # end
 
-function horizontal_pass_multithread!(target_branches, source_branches, m2l_list, expansion_order)
+function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, expansion_order::Val{P}) where {TF,P}
     # number of translations per thread
     n_threads = Threads.nthreads()
     n_per_thread, rem = divrem(length(m2l_list),n_threads)
     rem > 0 && (n_per_thread += 1)
+    assignments = 1:n_per_thread:length(m2l_list)
+
+    # preallocate memory
+    # harmonics_preallocated = [initialize_harmonics(P,TF) for _ in 1:length(assignments)]
+    # ML_preallocated = [initialize_ML(P,TF) for _ in 1:length(assignments)]
 
     # execute tasks
-	Threads.@threads for i_start in 1:n_per_thread:length(m2l_list)
+    Threads.@threads for i_thread in 1:length(assignments)
+	# Threads.@threads for i_start in 1:n_per_thread:length(m2l_list)
+        i_start = assignments[i_thread]
         i_stop = min(i_start+n_per_thread-1, length(m2l_list))
-        for (i_target, j_source) in view(m2l_list,i_start:i_stop)
+        # harmonics = harmonics_preallocated[i_thread]
+        # ML = ML_preallocated[i_thread]
+        # harmonics = initialize_harmonics(P,TF)
+        # ML = initialize_ML(P,TF)
+        for (i_target, j_source) in m2l_list[i_start:i_stop]
             Threads.lock(target_branches[i_target].lock) do
                 M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
+                # M2L!(target_branches[i_target], source_branches[j_source], harmonics, ML, expansion_order)
             end
+            # target_branch = target_branches[i_target]
+            # Threads.@lock target_branch.lock M2L!(target_branch, source_branches[j_source], expansion_order)
         end
     end
     
@@ -511,7 +525,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
 
     # run FMM
-    if Threads.nthreads() == 1
+    if false#Threads.nthreads() == 1
         nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
@@ -519,11 +533,19 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
     else # multithread
+        # println("nearfield")
         nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        # @time nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
+            # println("upward pass")
             upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+            # @time upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+            # println("horizontal pass")
             length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
+            # @time length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
+            # println("downward pass")
             downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+            # @time downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
 

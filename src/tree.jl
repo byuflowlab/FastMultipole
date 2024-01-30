@@ -738,7 +738,8 @@ function initialize_harmonics(expansion_order, type=Float64)
 end
 
 function initialize_ML(expansion_order, type=Float64)
-    return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    # return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    return zeros(type,2,4)
 end
 
 function reset_expansions!(tree)
