@@ -332,7 +332,7 @@ function horizontal_pass_multithread!(target_branches, source_branches, m2l_list
     rem > 0 && (n_per_thread += 1)
 
     # execute tasks
-    Threads.@threads for i_start in 1:n_per_thread:length(m2l_list)
+	Threads.@threads for i_start in 1:n_per_thread:length(m2l_list)
         i_stop = min(i_start+n_per_thread-1, length(m2l_list))
         for (i_target, j_source) in view(m2l_list,i_start:i_stop)
             Threads.lock(target_branches[i_target].lock) do
@@ -449,9 +449,9 @@ end
 
 function downward_pass_multithread!(branches, systems, expansion_order, levels_index, leaf_index)
     # m2m translation
-    translate_locals_multithread!(branches, expansion_order, levels_index)
+	translate_locals_multithread!(branches, expansion_order, levels_index)
     
-    # create multipole expansions
+    # local to body interaction 
     local_2_body_multithread!(branches, systems, expansion_order, leaf_index)
 end
 
