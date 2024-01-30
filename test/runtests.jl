@@ -1306,7 +1306,7 @@ end
 
 @testset "single/dual tree, single/multi branch" begin
 
-expansion_order, n_per_branch, theta = 8, 100, 0.31
+expansion_order, n_per_branch, theta = 14, 100, 0.31
 n_bodies = 5000
 shrink_recenter, ndivisions = true, 5
 seed = 123
@@ -1315,29 +1315,29 @@ fmm.direct!(validation_system)
 validation_potential = validation_system.potential[1,:]
 
 system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!(system3; n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
+fmm.fmm!(system3; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
 potential3 = system3.potential[1,:]
-@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=8e-4)
+@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-10)
 
 system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!((system4,); n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
+fmm.fmm!((system4,); expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true)
 potential4 = system4.potential[1,:]
-@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=8e-4)
+@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-10)
 
 system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!(system5, system5; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+fmm.fmm!(system5, system5; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential5 = system5.potential[1,:]
-@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=8e-4)
+@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-10)
 
 system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!((system6,), system6; n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+fmm.fmm!((system6,), system6; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential6 = system6.potential[1,:]
-@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=8e-4)
+@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-10)
 
 system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-fmm.fmm!((system7,), (system7,); n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+fmm.fmm!((system7,), (system7,); expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential7 = system7.potential[1,:]
-@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=8e-4)
+@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-10)
 
 end
 

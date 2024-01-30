@@ -419,18 +419,21 @@ function local_2_body_multithread!(branches, systems, expansion_order, leaf_inde
 
     assignments = fill(1:0,n_threads)
     i_start = 1
-    i_thread = 1
+    i_thread = 0
     n_bodies = 0
     for (i_end,i_leaf) in enumerate(leaf_index)
         n_bodies += get_n_bodies(branches[i_leaf])
         if n_bodies >= n_per_thread
+            i_thread += 1
             assignments[i_thread] = i_start:i_end
             i_start = i_end+1
-            i_thread += 1
             n_bodies = 0
         end
     end
-    i_thread <= n_threads && (assignments[i_thread] = i_start:length(leaf_index))
+    if i_start <= length(leaf_index)
+        i_thread += 1
+        assignments[i_thread] = i_start:length(leaf_index)
+    end
     resize!(assignments, i_thread)
 
     # preallocate containers
@@ -516,10 +519,10 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
     else # multithread
-        nearfield && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-            horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+            length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
             downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
