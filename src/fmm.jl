@@ -288,9 +288,10 @@ function nearfield_multithread!(target_system, target_branches, source_system, s
             n_interactions = 0
         end
     end
+    i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
     
     # execute tasks
-    Threads.@threads for (i_thread, assignment) in enumerate(assignments)
+    Threads.@threads for assignment in assignments
         for (i_target, j_source) in view(direct_list, assignment)
             target_branch = target_branches[i_target]
             Threads.lock(target_branch.lock) do
@@ -325,14 +326,14 @@ end
 # end
 
 function horizontal_pass_multithread!(target_branches, source_branches, m2l_list, expansion_order)
-    # divide chunks
+    # number of translations per thread
     n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(m2l_list),n_threads)
-    rem > 0 && (n_per_chunk += 1)
+    n_per_thread, rem = divrem(length(m2l_list),n_threads)
+    rem > 0 && (n_per_thread += 1)
 
     # execute tasks
-    Threads.@threads for i_start in 1:n_per_chunk:length(m2l_list)
-        i_stop = min(i_start+n_per_chunk-1, length(m2l_list))
+    Threads.@threads for i_start in 1:n_per_thread:length(m2l_list)
+        i_stop = min(i_start+n_per_thread-1, length(m2l_list))
         for (i_target, j_source) in view(m2l_list,i_start:i_stop)
             Threads.lock(target_branches[i_target].lock) do
                 M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
@@ -430,6 +431,7 @@ function local_2_body_multithread!(branches, systems, expansion_order, leaf_inde
         end
     end
     i_thread <= n_threads && (assignments[i_thread] = i_start:length(leaf_index))
+    resize!(assignments, i_thread)
 
     # preallocate containers
     containers = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order, n_threads)
