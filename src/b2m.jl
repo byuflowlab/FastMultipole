@@ -158,7 +158,8 @@ end
 
     # expansion coefficient for l=0, m=0
     dim = 1
-    branch.multipole_expansion[dim,1] += inm * strength_J_over_4pi
+    branch.multipole_expansion[1,dim,1] += real(inm * strength_J_over_4pi)
+    branch.multipole_expansion[2,dim,1] += imag(inm * strength_J_over_4pi)
     qnm_prev[1] = qnm
     jnm_prev[1] = jnm
     inm_prev[1] = inm
@@ -174,7 +175,8 @@ end
         jnm = (im*(xi0+xiv)*-conj(jnm_prev[2]) + im*(eta0+etav)*jnm_prev[2] - (z0+zv)*jnm_prev[1] + qnm)/(n+1)
         inm = (im*xi0*-conj(inm_prev[2]) + im*eta0*inm_prev[2] - z0*inm_prev[1] + jnm)/(n+2)
         i_compressed = 1 + (n * (n + 1)) >> 1
-        branch.multipole_expansion[1,i_compressed] += conj(inm * strength_J_over_4pi)
+        branch.multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi))
+        branch.multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi))
         qnm_m1 = qnm
         jnm_m1 = jnm
         inm_m1 = inm
@@ -184,7 +186,8 @@ end
             jnm = (im*(xi0+xiv)*jnm_prev[m] + im*(eta0+etav)*jnm_prev[m+2] - (z0+zv)*jnm_prev[m+1] + qnm)/(n+1)
             inm = (im*xi0*inm_prev[m] + im*eta0*inm_prev[m+2] - z0*inm_prev[m+1] + jnm)/(n+2)
             i_compressed += 1
-            branch.multipole_expansion[1,i_compressed] += conj(inm * strength_J_over_4pi * iam)
+            branch.multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi * iam))
+            branch.multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi * iam))
             qnm_prev[m] = qnm_m1
             jnm_prev[m] = jnm_m1
             inm_prev[m] = inm_m1
@@ -199,15 +202,15 @@ end
 end
 
 function B2M!_sourcequadpanel(system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
-    if P > 2
+    if false #P > 2
         harmonics .= zero(eltype(harmonics))
         qnm_prev = view(harmonics,1:P+2)
         jnm_prev = view(harmonics,P+3:P<<1+4)
         inm_prev = view(harmonics,P<<1+5:3*P+6)
     else
-        qnm_prev = zeros(Complex{Float64}, expansion_order+2)
-        jnm_prev = zeros(Complex{Float64}, expansion_order+2)
-        inm_prev = zeros(Complex{Float64}, expansion_order+2)
+        qnm_prev = zeros(Complex{Float64}, P+2)
+        jnm_prev = zeros(Complex{Float64}, P+2)
+        inm_prev = zeros(Complex{Float64}, P+2)
     end
     for i_body in bodies_index
         strength = system[i_body, SCALAR_STRENGTH]
@@ -222,15 +225,15 @@ function B2M!_sourcequadpanel(system, branch, bodies_index, harmonics, expansion
 end
 
 function B2M!_sourcetripanel(system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
-    if P > 2
+    if false#P > 2
         harmonics .= zero(eltype(harmonics))
         qnm_prev = view(harmonics,1:P+2)
         jnm_prev = view(harmonics,P+3:P<<1+4)
         inm_prev = view(harmonics,P<<1+5:3*P+6)
     else
-        qnm_prev = zeros(Complex{Float64}, expansion_order+2)
-        jnm_prev = zeros(Complex{Float64}, expansion_order+2)
-        inm_prev = zeros(Complex{Float64}, expansion_order+2)
+        qnm_prev = zeros(Complex{Float64}, P+2)
+        jnm_prev = zeros(Complex{Float64}, P+2)
+        inm_prev = zeros(Complex{Float64}, P+2)
     end
     for i_body in bodies_index
         strength = system[i_body, SCALAR_STRENGTH]
