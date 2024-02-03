@@ -133,84 +133,162 @@ end
 #     end
 # end
 
-@inline function _B2M!_panel(branch, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order::Val{P}) where P
+@inline function _B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order::Val{P}) where P  
     J = norm(cross(Ru,Rv))
 
     # transform into xi, eta, z
-    xi0 = (R0[1] + im*R0[2])/2
-    xiu = (Ru[1] + im*Ru[2])/2
-    xiv = (Rv[1] + im*Rv[2])/2
-    eta0 = (R0[1] - im*R0[2])/2
-    etau = (Ru[1] - im*Ru[2])/2
-    etav = (Rv[1] - im*Rv[2])/2
+    xi0_real = R0[1]/2
+    xi0_imag = R0[2]/2
+    xiu_real = Ru[1]/2
+    xiu_imag = Ru[2]/2
+    xiv_real = Rv[1]/2
+    xiv_imag = Rv[2]/2
+    eta0_real = R0[1]/2
+    eta0_imag = -R0[2]/2
+    etau_real = Ru[1]/2
+    etau_imag = -Ru[2]/2
+    etav_real = Rv[1]/2
+    etav_imag = -Rv[2]/2
     z0 = R0[3]
     zu = Ru[3]
     zv = Rv[3]
 
     # initialize recurrent values
-    qnm = 1.0
-    qnm_m1 = 0.0
-    jnm = 1.0
-    jnm_m1 = 0.0
-    inm = 0.5
-    inm_m1 = 0.0
+    qnm_real = 1.0
+    qnm_imag = 0.0
+    qnm_m1_real = 0.0
+    qnm_m1_imag = 0.0
+    jnm_real = 1.0
+    jnm_imag = 0.0
+    jnm_m1_real = 0.0
+    jnm_m1_imag = 0.0
+    inm_real = 0.5
+    inm_imag = 0.0
+    inm_m1_real = 0.0
+    inm_m1_imag = 0.0
     strength_J_over_4pi = J/4/pi * strength
 
     # expansion coefficient for l=0, m=0
     dim = 1
-    branch.multipole_expansion[1,dim,1] += real(inm * strength_J_over_4pi)
-    branch.multipole_expansion[2,dim,1] += imag(inm * strength_J_over_4pi)
-    qnm_prev[1] = qnm
-    jnm_prev[1] = jnm
-    inm_prev[1] = inm
+    # multipole_expansion[1,dim,1] += real(inm * strength_J_over_4pi)
+    # multipole_expansion[2,dim,1] += imag(inm * strength_J_over_4pi) # always zero
+    multipole_expansion[1,dim,1] += inm_real * strength_J_over_4pi
+    # multipole_expansion[2,dim,1] += inm_imag * strength_J_over_4pi # always zero
+    qnm_prev[1,1] = qnm_real
+    qnm_prev[2,1] = qnm_imag
+    jnm_prev[1,1] = jnm_real
+    jnm_prev[2,1] = jnm_imag
+    inm_prev[1,1] = inm_real
+    inm_prev[2,1] = inm_imag
 
     # i^(-1)
-    one_over_i = -im
+    one_over_i_real = 0
+    one_over_i_imag = -1
 
     # recurse
     for n in 1:P
         # m=0
-        iam = Complex(1)
-        qnm = (im*(xi0+xiu)*-conj(qnm_prev[2]) + im*(eta0+etau)*qnm_prev[2] - (z0+zu)*qnm_prev[1])/n
-        jnm = (im*(xi0+xiv)*-conj(jnm_prev[2]) + im*(eta0+etav)*jnm_prev[2] - (z0+zv)*jnm_prev[1] + qnm)/(n+1)
-        inm = (im*xi0*-conj(inm_prev[2]) + im*eta0*inm_prev[2] - z0*inm_prev[1] + jnm)/(n+2)
+        iam_real = 1
+        iam_imag = 0
+
+        # qnm = (im*(xi0+xiu)*-conj(qnm_prev[2]) + im*(eta0+etau)*qnm_prev[2] - (z0+zu)*qnm_prev[1])/n
+        x1_real, x1_imag = complex_multiply(xi0_real+xiu_real, xi0_imag+xiu_imag, -qnm_prev[1,2], qnm_prev[2,2], 0, 1)
+        x2_real, x2_imag = complex_multiply(eta0_real+etau_real, eta0_imag+etau_imag, qnm_prev[1,2], qnm_prev[2,2], 0, 1)
+        x3_real = (z0+zu)*qnm_prev[1,1]
+        x3_imag = (z0+zu)*qnm_prev[2,1]
+        qnm_real = (x1_real + x2_real - x3_real) / n
+        qnm_imag = (x1_imag + x2_imag - x3_imag) / n
+        
+        # jnm = (im*(xi0+xiv)*-conj(jnm_prev[2]) + im*(eta0+etav)*jnm_prev[2] - (z0+zv)*jnm_prev[1] + qnm)/(n+1)
+        x1_real, x1_imag = complex_multiply(xi0_real+xiv_real, xi0_imag+xiv_imag, -jnm_prev[1,2], jnm_prev[2,2], 0, 1)
+        x2_real, x2_imag = complex_multiply(eta0_real+etav_real, eta0_imag+etav_imag, jnm_prev[1,2], jnm_prev[2,2], 0, 1)
+        x3_real = (z0+zv) * jnm_prev[1,1]
+        x3_imag = (z0+zv) * jnm_prev[2,1]
+        jnm_real = (x1_real + x2_real - x3_real + qnm_real) / (n+1)
+        jnm_imag = (x1_imag + x2_imag - x3_imag + qnm_imag) / (n+1)
+        
+        # inm = (im*xi0*-conj(inm_prev[2]) + im*eta0*inm_prev[2] - z0*inm_prev[1] + jnm)/(n+2)
+        x1_real, x1_imag = complex_multiply(xi0_real, xi0_imag, -inm_prev[1,2], inm_prev[2,2], 0, 1)
+        x2_real, x2_imag = complex_multiply(eta0_real, eta0_imag, inm_prev[1,2], inm_prev[2,2], 0, 1)
+        x3_real, x3_imag = z0 * inm_prev[1,1], z0 * inm_prev[2,1]
+        inm_real = (x1_real + x2_real - x3_real + jnm_real) / (n+2)
+        inm_imag = (x1_imag + x2_imag - x3_imag + jnm_imag) / (n+2)
+
         i_compressed = 1 + (n * (n + 1)) >> 1
-        branch.multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi))
-        branch.multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi))
-        qnm_m1 = qnm
-        jnm_m1 = jnm
-        inm_m1 = inm
+        # multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi))
+        # multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi))
+        multipole_expansion[1,1,i_compressed] += inm_real * strength_J_over_4pi
+        multipole_expansion[2,1,i_compressed] += -inm_imag * strength_J_over_4pi
+
+        qnm_m1_real = qnm_real
+        qnm_m1_imag = qnm_imag
+        jnm_m1_real = jnm_real
+        jnm_m1_imag = jnm_imag
+        inm_m1_real = inm_real
+        inm_m1_imag = inm_imag
+
         for m in 1:n
-            iam *= one_over_i
-            qnm = (im*(xi0+xiu)*qnm_prev[m] + im*(eta0+etau)*qnm_prev[m+2] - (z0+zu)*qnm_prev[m+1])/n
-            jnm = (im*(xi0+xiv)*jnm_prev[m] + im*(eta0+etav)*jnm_prev[m+2] - (z0+zv)*jnm_prev[m+1] + qnm)/(n+1)
-            inm = (im*xi0*inm_prev[m] + im*eta0*inm_prev[m+2] - z0*inm_prev[m+1] + jnm)/(n+2)
+            iam_real, iam_imag = complex_multiply(iam_real,iam_imag,one_over_i_real,one_over_i_imag)
+            
+            # qnm = (im*(xi0+xiu)*qnm_prev[m] + im*(eta0+etau)*qnm_prev[m+2] - (z0+zu)*qnm_prev[m+1])/n
+            x1_real, x1_imag = complex_multiply(xi0_real+xiu_real, xi0_imag+xiu_imag, qnm_prev[1,m], qnm_prev[2,m], 0, 1)
+            x2_real, x2_imag = complex_multiply(eta0_real+etau_real, eta0_imag+etau_imag, qnm_prev[1,m+2], qnm_prev[2,m+2], 0, 1)
+            x3_real, x3_imag = (z0+zu)*qnm_prev[1,m+1], (z0+zu)*qnm_prev[2,m+1]
+            qnm_real = (x1_real + x2_real - x3_real) / n
+            qnm_imag = (x1_imag + x2_imag - x3_imag) / n
+            
+            # jnm = (im*(xi0+xiv)*jnm_prev[m] + im*(eta0+etav)*jnm_prev[m+2] - (z0+zv)*jnm_prev[m+1] + qnm)/(n+1)
+            x1_real, x1_imag = complex_multiply(xi0_real+xiv_real, xi0_imag+xiv_imag, jnm_prev[1,m], jnm_prev[2,m], 0, 1)
+            x2_real, x2_imag = complex_multiply(eta0_real+etav_real, eta0_imag+etav_imag, jnm_prev[1,m+2], jnm_prev[2,m+2], 0, 1)
+            x3_real, x3_imag = (z0+zv)*jnm_prev[1,m+1], (z0+zv)*jnm_prev[2,m+1]
+            jnm_real = (x1_real + x2_real - x3_real + qnm_real) / (n+1)
+            jnm_imag = (x1_imag + x2_imag - x3_imag + qnm_imag) / (n+1)
+            
+            # inm = (im*xi0*inm_prev[m] + im*eta0*inm_prev[m+2] - z0*inm_prev[m+1] + jnm)/(n+2)
+            x1_real, x1_imag = complex_multiply(xi0_real, xi0_imag, inm_prev[1,m], inm_prev[2,m], 0, 1)
+            x2_real, x2_imag = complex_multiply(eta0_real, eta0_imag, inm_prev[1,m+2], inm_prev[2,m+2], 0, 1)
+            x3_real, x3_imag = z0*inm_prev[1,m+1], z0*inm_prev[2,m+1]
+            inm_real = (x1_real + x2_real - x3_real + jnm_real) / (n+2)
+            inm_imag = (x1_imag + x2_imag - x3_imag + jnm_imag) / (n+2)
+
             i_compressed += 1
-            branch.multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi * iam))
-            branch.multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi * iam))
-            qnm_prev[m] = qnm_m1
-            jnm_prev[m] = jnm_m1
-            inm_prev[m] = inm_m1
-            qnm_m1 = qnm
-            jnm_m1 = jnm
-            inm_m1 = inm
+            # multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi * iam))
+            multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(inm_real, inm_imag, iam_real, iam_imag)
+            # multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi * iam))
+            multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(inm_real, inm_imag, iam_real, iam_imag)
+            
+            qnm_prev[1,m] = qnm_m1_real
+            qnm_prev[2,m] = qnm_m1_imag
+            jnm_prev[1,m] = jnm_m1_real
+            jnm_prev[2,m] = jnm_m1_imag
+            inm_prev[1,m] = inm_m1_real
+            inm_prev[2,m] = inm_m1_imag
+            qnm_m1_real = qnm_real
+            qnm_m1_imag = qnm_imag
+            jnm_m1_real = jnm_real
+            jnm_m1_imag = jnm_imag
+            inm_m1_real = inm_real
+            inm_m1_imag = inm_imag
         end
-        qnm_prev[n+1] = qnm
-        jnm_prev[n+1] = jnm
-        inm_prev[n+1] = inm
+        qnm_prev[1,n+1] = qnm_real
+        qnm_prev[2,n+1] = qnm_imag
+        jnm_prev[1,n+1] = jnm_real
+        jnm_prev[2,n+1] = jnm_imag
+        inm_prev[1,n+1] = inm_real
+        inm_prev[2,n+1] = inm_imag
     end
 end
 
-function B2M!_sourcequadpanel(system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
-    if false #P > 2
-        harmonics .= zero(eltype(harmonics))
-        qnm_prev = view(harmonics,1:P+2)
-        jnm_prev = view(harmonics,P+3:P<<1+4)
-        inm_prev = view(harmonics,P<<1+5:3*P+6)
+function B2M!_sourcequadpanel(system, branch, bodies_index, harmonics::AbstractArray{TF}, expansion_order::Val{P}) where {TF,P}
+    if P > 2
+        harmonics .= zero(TF)
+        qnm_prev = view(harmonics,1:2,1:P+2)
+        jnm_prev = view(harmonics,1:2,P+3:P<<1+4)
+        inm_prev = view(harmonics,1:2,P<<1+5:3*P+6)
     else
-        qnm_prev = zeros(Complex{Float64}, P+2)
-        jnm_prev = zeros(Complex{Float64}, P+2)
-        inm_prev = zeros(Complex{Float64}, P+2)
+        qnm_prev = zeros(TF, 2, P+2)
+        jnm_prev = zeros(TF, 2, P+2)
+        inm_prev = zeros(TF, 2, P+2)
     end
     for i_body in bodies_index
         strength = system[i_body, SCALAR_STRENGTH]
@@ -219,21 +297,21 @@ function B2M!_sourcequadpanel(system, branch, bodies_index, harmonics, expansion
         for i_side in 2:3
             Ru = system[i_body,VERTEX,i_side] - R0_global
             Rv = system[i_body,VERTEX,i_side + 1] - R0_global
-            _B2M!_panel(branch, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order)
+            _B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order)
         end
     end
 end
 
-function B2M!_sourcetripanel(system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
-    if false#P > 2
-        harmonics .= zero(eltype(harmonics))
-        qnm_prev = view(harmonics,1:P+2)
-        jnm_prev = view(harmonics,P+3:P<<1+4)
-        inm_prev = view(harmonics,P<<1+5:3*P+6)
+function B2M!_sourcetripanel(system, branch, bodies_index, harmonics::AbstractArray{TF}, expansion_order::Val{P}) where {TF,P}
+    if P > 2
+        harmonics .= zero(TF)
+        qnm_prev = view(harmonics,1:2,1:P+2)
+        jnm_prev = view(harmonics,1:2,P+3:P<<1+4)
+        inm_prev = view(harmonics,1:2,P<<1+5:3*P+6)
     else
-        qnm_prev = zeros(Complex{Float64}, P+2)
-        jnm_prev = zeros(Complex{Float64}, P+2)
-        inm_prev = zeros(Complex{Float64}, P+2)
+        qnm_prev = zeros(TF, 2, P+2)
+        jnm_prev = zeros(TF, 2, P+2)
+        inm_prev = zeros(TF, 2, P+2)
     end
     for i_body in bodies_index
         strength = system[i_body, SCALAR_STRENGTH]
@@ -241,6 +319,6 @@ function B2M!_sourcetripanel(system, branch, bodies_index, harmonics, expansion_
         R0 = R0_global - branch.center
         Ru = system[i_body,VERTEX,2] - R0_global
         Rv = system[i_body,VERTEX,3] - R0_global
-        _B2M!_panel(branch, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order)
+        _B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order)
     end
 end

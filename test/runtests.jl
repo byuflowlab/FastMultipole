@@ -27,6 +27,33 @@ fmm.M2L!(target_branch, source_branch, harmonics, L, expansion_order::Int) = fmm
 fmm.upward_pass_singlethread!(branches, systems, expansion_order::Int) = fmm.upward_pass_singlethread!(branches, systems, Val(expansion_order))
 fmm.M2L!(target_branch, source_branch, expansion_order::Int) = fmm.M2L!(target_branch, source_branch, Val(expansion_order))
 
+@testset "complex" begin
+    z1 = rand(Complex{Float64})
+    z2 = rand(Complex{Float64})
+    z3 = rand(Complex{Float64})
+    
+    # addition
+    @test real(z1+z2) ≈ fmm.complex_add(real(z1), imag(z1), real(z2), imag(z2))[1]
+    @test imag(z1+z2) ≈ fmm.complex_add(real(z1), imag(z1), real(z2), imag(z2))[2]
+    
+    # subtraction
+    @test real(z1-z2) ≈ fmm.complex_subtract(real(z1), imag(z1), real(z2), imag(z2))[1]
+    @test imag(z1-z2) ≈ fmm.complex_subtract(real(z1), imag(z1), real(z2), imag(z2))[2]
+    
+    # multiplication
+    @test real(z1*z2) ≈ fmm.complex_multiply(real(z1), imag(z1), real(z2), imag(z2))[1]
+    @test imag(z1*z2) ≈ fmm.complex_multiply(real(z1), imag(z1), real(z2), imag(z2))[2]
+    
+    @test real(z1*z2*z3) ≈ fmm.complex_multiply(real(z1), imag(z1), real(z2), imag(z2), real(z3), imag(z3))[1]
+    @test imag(z1*z2*z3) ≈ fmm.complex_multiply(real(z1), imag(z1), real(z2), imag(z2), real(z3), imag(z3))[2]
+    
+    # division
+    @test real(z1/z2) ≈ fmm.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[1]
+    @test imag(z1/z2) ≈ fmm.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[2]
+    @test real(z1/z2) ≈ fmm.complex_divide_real(real(z1), imag(z1), real(z2), imag(z2))
+    @test imag(z1/z2) ≈ fmm.complex_divide_imag(real(z1), imag(z1), real(z2), imag(z2))
+end
+
 @testset "direct" begin
 
     function V(xi, xj, mj; G=1)
@@ -1378,127 +1405,22 @@ potential12 = system12.system.potential[1,:]
 
 end
 
-# @testset "file read/write" begin
+@testset "b2m- panels" begin
 
-#     params = (fmm.ALLOC_M2M_DEFAULT, fmm.TAU_B2M_DEFAULT, fmm.TAU_M2M_L2L_DEFAULT, fmm.ALLOC_M2L_DEFAULT, fmm.TAU_M2L_DEFAULT, fmm.TAU_L2L_DEFAULT, fmm.ALLOC_L2B_DEFAULT, fmm.TAU_L2B_DEFAULT)
-#     errors = rand(8)
-#     nearfield_params = fmm.C_NEARFIELD_DEFAULT
-#     nearfield_error = rand()
+strength = 0.1428909901797533
+R0_global = [-0.11530793537122011, 0.1997192025788218, -0.9730448705798238]
+R0 = [-0.48862125790260025, -0.1735941199525583, -1.8441092898197107]
+Ru = [0.04707023255275322, -0.10579806212499904, -0.020193487162119217]
+Rv = [-0.039004202054645, -0.02833821156361363, 0.0]
+qnm_prev = [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
+jnm_prev = [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
+inm_prev = [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
+multipole_expansion = zeros(2,4,120)
+multipole_expansion_test = [3.15347369905358e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; 5.836576687179473e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -7.661878069585717e-6 0.0 0.0 0.0; 3.442114476513879e-6 0.0 0.0 0.0;;; 5.176954094092041e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -1.4179736287285782e-5 0.0 0.0 0.0; 6.372425519286581e-6 0.0 0.0 0.0;;; 7.42180196746523e-7 0.0 0.0 0.0; -8.340091929224401e-7 0.0 0.0 0.0;;; 2.9171240607705508e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -1.2848310937891748e-5 0.0 0.0 0.0; 5.7763762881869375e-6 0.0 0.0 0.0;;; 1.3731914469928547e-6 0.0 0.0 0.0; -1.5438750448677817e-6 0.0 0.0 0.0;;; -2.981931723472997e-8 0.0 0.0 0.0; 9.412368214502325e-8 0.0 0.0 0.0;;; 1.1616879034380539e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -7.589495677738776e-6 0.0 0.0 0.0; 3.4136975727862394e-6 0.0 0.0 0.0;;; 1.2526909809559565e-6 0.0 0.0 0.0; -1.409195559129566e-6 0.0 0.0 0.0;;; -5.512043533657875e-8 0.0 0.0 0.0; 1.742126360703301e-7 0.0 0.0 0.0;;; -7.340115650494341e-10 0.0 0.0 0.0; -6.495176725450135e-9 0.0 0.0 0.0;;; 3.411340562667307e-6 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -3.2811221779399064e-6 0.0 0.0 0.0; 1.4766336464937334e-6 0.0 0.0 0.0;;; 7.508033462390918e-7 0.0 0.0 0.0; -8.45140417586639e-7 0.0 0.0 0.0;;; -5.0408680959505405e-8 0.0 0.0 0.0; 1.5954795989679934e-7 0.0 0.0 0.0;;; -1.3643415621015169e-9 0.0 0.0 0.0; -1.2019285292447762e-8 0.0 0.0 0.0;;; 1.7490047653047897e-10 0.0 0.0 0.0; 2.9802226104568586e-10 0.0 0.0 0.0;;; 7.320829843849779e-7 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -1.1040063516878706e-6 0.0 0.0 0.0; 4.97169838052928e-7 0.0 0.0 0.0;;; 3.3233488404786064e-7 0.0 0.0 0.0; -3.7435741595385594e-7 0.0 0.0 0.0;;; -3.0399512277559916e-8 0.0 0.0 0.0; 9.636699936286549e-8 0.0 0.0 0.0;;; -1.257805313390412e-9 0.0 0.0 0.0; -1.1028077206194902e-8 0.0 0.0 0.0;;; 3.239977186634296e-10 0.0 0.0 0.0; 5.512947043790685e-10 0.0 0.0 0.0;;; -1.2339557354154617e-11 0.0 0.0 0.0; -8.868558661043951e-12 0.0 0.0 0.0;;; 1.0121462827844036e-7 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -2.9977386626355873e-7 0.0 0.0 0.0; 1.3510437997734334e-7 0.0 0.0 0.0;;; 1.1575725282596027e-7 0.0 0.0 0.0; -1.3049796958370626e-7 0.0 0.0 0.0;;; -1.3594389585018197e-8 0.0 0.0 0.0; 4.3167709924881135e-8 0.0 0.0 0.0;;; -7.667019220226146e-10 0.0 0.0 0.0; -6.6880743655575325e-9 0.0 0.0 0.0;;; 2.9803138008504807e-10 0.0 0.0 0.0; 5.0634784455077e-10 0.0 0.0 0.0;;; -2.284557373740596e-11 0.0 0.0 0.0; -1.6393720070527073e-11 0.0 0.0 0.0;;; 5.595126561276888e-13 0.0 0.0 0.0; 1.1787154792703014e-13 0.0 0.0 0.0;;; 1.4751810727352213e-9 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -6.708468877007811e-8 0.0 0.0 0.0; 3.026408896811465e-8 0.0 0.0 0.0;;; 3.300201956443528e-8 0.0 0.0 0.0; -3.723787837566326e-8 0.0 0.0 0.0;;; -4.805896384168386e-9 0.0 0.0 0.0; 1.5289010248988546e-8 0.0 0.0 0.0;;; -3.4754378686830237e-10 0.0 0.0 0.0; -3.0152402096102556e-9 0.0 0.0 0.0;;; 1.81479446950944e-10 0.0 0.0 0.0; 3.07835507484142e-10 0.0 0.0 0.0;;; -2.1022722355702963e-11 0.0 0.0 0.0; -1.506079745721181e-11 0.0 0.0 0.0;;; 1.035467726604547e-12 0.0 0.0 0.0; 2.1721150343128253e-13 0.0 0.0 0.0;;; -1.8395652399672212e-14 0.0 0.0 0.0; 3.852107985386056e-15 0.0 0.0 0.0;;; -4.0609549751469545e-9 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -1.2482117506512014e-8 0.0 0.0 0.0; 5.638433267215509e-9 0.0 0.0 0.0;;; 7.905670401846284e-9 0.0 0.0 0.0; -8.929464291174913e-9 0.0 0.0 0.0;;; -1.3981037159203388e-9 0.0 0.0 0.0; 4.456832611637532e-9 0.0 0.0 0.0;;; -1.2492898592786975e-10 0.0 0.0 0.0; -1.0775898987149912e-9 0.0 0.0 0.0;;; 8.228418174866392e-11 0.0 0.0 0.0; 1.3933781542187157e-10 0.0 0.0 0.0;;; -1.2818959531322538e-11 0.0 0.0 0.0; -9.167593119553919e-12 0.0 0.0 0.0;;; 9.531511322909608e-13 0.0 0.0 0.0; 1.9904649104822634e-13 0.0 0.0 0.0;;; -3.402893923417914e-14 0.0 0.0 0.0; 7.160468249308245e-15 0.0 0.0 0.0;;; 4.465711619580417e-16 0.0 0.0 0.0; -3.1804698481402137e-16 0.0 0.0 0.0;;; -1.4824011156256148e-9 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -1.919833813101314e-9 0.0 0.0 0.0; 8.688650303478487e-10 0.0 0.0 0.0;;; 1.6200773449979007e-9 0.0 0.0 0.0; -1.8320295085795508e-9 0.0 0.0 0.0;;; -3.4396303878189783e-10 0.0 0.0 0.0; 1.0989242195318225e-9 0.0 0.0 0.0;;; -3.708192715671552e-11 0.0 0.0 0.0; -3.1787656903648365e-10 0.0 0.0 0.0;;; 2.962574958499155e-11 0.0 0.0 0.0; 5.007695694535446e-11 0.0 0.0 0.0;;; -5.8262901006951636e-12 0.0 0.0 0.0; -4.159070625703628e-12 0.0 0.0 0.0;;; 5.818200312063137e-13 0.0 0.0 0.0; 1.2092681969926203e-13 0.0 0.0 0.0;;; -3.1327310064348024e-14 0.0 0.0 0.0; 6.625396053471999e-15 0.0 0.0 0.0;;; 8.255548969437712e-16 0.0 0.0 0.0; -5.893192421106608e-16 0.0 0.0 0.0;;; -7.403943579266824e-18 0.0 0.0 0.0; 1.2317599122655843e-17 0.0 0.0 0.0;;; -3.515934968301032e-10 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -2.3594925434518903e-10 0.0 0.0 0.0; 1.07127957503847e-10 0.0 0.0 0.0;;; 2.8743136385190034e-10 0.0 0.0 0.0; -3.2548499126874616e-10 0.0 0.0 0.0;;; -7.297407969269781e-11 0.0 0.0 0.0; 2.3371958216102407e-10 0.0 0.0 0.0;;; -9.344496321234191e-12 0.0 0.0 0.0; -7.957394809536844e-11 0.0 0.0 0.0;;; 8.820872426341902e-12 0.0 0.0 0.0; 1.4881530759394605e-11 0.0 0.0 0.0;;; -2.10510183229474e-12 0.0 0.0 0.0; -1.4998051808823597e-12 0.0 0.0 0.0;;; 2.6492865541168975e-13 0.0 0.0 0.0; 5.4789022475871284e-14 0.0 0.0 0.0;;; -1.9135933669548904e-14 0.0 0.0 0.0; 4.0683844309145415e-15 0.0 0.0 0.0;;; 7.598586435383344e-16 0.0 0.0 0.0; -5.43729257580773e-16 0.0 0.0 0.0;;; -1.366948657228694e-17 0.0 0.0 0.0; 2.2803585253454954e-17 0.0 0.0 0.0;;; 4.513564991747822e-20 0.0 0.0 0.0; -3.389937360059917e-19 0.0 0.0 0.0;;; -6.573572046881621e-11 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -2.043863801299287e-11 0.0 0.0 0.0; 9.352606219154242e-12 0.0 0.0 0.0;;; 4.445562910300353e-11 0.0 0.0 0.0; -5.042557742977247e-11 0.0 0.0 0.0;;; -1.3543695917757064e-11 0.0 0.0 0.0; 4.3496602156693426e-11 0.0 0.0 0.0;;; -2.0397436768532417e-12 0.0 0.0 0.0; -1.7246583947075334e-11 0.0 0.0 0.0;;; 2.2333444964799568e-12 0.0 0.0 0.0; 3.76016740753104e-12 0.0 0.0 0.0;;; -6.297270638036358e-13 0.0 0.0 0.0; -4.477390964671143e-13 0.0 0.0 0.0;;; 9.597644376139124e-14 0.0 0.0 0.0; 1.974437557076672e-14 0.0 0.0 0.0;;; -8.724659175859616e-15 0.0 0.0 0.0; 1.8650669605364297e-15 0.0 0.0 0.0;;; 4.642657322793347e-16 0.0 0.0 0.0; -3.3304590676846863e-16 0.0 0.0 0.0;;; -1.2569421365745768e-17 0.0 0.0 0.0; 2.1028191987394226e-17 0.0 0.0 0.0;;; 8.266548146039412e-20 0.0 0.0 0.0; -6.271851481459042e-19 0.0 0.0 0.0;;; 2.019255448918255e-21 0.0 0.0 0.0; 7.17077959778311e-21 0.0 0.0 0.0;;; -1.0278419931152499e-11 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; -4.203242166211679e-13 0.0 0.0 0.0; 2.1066117376944255e-13 0.0 0.0 0.0;;; 6.002693212564717e-12 0.0 0.0 0.0; -6.823256754648399e-12 0.0 0.0 0.0;;; -2.222360876797338e-12 0.0 0.0 0.0; 7.159343863048163e-12 0.0 0.0 0.0;;; -3.915530871566449e-13 0.0 0.0 0.0; -3.2854874061920314e-12 0.0 0.0 0.0;;; 4.906975535591016e-13 0.0 0.0 0.0; 8.243739866537346e-13 0.0 0.0 0.0;;; -1.603914412140437e-13 0.0 0.0 0.0; -1.1379290070808765e-13 0.0 0.0 0.0;;; 2.881187837425885e-14 0.0 0.0 0.0; 5.8944206681181154e-15 0.0 0.0 0.0;;; -3.166737553935407e-15 0.0 0.0 0.0; 6.808073260383793e-16 0.0 0.0 0.0;;; 2.11823342218566e-16 0.0 0.0 0.0; -1.5235001948604837e-16 0.0 0.0 0.0;;; -7.674869280589808e-18 0.0 0.0 0.0; 1.2877827358552214e-17 0.0 0.0 0.0;;; 7.540003064291612e-20 0.0 0.0 0.0; -5.781607461451349e-19 0.0 0.0 0.0;;; 3.753862216640856e-21 0.0 0.0 0.0; 1.3258129373615239e-20 0.0 0.0 0.0;;; -9.398251768197244e-23 0.0 0.0 0.0; -1.164083006095856e-22 0.0 0.0 0.0;;; -1.3762401781072233e-12 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; 2.8087332169094867e-13 0.0 0.0 0.0; -1.2390042397442847e-13 0.0 0.0 0.0;;; 7.032457492620986e-13 0.0 0.0 0.0; -8.016843386759864e-13 0.0 0.0 0.0;;; -3.248637046058368e-13 0.0 0.0 0.0; 1.0502423099069615e-12 0.0 0.0 0.0;;; -6.687546341485134e-14 0.0 0.0 0.0; -5.565382595152538e-13 0.0 0.0 0.0;;; 9.500740818317414e-14 0.0 0.0 0.0; 1.5924469307571103e-13 0.0 0.0 0.0;;; -3.5499221407458265e-14 0.0 0.0 0.0; -2.5128180166288814e-14 0.0 0.0 0.0;;; 7.370959401207499e-15 0.0 0.0 0.0; 1.4991782388637415e-15 0.0 0.0 0.0;;; -9.53078284611239e-16 0.0 0.0 0.0; 2.0611156438331795e-16 0.0 0.0 0.0;;; 7.697575427474568e-17 0.0 0.0 0.0; -5.551354761137937e-17 0.0 0.0 0.0;;; -3.500656875141304e-18 0.0 0.0 0.0; 5.891922242973979e-18 0.0 0.0 0.0;;; 4.5664032899842155e-20 0.0 0.0 0.0; -3.540569052057126e-19 0.0 0.0 0.0;;; 3.4784857373427885e-21 0.0 0.0 0.0; 1.2216677736179948e-20 0.0 0.0 0.0;;; -1.7414905033630244e-22 0.0 0.0 0.0; -2.1502849742163935e-22 0.0 0.0 0.0;;; 2.460117981125405e-24 0.0 0.0 0.0; 1.3094830233058996e-24 0.0 0.0 0.0]
+expansion_order = Val{14}()
+fmm._B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, expansion_order)
+for i in eachindex(multipole_expansion)
+    @test isapprox(multipole_expansion[i], multipole_expansion_test[i]; atol=1e-12)
+end
 
-#     fmm.write_cost_parameters("testing.csv", params, errors, nearfield_params, nearfield_error)
-#     params_check, errors_check, nearfield_params_check, nearfield_error_check = fmm.read_cost_parameters("testing.csv")
-
-#     for (p,p_check) in zip((params_check...,errors_check,nearfield_params_check,nearfield_error_check),(params...,errors,nearfield_params,nearfield_error))
-#         @test p == p_check
-#     end
-
-#     rm("testing.csv")
-# end
-
-# @testset "local P2P" begin
-
-# bodies = [
-#     0.205395  10.261945  0.870219  0.0933026  0.58933
-#     0.884498  11.125261  0.65333   0.293028   0.806995
-#     0.82999   12.39037   0.396068  0.563952   0.227808
-#     0.412938  3.578483  0.818427  0.688908   0.173329
-# ] # one way out there to trigger multipole expansion
-
-# struct TestBodies
-#     bodies # 16 x N array containing the control point, corner points, and panel strength
-#     index # N vector of integers
-#     potential
-#     direct!
-#     B2M!
-# end
-
-# i_POSITION = 1:3
-# i_STRENGTH = 4
-
-# function update_potential_direct!(target_potential, target_positions, source_bodies)
-#     n_targets = size(target_potential)[2]
-#     n_sources = size(source_bodies)[2]
-#     for i_target in 1:n_targets
-#         target_jacobian = reshape(view(target_potential,i_POTENTIAL_JACOBIAN,i_target),3,4)
-#         target_hessian = reshape(view(target_potential,i_POTENTIAL_HESSIAN,i_target),3,3,4)
-#         x_target = SVector{3}(target_positions[:,i_target])
-#         for j_source in 1:n_sources
-#             # potential, jacobian
-#             x_source = SVector{3}(source_bodies[i_POSITION,j_source])
-#             strength = source_bodies[i_STRENGTH,j_source]
-#             dx = x_target - x_source
-#             r = sqrt(dx' * dx)
-#             if r > 1e-15
-#                 phi = strength/r
-#                 r3 = r^3
-#                 dphidx = SVector{3}(-strength*dx[1]/r3, -strength*dx[2]/r3, -strength*dx[3]/r3)
-
-#                 target_potential[i_POTENTIAL_SCALAR,i_target] += phi
-#                 target_jacobian[:,1] .+= dphidx
-
-#                 # calculate hessian
-#                 x, y, z = dx
-#                 denom = r3 * r^2
-#                 target_hessian[:,1,i_POTENTIAL_SCALAR] .+= (2*x^2 - y^2 - z^2) / denom * strength, 3*x*y / denom * strength, 3*x*z / denom * strength
-#                 target_hessian[:,2,i_POTENTIAL_SCALAR] .+= 3*x*y / denom * strength, (2*y^2 - x^2 - z^2) / denom * strength, 3*y*z / denom * strength
-#                 target_hessian[:,3,i_POTENTIAL_SCALAR] .+= 3*x*z / denom * strength, 3*y*z / denom * strength, (2*z^2 - x^2 - y^2) / denom * strength
-#             end
-#         end
-#     end
-# end
-
-# function B2M_test!(branch, bodies, harmonics, expansion_order)
-#     for i_body in 1:size(bodies)[2]
-#         dx = bodies[i_POSITION,i_body] - branch.center
-#         q = bodies[i_STRENGTH,i_body]
-#         fmm.cartesian_2_spherical!(dx)
-#         fmm.regular_harmonic!(harmonics, dx[1], dx[2], -dx[3], expansion_order) # Ylm^* -> -dx[3]
-#         # update values
-#         for l in 0:expansion_order
-#             for m in 0:l
-#                 i_solid_harmonic = l^2 + l + m + 1
-#                 i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-#                 dim = 1 # just the scalar potential
-#                 branch.multipole_expansion[dim][i_compressed] += harmonics[i_solid_harmonic] * q
-#             end
-#         end
-#     end
-# end
-
-
-# testbodies = TestBodies(bodies, zeros(Int32,size(bodies)[2]), zeros(eltype(bodies),fmm.52,size(bodies)[2]),
-#     update_potential_direct!, B2M_test!
-# )
-
-# options = fmm.Options(8, 2, 0.5)
-# tree = fmm.Tree((testbodies,), options)
-
-# # note that `tree.branches[3].n_bodies = 2` 
-# # this is the branch we will test
-# # because tree.branches[3].first_body = 2
-# # bodies 2 and 3 are the ones in this branch
-
-# # compute the potential induced by all bodies outside the current cell
-# population = [
-#     [1], [2,3], [2,3], [4], [5]
-# ] # which elements are in the same leaf level cell
-# for i_target in 1:size(testbodies.bodies)[2]
-#     for i_source in 1:size(testbodies.bodies)[2]
-#         if !(i_source in population[i_target])
-#             testbodies.direct!(reshape(view(testbodies.potential,:,i_target),size(testbodies.potential)[1],1), reshape(testbodies.bodies[i_POSITION,i_target],3,1), reshape(testbodies.bodies[:,i_source], size(testbodies.bodies)[1], 1))
-#         end
-#     end
-# end
-# direct_potential = deepcopy(testbodies.potential)
-
-# # reset potential
-# testbodies.potential .= 0.0
-
-# # compute using FMM
-# fmm.fmm!(tree, (testbodies,), options; local_P2P=false)
-
-# for i in 1:length(testbodies.potential)
-#     @test isapprox(testbodies.potential[i], direct_potential[i], atol=1e-5)
-# end
-
-# end
+end
