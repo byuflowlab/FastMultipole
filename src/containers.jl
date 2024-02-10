@@ -27,6 +27,9 @@ const VELOCITY_GRADIENT = VelocityGradient()
 struct Vertex <: Indexable end
 const VERTEX = Vertex()
 
+struct Normal <: Indexable end
+const NORMAL = Normal()
+
 struct ScalarStrength <: Indexable end
 const SCALAR_STRENGTH = ScalarStrength()
 
@@ -39,16 +42,12 @@ const VECTOR_STRENGTH = VectorStrength()
 abstract type AbstractKernel end
 
 struct VortexPoint <: AbstractKernel end
-
 struct VortexLine <: AbstractKernel end # not yet derived
-
 struct VortexPanel <: AbstractKernel end # not yet derived
-
 struct SourcePoint <: AbstractKernel end
-
-struct SourcePanel <: AbstractKernel end # not yet implemented
-
-struct DipolePanel <: AbstractKernel end # not yet implemented
+struct UniformSourcePanel <: AbstractKernel end
+struct UniformNormalDipolePanel <: AbstractKernel end
+struct UniformSourceNormalDipolePanel <: AbstractKernel end
 
 
 #####
@@ -189,21 +188,4 @@ end
 
 function SortWrapper(system)
     return SortWrapper(system,collect(1:length(system)))
-end
-
-#####
-##### dummy system used in estimating cost
-#####
-struct Dummy{TF}
-    position::SVector{3,TF}
-    radius::TF
-    strength::TF
-end
-
-struct DummySystem{TF}
-    bodies::Vector{Dummy{TF}}
-    potential::Vector{TF}
-    vector_potential::Vector{SVector{3,TF}}
-    velocity::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
 end

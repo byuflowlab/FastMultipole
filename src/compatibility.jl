@@ -81,6 +81,10 @@ function Base.getindex(sys, i, ::VectorStrength)
     return zero(SVector{3,Float64})
 end
 
+function Base.getindex(sys, i, ::Normal)
+    @error "getindex! not overloaded for `FLOWFMM.Normal` for type $(typeof(sys))"
+end
+
 Base.getindex(sys, i, ::Vertex, i_vertex) = @error "`getindex!` not overloaded for `FLOWFMM.Vertex` for type $(typeof(sys)); cannot run FMM"
 
 Base.setindex!(sys, val, i) = @error "setindex! not overloaded for type $(typeof(sys))"
