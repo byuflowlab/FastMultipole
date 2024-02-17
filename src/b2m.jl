@@ -54,104 +54,28 @@ end
     end
 end
 
-# function B2M!_sourcepanel(system, branch, bodies_index, harmonics, expansion_order)
-#     qnm_prev = zeros(Complex{Float64}, expansion_order+2)
-#     jnm_prev = zeros(Complex{Float64}, expansion_order+2)
-#     inm_prev = zeros(Complex{Float64}, expansion_order+2)
-#     for i_body in bodies_index
-#         strength = system[i_body, SCALAR_STRENGTH]
-#         R0_global = system[i_body, POSITION]
-#         R0 = R0_global - branch.center
-#         n_sides = length()
-#         for i_side in 1:4
-#             i_side_p1 = i_side == 4 ? 1 : i_side + 1
-#             Ru = system[i_body,VERTEX,i_side] - R0_global
-#             Rv = system[i_body,VERTEX,i_side_p1] - R0_global
-#             J = norm(cross(Ru,Rv))
-
-#             # transform into xi, eta, z
-#             xi0 = (R0[1] + im*R0[2])/2
-#             xiu = (Ru[1] + im*Ru[2])/2
-#             xiv = (Rv[1] + im*Rv[2])/2
-#             eta0 = (R0[1] - im*R0[2])/2
-#             etau = (Ru[1] - im*Ru[2])/2
-#             etav = (Rv[1] - im*Rv[2])/2
-#             z0 = R0[3]
-#             zu = Ru[3]
-#             zv = Rv[3]
-
-#             # initialize recurrent values
-#             qnm = 1.0
-#             qnm_m1 = 0.0
-#             jnm = 1.0
-#             jnm_m1 = 0.0
-#             inm = 0.5
-#             inm_m1 = 0.0
-#             strength_J_over_4pi = J/4/pi * strength
-
-#             # expansion coefficient for l=0, m=0
-#             dim = 1
-#             branch.multipole_expansion[dim,1] += inm * strength_J_over_4pi
-#             qnm_prev[1] = qnm
-#             jnm_prev[1] = jnm
-#             inm_prev[1] = inm
-
-#             # i^(-1)
-#             one_over_i = -im
-
-#             # recurse
-#             for n in 1:expansion_order
-#                 # m=0
-#                 iam = Complex(1)
-#                 qnm = (im*(xi0+xiu)*-conj(qnm_prev[2]) + im*(eta0+etau)*qnm_prev[2] - (z0+zu)*qnm_prev[1])/n
-#                 jnm = (im*(xi0+xiv)*-conj(jnm_prev[2]) + im*(eta0+etav)*jnm_prev[2] - (z0+zv)*jnm_prev[1] + qnm)/(n+1)
-#                 inm = (im*xi0*-conj(inm_prev[2]) + im*eta0*inm_prev[2] - z0*inm_prev[1] + jnm)/(n+2)
-#                 i_compressed = 1 + (n * (n + 1)) >> 1
-#                 branch.multipole_expansion[1,i_compressed] += conj(inm * strength_J_over_4pi)
-#                 qnm_m1 = qnm
-#                 jnm_m1 = jnm
-#                 inm_m1 = inm
-#                 for m in 1:n
-#                     iam *= one_over_i
-#                     qnm = (im*(xi0+xiu)*qnm_prev[m] + im*(eta0+etau)*qnm_prev[m+2] - (z0+zu)*qnm_prev[m+1])/n
-#                     jnm = (im*(xi0+xiv)*jnm_prev[m] + im*(eta0+etav)*jnm_prev[m+2] - (z0+zv)*jnm_prev[m+1] + qnm)/(n+1)
-#                     inm = (im*xi0*inm_prev[m] + im*eta0*inm_prev[m+2] - z0*inm_prev[m+1] + jnm)/(n+2)
-#                     i_compressed += 1
-#                     branch.multipole_expansion[1,i_compressed] += conj(inm * strength_J_over_4pi * iam)
-#                     qnm_prev[m] = qnm_m1
-#                     jnm_prev[m] = jnm_m1
-#                     inm_prev[m] = inm_m1
-#                     qnm_m1 = qnm
-#                     jnm_m1 = jnm
-#                     inm_m1 = inm
-#                 end
-#                 qnm_prev[n+1] = qnm
-#                 jnm_prev[n+1] = jnm
-#                 inm_prev[n+1] = inm
-#             end
-#         end
-#     end
-# end
-
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourcePanel)
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourcePanel, negative_1_n)
     multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(inm_real, inm_imag, iam_real, iam_imag)
     multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(inm_real, inm_imag, iam_real, iam_imag)
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformNormalDipolePanel)
-    mean_iterm_real = (inm_prev_mm1_real + inm_prev_mp1_real)/2
-    mean_iterm_imag = (inm_prev_mm1_imag + inm_prev_mp1_imag)/2
-    x1_real, x1_imag = complex_multiply(mean_iterm_real, mean_iterm_imag, 0.0, n[1])
-    x2_real, x2_imag = n[2] * mean_iterm_real, n[2] * mean_iterm_imag
-    x3_real, x3_imag = n[3] * inm_prev_m_real, n[3] * inm_rev_m_imag
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformNormalDipolePanel, negative_1_n)
+    sum_iterm_real = (inm_prev_mp1_real + inm_prev_mm1_real)/2
+    sum_iterm_imag = (inm_prev_mp1_imag + inm_prev_mm1_imag)/2
+    x1_real, x1_imag = complex_multiply(inm_prev_mm1_real + inm_prev_mp1_real, inm_prev_mm1_imag + inm_prev_mp1_imag, 0.0, n[1]/2)
+    x2_real, x2_imag = n[2] * (inm_prev_mp1_real - inm_prev_mm1_real)/2, n[2] * (inm_prev_mp1_imag - inm_prev_mm1_imag)/2
+    x3_real, x3_imag = n[3] * inm_prev_m_real, n[3] * inm_prev_m_imag
     lnm_real, lnm_imag = x1_real + x2_real - x3_real, x1_imag + x2_imag - x3_imag
-    multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(lnm_real, lnm_imag, iam_real, iam_imag)
-    multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(lnm_real, lnm_imag, iam_real, iam_imag)
+    # coeff_gumerov = strength_J_over_4pi * (lnm_real - im*lnm_imag) * (-1)^m / (1.0im)^m
+    Mnm_real, Mnm_imag = complex_multiply(lnm_real, -lnm_imag, iam_real, iam_imag, negative_1_n*strength_J_over_4pi, 0.0)
+
+    multipole_expansion[1,1,i_compressed] += Mnm_real
+    multipole_expansion[2,1,i_compressed] += Mnm_imag
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourceNormalDipolePanel)
-    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[1], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformSourcePanel())
-    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformNormalDipolePanel())
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourceNormalDipolePanel, negative_1_n)
+    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[1], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformSourcePanel(), negative_1_n)
+    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformNormalDipolePanel(), negative_1_n)
 end
 
 @inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type::UniformSourcePanel)
@@ -258,7 +182,8 @@ end
         # multipole_expansion[1,1,i_compressed] += inm_real * strength_J_over_4pi
         # multipole_expansion[2,1,i_compressed] += -inm_imag * strength_J_over_4pi
 
-        update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type)
+        # update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type)
+        update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, -inm_prev[1,2], inm_prev[2,2], inm_prev[1,1], inm_prev[2,1], inm_prev[1,2], inm_prev[2,2], normal, panel_type, 1)
 
         qnm_m1_real = qnm_real
         qnm_m1_imag = qnm_imag
@@ -266,6 +191,9 @@ end
         jnm_m1_imag = jnm_imag
         inm_m1_real = inm_real
         inm_m1_imag = inm_imag
+
+        # (-1)^m
+        negative_1_m = -1
 
         for m in 1:n
             iam_real, iam_imag = complex_multiply(iam_real,iam_imag,one_over_i_real,one_over_i_imag)
@@ -297,8 +225,7 @@ end
             
             # multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(inm_real, inm_imag, iam_real, iam_imag)
             # multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(inm_real, inm_imag, iam_real, iam_imag)
-            
-            update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev[1,m], inm_prev[2,m], inm_prev[1,m+1], inm_prev[2,m+1], inm_prev[1,m+2], inm_prev[2,m+2], normal, panel_type)
+            update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev[1,m], inm_prev[2,m], inm_prev[1,m+1], inm_prev[2,m+1], inm_prev[1,m+2], inm_prev[2,m+2], normal, panel_type, negative_1_m)
 
             qnm_prev[1,m] = qnm_m1_real
             qnm_prev[2,m] = qnm_m1_imag
@@ -312,6 +239,9 @@ end
             jnm_m1_imag = jnm_imag
             inm_m1_real = inm_real
             inm_m1_imag = inm_imag
+            
+            # update (-1)^m
+            negative_1_m *= -1
         end
         qnm_prev[1,n+1] = qnm_real
         qnm_prev[2,n+1] = qnm_imag

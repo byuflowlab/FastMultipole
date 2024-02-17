@@ -11,7 +11,7 @@ S = Statistics
 import FLOWFMM
 fmm = FLOWFMM
 
-using FLOWFMM.StaticArrays, Random, LegendrePolynomials
+using FLOWFMM.LinearAlgebra, FLOWFMM.StaticArrays, Random, LegendrePolynomials, SpecialFunctions
 
 test_dir = @__DIR__
 
@@ -624,7 +624,7 @@ fmm.M2B!(mass_target_potential, mass_target, 2, tree)
 u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
-m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, theta, true, true)
+m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, tree.branches, theta, true, true, true)
 fmm.nearfield_singlethread!((elements,), tree.branches, (elements,), tree.branches, direct_list)
 fmm.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
 
@@ -1405,8 +1405,9 @@ potential12 = system12.system.potential[1,:]
 
 end
 
-@testset "b2m- panels" begin
+@testset "b2m source and dipole panels" begin
 
+# source panel expansion
 strength = 0.1428909901797533
 R0_global = [-0.11530793537122011, 0.1997192025788218, -0.9730448705798238]
 R0 = [-0.48862125790260025, -0.1735941199525583, -1.8441092898197107]
@@ -1423,5 +1424,68 @@ fmm._B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, s
 for i in eachindex(multipole_expansion)
     @test isapprox(multipole_expansion[i], multipole_expansion_test[i]; atol=1e-12)
 end
+
+# single tri panel
+displ = rand(SVector{3,Float64})
+vertices = [
+    SVector{3}(0.0,0.0,-0.2) + displ,
+    SVector{3}(2,1,0.3) + displ,
+    SVector{3}(-1,2,0.1) + displ
+]
+target = [5.5, -4.2, 5.3] + displ
+centroid = (vertices[1] + vertices[2] + vertices[3])/3
+normal = cross(vertices[2]-vertices[1],vertices[3]-vertices[1])
+area = norm(normal)/2
+normal /= area*2
+strength = 1.0
+P = 20
+expansion_order = Val(P)
+branch = FLOWFMM.SingleBranch(
+    1:1,
+    0,
+    1:0,
+    0,
+    SVector{3}(0.0,0.0,0.0) + displ,
+    0.4,
+    FLOWFMM.initialize_expansion(P),
+    FLOWFMM.initialize_expansion(P),
+    zeros(2, (P+1)*(P+1)),
+    zeros(2,4),
+    ReentrantLock(),
+)
+
+# build expansion
+qnm_prev = zeros(2, P+2)
+jnm_prev = zeros(2, P+2)
+inm_prev = zeros(2, P+2)
+R0_global = vertices[1]
+R0 = R0_global - branch.center
+Ru = vertices[2] - R0_global
+Rv = vertices[3] - R0_global
+panel_type = fmm.UniformNormalDipolePanel()
+fmm._B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
+
+# evaluate
+target_potential_dipole = zeros(4)
+irregular_harmonics_dipole = FLOWFMM.initialize_harmonics(P,Float64)
+multipole_expansion_dipole = branch.multipole_expansion
+FLOWFMM.M2B!(target_potential_dipole, target, displ, irregular_harmonics_dipole, multipole_expansion_dipole, P)
+
+this_potential = 0.0015577438029241901
+
+@test isapprox(target_potential_dipole[1], this_potential; atol=1e-12)
+
+# reset and repeat for source panel
+branch.multipole_expansion .= 0.0
+
+panel_type = fmm.UniformSourcePanel()
+fmm._B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
+
+target_potential = zeros(4)
+irregular_harmonics = FLOWFMM.initialize_harmonics(P,Float64)
+multipole_expansion = branch.multipole_expansion
+FLOWFMM.M2B!(target_potential, target, displ, irregular_harmonics, multipole_expansion, P)
+
+@test isapprox(target_potential[1], 0.022849841377239076; atol=1e-12)
 
 end

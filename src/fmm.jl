@@ -479,14 +479,14 @@ function build_interaction_lists(branches, theta, farfield, nearfield)
     return build_interaction_lists(branches, branches, theta, farfield, nearfield)
 end
 
-function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield)
+function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield, self_induced)
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, theta, farfield, nearfield)
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
@@ -496,15 +496,15 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     summed_radii_squared *= summed_radii_squared
     if center_spacing_squared * theta * theta >= summed_radii_squared && farfield # meet M2L criteria
         push!(m2l_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield # both leaves
+    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && !(!self_induced && i_target==j_source) # both leaves
         push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
         end
     else
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield, self_induced)
         end
     end
 end
@@ -512,17 +512,17 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
-    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
+function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true)
+    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced=true, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
 end
 
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true)
     # reset multipole/local expansions
     reset_target_tree && (reset_expansions!(source_tree))
     reset_source_tree && (reset_expansions!(source_tree))
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield, self_induced)
 
     # run FMM
     if Threads.nthreads() == 1
@@ -554,12 +554,12 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     unsort_source_bodies && (unsort!(source_systems, source_tree))
 end
 
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
     # create tree
-    tree = Tree(systems; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
+    tree = Tree(systems; expansion_order, n_per_branch, ndivisions, shrink_recenter)
     
     # perform fmm
-    fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
+    fmm!(tree, systems; theta, reset_tree=false, nearfield, farfield, self_induced, unsort_bodies)
     
     # visualize
     save_tree && (visualize(save_name, systems, tree))
@@ -575,7 +575,7 @@ end
 
 @inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
@@ -584,7 +584,7 @@ function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_so
     target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
 
     # perform fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
+    fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
 
     # visualize
     save_tree && (visualize(save_name, systems, tree))

@@ -252,25 +252,48 @@ function B2M!(branch, systems::Tuple, harmonics, expansion_order)
     end
 end
 
-function M2B!(target_potential, target, i_branch, tree::Tree{P}) where P
-    branch = tree.branches[i_branch]
-    irregular_harmonics = Matrix{eltype(branch.multipole_expansion[1])}(undef, 2, (P+1)^2)
-    dx = target[1:3] - branch.center
+function M2B!(target_potential, target, center, irregular_harmonics, multipole_expansion, expansion_order)
+    dx = target[1:3] - center
     r, theta, phi = cartesian_2_spherical(dx)
-    irregular_harmonic!(irregular_harmonics, r, theta, phi, P)
+    irregular_harmonic!(irregular_harmonics, r, theta, phi, expansion_order)
     d_potential = zeros(4)
-    for l in 0:P
+    for l in 0:expansion_order
         for m in 0:l
             ip = l^2 + l + m + 1
             i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
             factor = m > 0 ? 2.0 : 1.0
             for dim in 1:4
                 #d_potential[dim] += factor*real(branch.multipole_expansion[dim,i_compressed] * irregular_harmonics[ip])
-                d_potential[dim] += factor*(branch.multipole_expansion[1,dim,i_compressed] * irregular_harmonics[1,ip] - branch.multipole_expansion[2,dim,i_compressed] * irregular_harmonics[2,ip])
+                d_potential[dim] += factor*(multipole_expansion[1,dim,i_compressed] * irregular_harmonics[1,ip] - multipole_expansion[2,dim,i_compressed] * irregular_harmonics[2,ip])
             end
         end
     end
     target_potential .+= d_potential
+end
+
+function M2B!(target_potential, target, center, irregular_harmonics, multipole_expansion::Matrix{Complex{Float64}}, expansion_order)
+    dx = target[1:3] - center
+    r, theta, phi = cartesian_2_spherical(dx)
+    irregular_harmonic!(irregular_harmonics, r, theta, phi, expansion_order)
+    d_potential = zeros(4)
+    for l in 0:expansion_order
+        for m in 0:l
+            ip = l^2 + l + m + 1
+            i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
+            factor = m > 0 ? 2.0 : 1.0
+            for dim in 1:4
+                #d_potential[dim] += factor*real(branch.multipole_expansion[dim,i_compressed] * irregular_harmonics[ip])
+                d_potential[dim] += factor*(real(multipole_expansion[dim,i_compressed]) * irregular_harmonics[1,ip] - imag(multipole_expansion[dim,i_compressed]) * irregular_harmonics[2,ip])
+            end
+        end
+    end
+    target_potential .+= d_potential
+end
+
+function M2B!(target_potential, target, i_branch, tree::Tree{P}) where P
+    branch = tree.branches[i_branch]
+    irregular_harmonics = Matrix{eltype(branch.multipole_expansion[1])}(undef, 2, (P+1)^2)
+    M2B!(target_potential, target, branch.center, irregular_harmonics, branch.multipole_expansion, P)
 end
 
 function M2M!(branch, child, harmonics, M, expansion_order::Val{P}) where P
