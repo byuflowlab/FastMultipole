@@ -1,5 +1,5 @@
 # overload for SortWrapper
-Base.length(sys::SortWrapper) = length(sys.system)
+get_n_bodies(sys::SortWrapper) = get_n_bodies(sys.system)
 
 Base.setindex!(sys::SortWrapper,val,i) = setindex!(sys.system,val,sys.index[i])
 Base.setindex!(sys::SortWrapper,val,i,parameter::ScalarPotential) = setindex!(sys.system,val,sys.index[i],parameter)

@@ -97,7 +97,7 @@ Base.setindex!(sys, val, i, ::Velocity) = nothing
 
 Base.setindex!(sys, val, i, ::VelocityGradient) = nothing
 
-Base.length(sys) = @error "Base.length() not overloaded for type $(typeof(sys))"
+get_n_bodies(sys) = @error "FLOWFMM.get_n_bodies() not overloaded for type $(typeof(sys))"
 
 buffer_element(system) = @error "`buffer_element` not overloaded for `system::`$(typeof(system)); try using `SortWrapper(system)` or overload `buffer_element`"
 

@@ -1,5 +1,5 @@
 function visualize_bodies(name, system, probe_indices=())
-    n_bodies = length(system)
+    n_bodies = get_n_bodies(system)
     body_locations = zeros(3,n_bodies,1,1)
     body_radii = zeros(n_bodies,1,1)
     scalar_strength = zeros(n_bodies,1,1)

@@ -25,7 +25,7 @@ Direct calculation of induced potential (no FMM acceleration).
 function direct!(systems::Tuple)
     for source_system in systems
         for target_system in systems
-            _direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
+            _direct!(target_system, 1:get_n_bodies(target_system), source_system, 1:get_n_bodies(source_system))
         end
     end
 end
@@ -35,7 +35,7 @@ function direct!(system)
 end
 
 @inline function direct!(target_system, source_system)
-    _direct!(target_system, 1:length(target_system), source_system, 1:length(source_system))
+    _direct!(target_system, 1:get_n_bodies(target_system), source_system, 1:get_n_bodies(source_system))
 end
 
 function direct!(target_systems::Tuple, source_systems::Tuple)

@@ -67,7 +67,7 @@ end
 function Base.setindex!(vp::VortexParticles, val, i, ::fmm.VelocityGradient)
     vp.potential[i_VELOCITY_GRADIENT_vortex,i] .= reshape(val,9)
 end
-Base.length(vp::VortexParticles) = length(vp.bodies)
+FLOWFMM.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
 Base.eltype(::VortexParticles{TF}) where TF = TF
 
 """
@@ -159,7 +159,7 @@ end
 end
 
 function update_velocity_stretching!(vortex_particles::VortexParticles)
-    for i_body in 1:length(vortex_particles)
+    for i_body in 1:fmm.get_n_bodies(vortex_particles)
         update_velocity_stretching!(vortex_particles, i_body)
     end
 end
@@ -183,7 +183,7 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     potential = vortex_particles.potential
     velocity_stretching = vortex_particles.velocity_stretching
     update_velocity_stretching!(vortex_particles)
-    for i_body in 1:length(vortex_particles)
+    for i_body in 1:fmm.get_n_bodies(vortex_particles)
         vortex_particles[i_body, fmm.POSITION] .+= vortex_particles.velocity_stretching[1:3,i_body] * euler.dt
         vortex_particles.bodies[i_body] .+= vortex_particles.velocity_stretching[4:6] * euler.dt
     end

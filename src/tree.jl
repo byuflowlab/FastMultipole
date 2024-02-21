@@ -86,18 +86,16 @@ Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inv
 Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
     MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
-@inline total_n_bodies(system) = length(system)
-
-@inline function total_n_bodies(systems::Tuple)
+@inline function get_n_bodies(systems::Tuple)
     n_bodies = 0
     for system in systems
-        n_bodies += total_n_bodies(system)
+        n_bodies += get_n_bodies(system)
     end
     return n_bodies
 end
 
 function estimate_n_branches(system, n_per_branch, allocation_safety_factor)
-    n_bodies = total_n_bodies(system)
+    n_bodies = get_n_bodies(system)
     estimated_n_divisions = Int(ceil(log(8,n_bodies/n_per_branch)))
     estimated_n_branches = div(8^(estimated_n_divisions+1) - 1,7)
     return Int(ceil(estimated_n_branches * allocation_safety_factor))
@@ -200,14 +198,14 @@ end
 function get_octant_container(systems::Tuple)
     census = MMatrix{length(systems),8,Int64}(undef)
     for (i,system) in enumerate(systems)
-        census[i,1] = length(system)
+        census[i,1] = get_n_bodies(system)
     end
     return census
 end
 
 function get_octant_container(system)
     census = MVector{8,Int64}(undef)
-    census[1] = length(system)
+    census[1] = get_n_bodies(system)
     return census
 end
 
@@ -264,7 +262,7 @@ end
     return bodies_index
 end
 
-@inline get_bodies_index(system) = 1:length(system)
+@inline get_bodies_index(system) = 1:get_n_bodies(system)
 
 @inline function get_bodies_index(systems::Tuple)
     n_systems = length(systems)
@@ -283,7 +281,7 @@ end
     # return Vector{Int64}(undef,length(system))
     # [buffer_element(system) for _ in 1:length(system)]
     buffer = [buffer_element(system)]
-    resize!(buffer,length(system))
+    resize!(buffer,get_n_bodies(system))
     return buffer
 end
 
@@ -296,7 +294,7 @@ end
 end
 
 @inline function get_sort_index(system)
-    return collect(1:length(system))
+    return collect(1:get_n_bodies(system))
 end
 
 @inline function get_sort_index(systems::Tuple)
@@ -304,7 +302,7 @@ end
 end
 
 @inline function get_sort_index_buffer(system) # need not be overloaded for SortWrapper as it will be the same
-    return Vector{Int64}(undef,length(system))
+    return Vector{Int64}(undef,get_n_bodies(system))
 end
 
 @inline function get_sort_index_buffer(systems::Tuple)
@@ -391,10 +389,10 @@ function unsort!(system, tree::SingleTree)
 end
 
 @inline function unsort!(system, buffer, inverse_sort_index)
-    for i_body in 1:length(system)
+    for i_body in 1:get_n_bodies(system)
         buffer[i_body] = system[inverse_sort_index[i_body]]
     end
-    for i_body in 1:length(system)
+    for i_body in 1:get_n_bodies(system)
         system[i_body] = buffer[i_body]
     end
 end
@@ -470,7 +468,7 @@ end
 end
 
 @inline function max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, system)
-    for i in 1:length(system)
+    for i in 1:get_n_bodies(system)
         x, y, z = system[i,POSITION]
         x_min, y_min, z_min, x_max, y_max, z_max = max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z)
     end

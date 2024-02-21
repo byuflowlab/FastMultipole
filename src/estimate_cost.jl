@@ -427,7 +427,7 @@ Base.setindex!(sys::DummySystem, val, i, ::ScalarPotential) = sys.potential[i] =
 Base.setindex!(sys::DummySystem, val, i, ::VectorPotential) = sys.vector_potential[i] = val
 Base.setindex!(sys::DummySystem, val, i, ::Velocity) = sys.velocity[i] = val
 Base.setindex!(sys::DummySystem, val, i, ::VelocityGradient) = sys.gradient[i] = val
-Base.length(sys::DummySystem) = length(sys.bodies)
+get_n_bodies(sys::DummySystem) = length(sys.bodies)
 
 function DummySystem(n_bodies, TF)
     bodies = [Dummy(rand(SVector{3,TF}), rand(), rand()) for _ in 1:n_bodies]

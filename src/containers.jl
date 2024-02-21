@@ -187,5 +187,5 @@ struct SortWrapper{TS}
 end
 
 function SortWrapper(system)
-    return SortWrapper(system,collect(1:length(system)))
+    return SortWrapper(system,collect(1:get_n_bodies(system)))
 end

@@ -69,7 +69,7 @@ function visualize_tree(name, system, tree; probe_indices=[])
     #####
     ##### bodies
     #####
-    n_bodies = length(system)
+    n_bodies = fmm.get_n_bodies(system)
     body_locations = Array{Float64,4}(undef,3,n_bodies,1,1)
     body_radii = Array{Float64,3}(undef,n_bodies,1,1)
     scalar_strength = Array{Float64,3}(undef,n_bodies,1,1)

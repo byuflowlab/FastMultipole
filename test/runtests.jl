@@ -679,7 +679,7 @@ fmm.direct!((elements,))
 
 u_direct = deepcopy(elements.potential[1,:])
 
-for i in 1:length(elements)
+for i in 1:fmm.get_n_bodies(elements)
     @test isapprox(u_fmm[i], u_direct[i]; atol=1e-12)
 end
 
@@ -1018,7 +1018,7 @@ branch_3 = fmm.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_3, 1/8, fmm.in
 
 # using FMM
 # tree = fmm.Tree(branches, [expansion_order], n_per_branch, B2M!, P2P!)
-dummy_index = (zeros(Int64,length(vortexparticles)),)
+dummy_index = (zeros(Int64,fmm.get_n_bodies(vortexparticles)),)
 dummy_leaf_index = collect(1:3)
 # dummy_cost_parameter = fmm.dummy_direct_cost_estimate((vortexparticles,), n_per_branch)
 tree = fmm.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), Val(expansion_order), n_per_branch)#, dummy_cost_parameter)
