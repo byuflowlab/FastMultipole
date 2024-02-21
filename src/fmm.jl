@@ -243,10 +243,12 @@ end
 function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
     # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
     # L = zeros(eltype(target_branches[1].local_expansion), 4)
+    
     for (i_target, j_source) in m2l_list
-        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
+        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)        
         # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
     end
+    
 end
 
 function horizontal_pass_lock!(target_branches, source_branches, m2l_list, expansion_order)
@@ -326,6 +328,7 @@ function downward_pass_single_thread!(branches, systems, expansion_order)
     L = zeros(eltype(branches[1].multipole_expansion),2,4)
     #vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     vector_potential, potential_jacobian, potential_hessian, harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+
     for branch in branches
         if branch.n_branches == 0 # leaf level
             #l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
@@ -335,6 +338,7 @@ function downward_pass_single_thread!(branches, systems, expansion_order)
         else
             for child_branch in view(branches,branch.branch_index)
                 #l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
+                
                 L2L!(branch, child_branch, regular_harmonics, L, expansion_order)
                 #println("L2L tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)")
             end
@@ -491,10 +495,8 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # reset multipole/local expansions
     reset_target_tree && (reset_expansions!(source_tree))
     reset_source_tree && (reset_expansions!(source_tree))
-
     # create interaction lists
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
-
     # run FMM
     if true#Threads.nthreads() == 1
         # println("nearfield")
@@ -502,8 +504,38 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         if farfield
             # println("upward pass:")
             upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)
+            #@show target_tree.branches[20].local_expansion
             # println("horizontal pass:")
+            for i=1:length(target_tree.branches)
+                for j=1:length(target_tree.branches[i].harmonics)
+                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].harmonics[j]))) > 0
+                        error("NaN in harmonics of tree $(i) in branch $(j)!")
+                    end
+                end
+            end
+            for i=1:length(target_tree.branches)
+                for j=1:length(target_tree.branches[i].ML)
+                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].ML[j]))) > 0
+                        error("NaN in ML of tree $(i) in branch $(j)!")
+                    end
+                end
+            end
+            for i=1:length(target_tree.branches)
+                for j=1:length(target_tree.branches[i].multipole_expansion)
+                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].multipole_expansion[j]))) > 0
+                        error("NaN in multipole expansion of tree $(i) in branch $(j)!")
+                    end
+                end
+            end
+            for i=1:length(target_tree.branches)
+                for j=1:length(target_tree.branches[i].local_expansion)
+                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].local_expansion[j]))) > 0
+                        error("NaN in local expansion of tree $(i) in branch $(j)!")
+                    end
+                end
+            end
             horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+            
             # println("downward pass:")
             downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
@@ -531,13 +563,15 @@ end
 function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
     # create tree
     tree = Tree(systems; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
-    
+    l = length(ReverseDiff.tape(tree.branches[1].radius))
+    println("tape length before running fmm: $l")
+
     # perform fmm
     fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
-    
+    l2 = length(ReverseDiff.tape(tree.branches[1].radius))
+    println("tape length after running fmm: $l2.\n$(l2-l) additional tape entries.")
     # visualize
     save_tree && (visualize(save_name, systems, tree))
-
     return tree
 end
 
@@ -556,7 +590,6 @@ function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_so
     # create trees
     source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter, ndivisions=ndivisions_source)
     target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
-
     # perform fmm
     fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
 

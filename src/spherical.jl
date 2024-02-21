@@ -1,21 +1,21 @@
-function cartesian_2_spherical!(dx; EPSILON=1e-10)
+#=function cartesian_2_spherical!(dx; EPSILON=1e-10)
     r = sqrt(dx' * dx)
     theta = r < EPSILON ? 0.0 : acos(dx[3] / r)
     phi = r < EPSILON ? 0.0 : atan(dx[2], dx[1])
     dx .= r, theta, phi
-end
+end=#
 
 function cartesian_2_spherical(dx; EPSILON=1e-10)
     r = sqrt(dx' * dx)
-    theta = r < EPSILON ? 0.0 : acos(dx[3] / r)
+    theta = r < EPSILON ? 0.0 : (dx[3] == r ? 0.0 : (dx[3] == -r ? pi : acos(dx[3] / r)))
     phi = r < EPSILON ? 0.0 : atan(dx[2], dx[1])
     dx = SVector{3}(r, theta, phi)
 end
 
 function cartesian_2_spherical(x, y, z; EPSILON=1e-10)
     r = sqrt(x*x + y*y + z*z)
-    theta = r < EPSILON ? 0.0 : acos(z / r)
-    phi = r < EPSILON ? 0.0 : atan(y, x)
+    theta = r < EPSILON ? 0.0 : (z == r ? 0.0 : (z == -r ? pi : acos(z / r)))
+    phi = r < EPSILON ? 0.0 : ((abs(x) < EPSILON && abs(y) < EPSILON) ? 0.0 : atan(y, x)) # if y = x = 0, then the value of phi shouldn't matter anyway.
     return r, theta, phi
 end
 
@@ -656,11 +656,22 @@ function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
 end
 
 function M2L!(target_branch, source_branch, expansion_order)
+
     twice_expansion_order = expansion_order << 1
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
+    if sum(isnan.(ForwardDiff.partials(r))) > 0
+        error("r has NaNs!")
+    end
+    if sum(isnan.(ForwardDiff.partials(theta))) > 0
+        error("theta has NaNs!")
+    end
+    if sum(isnan.(ForwardDiff.partials(phi))) > 0
+        error("phi has NaNs!")
+    end
     source_branch.harmonics .= irregular_harmonic!(source_branch.harmonics, r, theta, phi, twice_expansion_order)
     target_branch.local_expansion .= M2L_loop!(target_branch.local_expansion, source_branch.ML, source_branch.multipole_expansion, source_branch.harmonics, expansion_order)
+
 end
 
 function B2L!(tree, i_branch, source_position, source_strength)
@@ -685,7 +696,12 @@ function L2L!(branch, child, harmonics, L, expansion_order) # 15-50k tape entrie
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
+    #if 14 in branch.branch_index
+    #    @show branch.local_expansion
+    #    println(" ")
+    #end
     child.local_expansion .= L2L_loop!(child.local_expansion,branch.local_expansion,harmonics,L,expansion_order)
+
     return nothing
 end
 @inline function L2L_loop!(child_local_expansion,branch_local_expansion,regular_harmonics,L,expansion_order)

@@ -637,10 +637,14 @@ end
 @inline function away_from_center!(center, system, bodies_index)
     for i_body in bodies_index
         x, y, z = system[i_body,POSITION]
-        distance_2_body_center = get_distance(x, y, z, center)
-        if distance_2_body_center < 1e-7
-            return SVector{3}(1e-6,1e-6,1e-6)
+        d2 = (x-center[1])^2 + (y-center[2])^2 + (z-center[3])^2
+        if d2 < 1e-14
+            return SVector{3}(1e-6,1e-6,1e-6) 
         end
+        #distance_2_body_center = get_distance(x, y, z, center)
+        #if distance_2_body_center < 1e-7
+        #    return SVector{3}(1e-6,1e-6,1e-6)
+        #end
     end
 
     return @SVector zeros(3)
