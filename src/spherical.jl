@@ -235,7 +235,7 @@ function update_potentials!(scalar_potential, vector_potential, potential_jacobi
 
 end
 
-@inline function update_scalar_potential(scalar_potential,LE,h,P)
+@inline function update_scalar_potential(scalar_potential,LE,h,expansion_order::Val{P}) where {P}
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
@@ -253,7 +253,7 @@ end
 
 end
 
-@inline function update_vector_potential!(vector_potential,LE,h,P)
+@inline function update_vector_potential!(vector_potential,LE,h,expansion_order::Val{P}) where {P}
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
@@ -278,7 +278,7 @@ end
     return vector_potential
 end
 
-@inline function update_potential_jacobian!(potential_jacobian,LE,h,P,r)
+@inline function update_potential_jacobian!(potential_jacobian,LE,h,expansion_order::Val{P},r) where {P}
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
@@ -308,7 +308,7 @@ end
     return potential_jacobian
 end
 
-@inline function update_potential_hessian!(potential_hessian,LE,h,P,r)
+@inline function update_potential_hessian!(potential_hessian,LE,h,expansion_order::Val{P},r) where {P}
 
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
@@ -363,16 +363,16 @@ end
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic_derivs!(harmonics, rho, theta, phi, P)
+function regular_harmonic_derivs!(harmonics, rho, theta, phi::TF, P) where TF
     y,x = sincos(theta)
     invY = y == 0 ? 0 : 1 / y
     fact = 1.0
     pl = 1.0
     rhom = 1.0
     #ei = exp(im * phi)
-    ei = [cos(phi), sin(phi)]
+    ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
-    eim = eltype(harmonics)[1.0,0.0] # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
     for m=0:P
         p = pl
         lpl = (m * (m + 1)) >> 1 + m + 1
@@ -416,21 +416,20 @@ function regular_harmonic_derivs!(harmonics, rho, theta, phi, P)
         pl = -pl * fact * y
         fact += 2
         #eim *= ei
-        eim .= [eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1]]
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
     end
     return harmonics
 end
 
-function regular_harmonic!(harmonics, rho, theta, phi, P)
-    harmonics .= zero(eltype(harmonics)) # temp
+function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     y,x = sincos(theta)
     fact = 1.0
     pl = 1.0
     rhom = 1.0 # rho^l / (l+m)! * (-1)^l
     #ei = exp(im * phi)
-    ei = [cos(phi), sin(phi)]
+    ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
-    eim = eltype(harmonics)[1.0,0.0] # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
     for m=0:P # l=m up here
         p = pl
         lpl = m * m + 2 * m + 1
@@ -464,21 +463,21 @@ function regular_harmonic!(harmonics, rho, theta, phi, P)
         pl = -pl * fact * y
         fact += 2
         #eim *= ei
-        eim .= [eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1]]
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
     end
     return harmonics
 end
 
-function irregular_harmonic!(harmonics, rho, theta, phi, P)
+function irregular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     y, x = sincos(theta)
     fact = 1
     pl = 1
     invR = -1.0 / rho
     rhom = -invR
     #ei = exp(im * phi)
-    ei = [cos(phi), sin(phi)]
+    ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
-    eim = eltype(harmonics)[1.0,0.0] # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
     for m=0:P
         p = pl
         npl = m * m + 2 * m + 1
@@ -511,52 +510,75 @@ function irregular_harmonic!(harmonics, rho, theta, phi, P)
         pl = -pl * fact * y
         fact += 2
         #eim *= ei
-        eim .= [eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1]]
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
     end
     return harmonics
 end
 
-@inline function B2M!(branch::SingleBranch, system, harmonics, expansion_order)
+@inline function B2M!(branch, system, harmonics, expansion_order)
     B2M!(system, branch, branch.bodies_index, harmonics, expansion_order)
 end
 
-function B2M!(branch::MultiBranch, systems, harmonics, expansion_order)
+function B2M!(branch, systems::Tuple, harmonics, expansion_order)
     # iterate over systems
-    for (i,system) in enumerate(systems)
-        B2M!(system, branch, branch.bodies_index[i], harmonics, expansion_order)
+    for (system,bodies_index) in zip(systems, branch.bodies_index)
+        B2M!(system, branch, bodies_index, harmonics, expansion_order)
     end
 end
 
-function M2B!(target_potential, target, i_branch, tree)
-    branch = tree.branches[i_branch]
-    irregular_harmonics = Matrix{eltype(branch.multipole_expansion[1])}(undef, 2, (tree.expansion_order+1)^2)
-    dx = target[1:3] - branch.center
+function M2B!(target_potential, target, center, irregular_harmonics, multipole_expansion, expansion_order::Val{P}) where P
+    dx = target[1:3] - center
     r, theta, phi = cartesian_2_spherical(dx)
-    irregular_harmonics = irregular_harmonic!(irregular_harmonics, r, theta, phi, tree.expansion_order)
+    irregular_harmonics = irregular_harmonic!(irregular_harmonics, r, theta, phi, P)
     d_potential = zeros(4)
-    for l in 0:tree.expansion_order
+    for l in 0:expansion_order
         for m in 0:l
             ip = l^2 + l + m + 1
             i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
             factor = m > 0 ? 2.0 : 1.0
             for dim in 1:4
                 #d_potential[dim] += factor*real(branch.multipole_expansion[dim,i_compressed] * irregular_harmonics[ip])
-                d_potential[dim] += factor*(branch.multipole_expansion[1,dim,i_compressed] * irregular_harmonics[1,ip] - branch.multipole_expansion[2,dim,i_compressed] * irregular_harmonics[2,ip])
+                d_potential[dim] += factor*(multipole_expansion[1,dim,i_compressed] * irregular_harmonics[1,ip] - multipole_expansion[2,dim,i_compressed] * irregular_harmonics[2,ip])
             end
         end
     end
     target_potential .+= d_potential
 end
 
-function M2M!(branch, child, harmonics, M, expansion_order)
+function M2B!(target_potential, target, center, irregular_harmonics, multipole_expansion::Matrix{Complex{Float64}}, expansion_order::Val{P}) where P
+    dx = target[1:3] - center
+    r, theta, phi = cartesian_2_spherical(dx)
+    irregular_harmonic!(irregular_harmonics, r, theta, phi, P)
+    d_potential = zeros(4)
+    for l in 0:expansion_order
+        for m in 0:l
+            ip = l^2 + l + m + 1
+            i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
+            factor = m > 0 ? 2.0 : 1.0
+            for dim in 1:4
+                #d_potential[dim] += factor*real(branch.multipole_expansion[dim,i_compressed] * irregular_harmonics[ip])
+                d_potential[dim] += factor*(real(multipole_expansion[dim,i_compressed]) * irregular_harmonics[1,ip] - imag(multipole_expansion[dim,i_compressed]) * irregular_harmonics[2,ip])
+            end
+        end
+    end
+    target_potential .+= d_potential
+end
+
+function M2B!(target_potential, target, i_branch, tree::Tree{P}) where P
+    branch = tree.branches[i_branch]
+    irregular_harmonics = Matrix{eltype(branch.multipole_expansion[1])}(undef, 2, (P+1)^2)
+    M2B!(target_potential, target, branch.center, irregular_harmonics, branch.multipole_expansion, P)
+end
+
+function M2M!(branch, child, harmonics, M, expansion_order::Val{P}) where P
     # get distance vector
     dx, dy, dz = branch.center - child.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
+    harmonics = regular_harmonic!(harmonics, r, theta, phi, P)
     branch.multipole_expansion .= M2M_loop!(branch.multipole_expansion,child.multipole_expansion,harmonics,expansion_order)
 end
 
-function M2M_loop!(branch_multipole_expansion,child_multipole_expansion,harmonics,P)
+function M2M_loop!(branch_multipole_expansion,child_multipole_expansion,harmonics,expansion_order::Val{P}) where P
 
     M = zeros(eltype(branch_multipole_expansion), 2, 4)
     for j in 0:P # iterate over new multipole coefficients B_j^k
@@ -602,13 +624,13 @@ function M2M_loop!(branch_multipole_expansion,child_multipole_expansion,harmonic
     return branch_multipole_expansion
 end
 
-function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order)
-    for j in 0:expansion_order
+function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order::Val{P}) where P
+    for j in 0:P
         Cnm = odd_or_even(j)
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
             L .= zero(eltype(L))
-            for n in 0:expansion_order
+            for n in 0:P
                 for m in -n:-1
                     nms = (n * (n+1)) >> 1 - m + 1
                     jnkm = (j + n)^2 + j + n + m - k + 1
@@ -642,11 +664,7 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
     return local_expansion
 end
 
-function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
-    twice_expansion_order = expansion_order << 1
-    #l = length(ReverseDiff.tape(target_branch.center))
-    #harmonics = Vector{eltype(target_branch.multipole_expansion)}(undef, (twice_expansion_order + 1)*(twice_expansion_order + 1))
-    harmonics = zeros(eltype(target_branch.multipole_expansion), 2, (twice_expansion_order + 1)*(twice_expansion_order + 1))
+function M2L!(target_branch, source_branch, harmonics, L, expansion_order::Val{P}) where P
     dx, dy, dz = target_branch.center - source_branch.center
     #@show length(ReverseDiff.tape(target_branch.center)) - l
     #l = length(ReverseDiff.tape(target_branch.center))
@@ -655,9 +673,9 @@ function M2L!(target_branch, source_branch, harmonics, L, expansion_order)
     target_branch.local_expansion .= M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
-function M2L!(target_branch, source_branch, expansion_order)
+function M2L!(target_branch, source_branch, expansion_order::Val{P}) where P
 
-    twice_expansion_order = expansion_order << 1
+    twice_expansion_order = P << 1
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     if sum(isnan.(ForwardDiff.partials(r))) > 0
@@ -674,12 +692,12 @@ function M2L!(target_branch, source_branch, expansion_order)
 
 end
 
-function B2L!(tree, i_branch, source_position, source_strength)
+function B2L!(tree::Tree{P}, i_branch, source_position, source_strength) where P
     branch = tree.branches[i_branch]
-    irregular_harmonics = Matrix{eltype(branch.multipole_expansion)}(undef, 2, (tree.expansion_order+1)^2)
+    irregular_harmonics = Matrix{eltype(branch.multipole_expansion)}(undef, 2, (P+1)^2)
     r, theta, phi = cartesian_2_spherical(source_position - branch.center)
-    irregular_harmonics = irregular_harmonic!(irregular_harmonics, r, theta, -phi, tree.expansion_order)
-    for l in 0:tree.expansion_order
+    irregular_harmonics = irregular_harmonic!(irregular_harmonics, r, theta, -phi, P)
+    for l in 0:P
         for m in 0:l
             i_abb = (l * (l+1)) >> 1 + m + 1
             i_exp = l^2 + l + m + 1
@@ -692,10 +710,10 @@ function B2L!(tree, i_branch, source_position, source_strength)
     end
 end
 
-function L2L!(branch, child, harmonics, L, expansion_order) # 15-50k tape entries from this, also only in the loop.
+function L2L!(branch, child, harmonics, L, expansion_order::Val{P}) where P # 15-50k tape entries from this, also only in the loop.
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    harmonics = regular_harmonic!(harmonics, r, theta, phi, expansion_order)
+    harmonics = regular_harmonic!(harmonics, r, theta, phi, P)
     #if 14 in branch.branch_index
     #    @show branch.local_expansion
     #    println(" ")
@@ -704,12 +722,12 @@ function L2L!(branch, child, harmonics, L, expansion_order) # 15-50k tape entrie
 
     return nothing
 end
-@inline function L2L_loop!(child_local_expansion,branch_local_expansion,regular_harmonics,L,expansion_order)
-    for j in 0:expansion_order
+@inline function L2L_loop!(child_local_expansion,branch_local_expansion,regular_harmonics,L,expansion_order::Val{P}) where P
+    for j in 0:P
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
             L .= zero(eltype(L))
-            for n in j:expansion_order
+            for n in j:P
                 for m in j+k-n:-1
                     jnkm = (n-j) * (n-j) + n - j + m - k + 1
                     nms = (n * (n + 1)) >> 1 - m + 1
@@ -786,11 +804,11 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
     end
 end
 
-function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, expansion_order, workspace)
+function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, expansion_order::Val{P}, workspace) where P
 
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    harmonics .= regular_harmonic_derivs!(harmonics, r, theta, phi, expansion_order)
+    harmonics .= regular_harmonic_derivs!(harmonics, r, theta, phi, P)
     scalar_potential = update_potentials!(zero(eltype(vector_potential)), vector_potential, potential_jacobian, potential_hessian, local_expansion, harmonics, expansion_order, r, theta, phi)
     spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
     flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient

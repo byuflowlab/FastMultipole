@@ -17,7 +17,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     sort_index_buffer = get_sort_index_buffer(system)
     
     # grow root branch
-    root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, n_per_branch, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+    root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, n_per_branch, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
     branches = [root_branch] # this first branch will already have its child branches encoded
     # estimated_n_branches = estimate_n_branches(system, n_per_branch, allocation_safety_factor)
     # sizehint!(branches, estimated_n_branches)
@@ -56,25 +56,6 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
         shrink_recenter!(branches, levels_index, system)
     end
 
-    # # count leaves
-    # n_leaves = 0
-    # for branch in branches
-    #     branch.n_branches == 0 && (n_leaves += 1)
-    # end
-
-    # # create leaf index and leaf count
-    # cumulative_count = Vector{Int64}(undef,n_leaves)
-    # cumulative_count[1] = 0
-    # leaf_index = zeros(Int,n_leaves)
-    # i_leaf_index = 1
-    # for (i_branch, branch) in enumerate(branches)
-    #     if branch.n_branches == 0
-    #         leaf_index[i_leaf_index] = Int32(i_branch)
-    #         i_leaf_index < n_leaves && (cumulative_count[i_leaf_index+1] = cumulative_count[i_leaf_index] + sum(branch.n_bodies))
-    #         i_leaf_index += 1
-    #     end
-    # end
-    
     # store leaves
     leaf_index = Vector{Int}(undef,0)
     sizehint!(leaf_index, length(levels_index[end]))
@@ -91,19 +72,19 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
     # else
     #     cost_parameters = CostParameters(system)
     # end
-    cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
+    # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
 
     # assemble tree
-    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
+    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch)#, cost_parameters)
 
     return tree
 end
 
-Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters) = 
-    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
+Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
-Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters) = 
-    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch, cost_parameters)
+Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
 @inline total_n_bodies(system) = length(system)
 
@@ -124,7 +105,8 @@ end
 
 function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
     i_first_branch = parents_index[end] + n_children + 1
-    for parent_branch in view(branches, parents_index)
+    for i_parent in parents_index
+        parent_branch = branches[i_parent]
         if parent_branch.n_branches > 0
             # radius of the child branches
             child_radius = parent_branch.radius / 2.0
@@ -141,7 +123,7 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
                     if get_population(cumulative_octant_census, i_octant) > 0  
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
                         child_center = get_child_center(parent_branch.center, parent_branch.radius, i_octant)
-                        child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, n_per_branch, expansion_order)
+                        child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, i_parent, n_per_branch, expansion_order)
                         i_first_branch += n_grandchildren
                         push!(branches, child_branch)
                     end
@@ -154,7 +136,7 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
     return parents_index, n_children
 end
 
-function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, n_per_branch, expansion_order)
+function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, i_parent, n_per_branch, expansion_order)
     # count bodies in each octant
     census!(octant_container, system, bodies_index, center)
     
@@ -175,15 +157,15 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
     branch_index = i_first_branch : i_first_branch + n_children - 1
     n_branches = length(branch_index)
 
-    return Branch(bodies_index, n_branches, branch_index, center, radius, expansion_order), n_children
+    return Branch(bodies_index, n_branches, branch_index, i_parent, center, radius, expansion_order), n_children
 end
 
-function Branch(bodies_index::UnitRange, n_branches, branch_index, center, radius, expansion_order)
-    return SingleBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, center, radius, expansion_order)
+    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
-function Branch(bodies_index, n_branches, branch_index, center, radius, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+function Branch(bodies_index, n_branches, branch_index, i_parent, center, radius, expansion_order)
+    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -584,10 +566,10 @@ end
     y_max = y_min
     z_max = z_min
     x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, system, bodies_index)
-    #if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
-    #    # TODO with a smarter local expansion evaluation, we could get rid of this provision
-    #    center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-    #else
+    # if get_n_bodies(bodies_index) == 1 # singularity issues in the local expansion if we center the expansion on point where we want to evaluate it
+    #     # TODO with a smarter local expansion evaluation, we could get rid of this provision
+    #     center = SVector{3}((x_min+x_max)/2.0 + SHRINKING_OFFSET, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
+    # else
         center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
     # end
     delta = away_from_center!(center, system, bodies_index)
@@ -613,7 +595,6 @@ end
     for i_body in bodies_index
         x, y, z = system[i_body,POSITION]
         body_radius = system[i_body,RADIUS]
-        #radius = max(radius, get_distance(x, y, z, center) + body_radius)
         distance_2_body_center = get_distance(x, y, z, center)
         # if distance_2_body_center < 1e-7
         #     system[i_body,POSITION] .+= 1e-6
@@ -637,9 +618,9 @@ end
 @inline function away_from_center!(center, system, bodies_index)
     for i_body in bodies_index
         x, y, z = system[i_body,POSITION]
-        d2 = (x-center[1])^2 + (y-center[2])^2 + (z-center[3])^2
-        if d2 < 1e-14
-            return SVector{3}(1e-6,1e-6,1e-6) 
+        distance_2_body_center = get_distance(x, y, z, center)
+        if distance_2_body_center < 1e-7
+            return SVector{3}(1e-6,1e-6,1e-6)
         end
         #distance_2_body_center = get_distance(x, y, z, center)
         #if distance_2_body_center < 1e-7
@@ -658,10 +639,11 @@ end
 end
 
 @inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius) where TB
-    # (; bodies_index, n_branches, branch_index, center, radius, multipole_expansion, local_expansion, harmonics, ML, lock) = branch[]
+    # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, ML, lock) = branch[]
     bodies_index = branch[].bodies_index
     n_branches = branch[].n_branches
     branch_index = branch[].branch_index
+    i_parent = branch[].i_parent
     center = branch[].center
     radius = branch[].radius
     multipole_expansion = branch[].multipole_expansion
@@ -669,7 +651,7 @@ end
     harmonics = branch[].harmonics
     ML = branch[].ML
     lock = branch[].lock
-    branch[] = TB(bodies_index, n_branches, branch_index, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
+    branch[] = TB(bodies_index, n_branches, branch_index, i_parent, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
 end
 
 function shrink_leaf!(branch, system)
@@ -760,7 +742,8 @@ function initialize_harmonics(expansion_order, type=Float64)
 end
 
 function initialize_ML(expansion_order, type=Float64)
-    return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    # return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    return zeros(type,2,4)
 end
 
 function reset_expansions!(tree)

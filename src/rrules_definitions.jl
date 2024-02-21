@@ -83,7 +83,6 @@ ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::AbstractArray{<:R
 # all correct except for an incredibly painful third derivative with respect to θ. also accounts for ~15% of tape entries, so it will need to be done eventually.
 # update: I think this works? It produces the right answer in practice but fails tests.
 function ChainRulesCore.rrule(::typeof(regular_harmonic_derivs!),harmonics,rho,theta,phi,P)
-
     #@show typeof(harmonics)
     #harmonics = regular_harmonic_derivs!(harmonics,rho,theta,phi,P)
     #regular_harmonic_derivs!(harmonics,rho,theta,phi,P)
@@ -180,7 +179,6 @@ ReverseDiff.@grad_from_chainrules regular_harmonic_derivs!(harmonics::AbstractAr
 #@grad_from_chainrules_extended (1,) regular_harmonic_derivs!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
 
 function ChainRulesCore.rrule(::typeof(irregular_harmonic!),harmonics, rho, theta, phi, P)
-
     function h_pullback(h̄)
         h̄armonics = zeros(eltype(harmonics),size(harmonics))
         r̄ho = zero(eltype(rho))
@@ -309,7 +307,6 @@ end
 
 # finally passes tests.
 function ChainRulesCore.rrule(::typeof(s2c_hess!),potential_jacobian, potential_hessian, workspace, rho, theta, phi)
-
     s_theta, c_theta = sincos(theta)
     s_phi, c_phi = sincos(phi)
 
@@ -411,7 +408,7 @@ end
 ReverseDiff.@grad_from_chainrules s2c_hess!(potential_jacobian, potential_hessian, workspace, rho::tracked_type, theta::tracked_type, phi::tracked_type)
 
 # passes tests
-function ChainRulesCore.rrule(::typeof(s2c_jac!),potential_jacobian, workspace, rho, theta, phi)
+function ChainRulesCore.rrule(::typeof(s2c_jac!),potential_jacobian, workspace, rho, theta, phi)\
     #println("initial call:")
     #@show potential_jacobian
     function J_pullback(J̄2)
@@ -530,7 +527,7 @@ end
 ReverseDiff.@grad_from_chainrules flatten_hessian!(hessian::AbstractArray{<:ReverseDiff.TrackedReal})
 
 # works
-function ChainRulesCore.rrule(::typeof(update_scalar_potential),scalar_potential,LE,h,P)
+function ChainRulesCore.rrule(::typeof(update_scalar_potential),scalar_potential,LE,h,expansion_order::Val{P}) where P
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
         p̄otential = p̄
@@ -559,19 +556,19 @@ function ChainRulesCore.rrule(::typeof(update_scalar_potential),scalar_potential
         return s̄elf, p̄otential, L̄E, h̄, P̄
 
     end
-    return update_scalar_potential(scalar_potential,LE,h,P),potential_pullback
+    return update_scalar_potential(scalar_potential,LE,h,expansion_order),potential_pullback
 
 end
 
 ReverseDiff.@grad_from_chainrules update_scalar_potential(scalar_potential,
                                                            LE::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           P)
+                                                           P::Val)
                                                            
 
-function ChainRulesCore.rrule(::typeof(update_vector_potential!),vector_potential,LE,h,P)
+function ChainRulesCore.rrule(::typeof(update_vector_potential!),vector_potential,LE,h,expansion_order::Val{P}) where P
 
-    vector_potential2 = update_vector_potential!(copy(vector_potential),LE,h,P)
+    vector_potential2 = update_vector_potential!(copy(vector_potential),LE,h,expansion_order)
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
         p̄otential = p̄
@@ -623,11 +620,11 @@ end
 ReverseDiff.@grad_from_chainrules update_vector_potential!(vector_potential::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            LE::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           P)
+                                                           expansion_order::Val)
                                                            
                                 
-function ChainRulesCore.rrule(::typeof(update_potential_jacobian!),potential_jacobian,LE,h,P,r)
-    potential_jacobian_out = update_potential_jacobian!(copy(potential_jacobian),LE,h,P,r)
+function ChainRulesCore.rrule(::typeof(update_potential_jacobian!),potential_jacobian,LE,h,expansion_order::Val{P},r) where P
+    potential_jacobian_out = update_potential_jacobian!(copy(potential_jacobian),LE,h,expansion_order,r)
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
         p̄otential = p̄
@@ -707,10 +704,10 @@ end
 ReverseDiff.@grad_from_chainrules update_potential_jacobian!(potential_jacobian::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            LE::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           P,
+                                                           expansion_order::Val,
                                                            r::ReverseDiff.TrackedReal)
                                     
-function ChainRulesCore.rrule(::typeof(update_potential_hessian!),potential_hessian,LE,h,P,r)
+function ChainRulesCore.rrule(::typeof(update_potential_hessian!),potential_hessian,LE,h,expansion_order::Val{P},r) where P
     function potential_pullback(p̄)
         s̄elf = NoTangent() # not a closure
         p̄otential = p̄
@@ -828,7 +825,7 @@ function ChainRulesCore.rrule(::typeof(update_potential_hessian!),potential_hess
         return s̄elf, p̄otential, L̄E, h̄, P̄, r̄
 
     end
-    return update_potential_hessian!(copy(potential_hessian),LE,h,P,r),potential_pullback
+    return update_potential_hessian!(copy(potential_hessian),LE,h,expansion_order,r),potential_pullback
 
 end
 
@@ -837,10 +834,10 @@ ReverseDiff.@grad_from_chainrules update_potential_hessian!(potential_hessian::A
                                                            h::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            #ht::AbstractArray{<:ReverseDiff.TrackedReal},
                                                            #ht2::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           P,
+                                                           expansion_order::Val,
                                                            r::ReverseDiff.TrackedReal)
 
-function ChainRulesCore.rrule(::typeof(M2L_loop!),LE,L,ME,h,expansion_order)
+function ChainRulesCore.rrule(::typeof(M2L_loop!),LE,L,ME,h,expansion_order::Val{P}) where P
 
     function LE_pullback(L̄E2)
         s̄elf = NoTangent()
@@ -849,12 +846,12 @@ function ChainRulesCore.rrule(::typeof(M2L_loop!),LE,L,ME,h,expansion_order)
         M̄E = zeros(eltype(ME),size(ME))
         h̄ = zeros(eltype(h),size(h))
         P̄ = NoTangent()
-        for j in 0:expansion_order
+        for j in 0:P
             Cnm = odd_or_even(j)
             for k in 0:j
                 jks = (j * (j + 1)) >> 1 + k + 1
                 
-                for n in 0:expansion_order
+                for n in 0:P
                     for m in -n:-1
                         nms = (n * (n+1)) >> 1 - m + 1
                         jnkm = (j + n)^2 + j + n + m - k + 1
@@ -895,7 +892,7 @@ ReverseDiff.@grad_from_chainrules M2L_loop!(LE::AbstractArray{<:ReverseDiff.Trac
                                             L::AbstractArray{<:ReverseDiff.TrackedReal},
                                             ME::AbstractArray{<:ReverseDiff.TrackedReal},
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            expansion_order)
+                                            expansion_order::Val)
 
 #=@grad_from_chainrules_extended (1,) M2L_loop!(LE::AbstractArray{<:ReverseDiff.TrackedReal},
                                             L::AbstractArray{<:ReverseDiff.TrackedReal},
@@ -903,7 +900,7 @@ ReverseDiff.@grad_from_chainrules M2L_loop!(LE::AbstractArray{<:ReverseDiff.Trac
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
                                             expansion_order)=#
 
-function ChainRulesCore.rrule(::typeof(M2M_loop!),BM,CM,h,P)
+function ChainRulesCore.rrule(::typeof(M2M_loop!),BM,CM,h,expansion_order::Val{P}) where P
 
     function BM_pullback(B̄M2)
         s̄elf = NoTangent()
@@ -952,19 +949,19 @@ function ChainRulesCore.rrule(::typeof(M2M_loop!),BM,CM,h,P)
         
     end
     
-    return M2M_loop!(copy(BM),CM,h,P),BM_pullback
+    return M2M_loop!(copy(BM),CM,h,expansion_order),BM_pullback
 
 end
 ReverseDiff.@grad_from_chainrules M2M_loop!(BM::AbstractArray{<:ReverseDiff.TrackedReal},
                                             CM::AbstractArray{<:ReverseDiff.TrackedReal},
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            P)
+                                            expansion_order::Val)
 #=@grad_from_chainrules_extended (1,) M2M_loop!(BM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             CM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
                                             P)=#
 
-function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,P)
+function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,expansion_order::Val{P}) where P
 
     function CLE_pullback(C̄LE2)
         s̄elf = NoTangent()
@@ -1016,7 +1013,7 @@ function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,P)
         return s̄elf, C̄LE, B̄LE, h̄, L̄, P̄
 
     end
-    return L2L_loop!(copy(CLE),BLE,h,L,P),CLE_pullback
+    return L2L_loop!(copy(CLE),BLE,h,L,expansion_order),CLE_pullback
     #L2L_loop!(copyCLE,BLE,h,L,P)
     #@show sum(CLE)
     #return CLE, CLE_pullback
@@ -1026,7 +1023,7 @@ ReverseDiff.@grad_from_chainrules L2L_loop!(CLE::AbstractArray{<:ReverseDiff.Tra
                                             BLE::AbstractArray{<:ReverseDiff.TrackedReal},
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
                                             L::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            P)
+                                            expansion_order::Val)
 
 #=@grad_from_chainrules_extended (1,) L2L_loop!(CLE::AbstractArray{<:ReverseDiff.TrackedReal},
                                             BLE::AbstractArray{<:ReverseDiff.TrackedReal},

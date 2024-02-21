@@ -27,6 +27,9 @@ const VELOCITY_GRADIENT = VelocityGradient()
 struct Vertex <: Indexable end
 const VERTEX = Vertex()
 
+struct Normal <: Indexable end
+const NORMAL = Normal()
+
 struct ScalarStrength <: Indexable end
 const SCALAR_STRENGTH = ScalarStrength()
 
@@ -39,16 +42,12 @@ const VECTOR_STRENGTH = VectorStrength()
 abstract type AbstractKernel end
 
 struct VortexPoint <: AbstractKernel end
-
 struct VortexLine <: AbstractKernel end # not yet derived
-
 struct VortexPanel <: AbstractKernel end # not yet derived
-
 struct SourcePoint <: AbstractKernel end
-
-struct SourcePanel <: AbstractKernel end # not yet implemented
-
-struct DipolePanel <: AbstractKernel end # not yet implemented
+struct UniformSourcePanel <: AbstractKernel end
+struct UniformNormalDipolePanel <: AbstractKernel end
+struct UniformSourceNormalDipolePanel <: AbstractKernel end
 
 
 #####
@@ -113,68 +112,70 @@ struct DipolePanel <: AbstractKernel end # not yet implemented
 #####
 ##### octree creation
 #####
-abstract type Branch end
+abstract type Branch{TF} end
 
-struct MultiBranch{TF,N} <: Branch
+struct MultiBranch{TF,N} <: Branch{TF}
     bodies_index::SVector{N,UnitRange{Int64}}
     n_branches::Int64
     branch_index::UnitRange{Int64}
+    i_parent::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,2}
-    ML::MArray{Tuple{2,4},TF}
+    ML::Matrix{TF}
     lock::ReentrantLock
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
 
-struct SingleBranch{TF} <: Branch
+struct SingleBranch{TF} <: Branch{TF}
     bodies_index::UnitRange{Int64}
     n_branches::Int64
     branch_index::UnitRange{Int64}
+    i_parent::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,2}
-    ML::MArray{Tuple{2,4},TF}
+    ML::Matrix{TF}
     lock::ReentrantLock
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
 
-abstract type Tree end
+abstract type Tree{P} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB} <: Tree
+struct MultiTree{TF,N,TB,P} <: Tree{P}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
-    expansion_order::Int64
+    expansion_order::Val{P}
     n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
-    cost_parameters::SVector{N,Float64}
+    # cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB} <: Tree
+struct SingleTree{TF,TB,P} <: Tree{P}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index::Vector{Int64}
     inverse_sort_index::Vector{Int64}
     buffer::TB
-    expansion_order::Int64
+    expansion_order::Val{P}
     n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
-    cost_parameters::Float64
+    # cost_parameters::Float64
 end
 
 #####

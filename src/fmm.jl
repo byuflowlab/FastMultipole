@@ -25,241 +25,291 @@ function P2P!(target_systems, target_branch::MultiBranch, source_systems, source
     end
 end
 
+function P2P!(target_systems, target_branch::MultiBranch, source_system, source_bodies_index::UnitRange)
+    for (target_system, target_bodies_index) in zip(target_systems, target_branch.bodies_index)
+        _direct!(target_system, target_bodies_index, source_system, source_bodies_index)
+    end
+end
+
+function P2P!(target_system, target_branch::SingleBranch, source_system, source_bodies_index::UnitRange)
+    _direct!(target_system, target_branch.bodies_index, source_system, source_bodies_index)
+end
+
 #####
 ##### upward pass
 #####
-function upward_pass_single_thread!(branches, systems, expansion_order)
-    # initialize memory
-    harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-    M = zeros(eltype(branches[1].multipole_expansion), 4)
+function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
 
     # loop over branches
     for branch in view(branches,length(branches):-1:1) # no need to create a multipole expansion at the very top level
         if branch.n_branches == 0 # branch is a leaf
-            B2M!(branch, systems, harmonics, expansion_order)
+            B2M!(branch, systems, branch.harmonics, expansion_order)
         else # not a leaf
             # iterate over children
             for child_branch in view(branches, branch.branch_index)
-                M2M!(branch, child_branch, harmonics, M, expansion_order)
+                M2M!(branch, child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
             end
         end
     end
 end
 
-function body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
-    # divide chunks
+function body_2_multipole_multithread!(branches, systems::Tuple, expansion_order::Val{P}, leaf_index) where P
+    ## load balance
     n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
-    if n_per_chunk == 0
-        n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-        rem = 0 # no reason to spread a remainder
-    end
+    leaf_assignments = fill(1:0, length(systems), n_threads)
+    for (i_system,system) in enumerate(systems)
 
-    # spread remainder across rem chunks
-    Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-        chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
-        for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
-            B2M!(leaf, systems, harmonics, expansion_order)
+        # total number of bodies
+        n_bodies = 0
+        for i_leaf in leaf_index
+            n_bodies += length(branches[i_leaf].bodies_index[i_system])
         end
-    end
-end
 
-function body_2_multipole_single_thread!(branches, systems, expansion_order, leaf_index)
-    # divide chunks
-    n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
-    if n_per_chunk == 0
-        n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-        rem = 0 # no reason to spread a remainder
-    end
+        # number of bodies per thread
+        n_per_thread, rem = divrem(n_bodies, n_threads)
+        rem > 0 && (n_per_thread += 1)
 
-    # spread remainder across rem chunks
-    for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-        chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
-        for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
-            B2M!(leaf, systems, harmonics, expansion_order)
+        # if there are too many threads, we'll actually hurt performance
+        n_per_thread < MIN_NPT_B2M && (n_per_thread = MIN_NPT_B2M)
+
+        # create chunks
+        i_start = 1
+        i_thread = 1
+        n_bodies = 0
+        for (i_end,i_leaf) in enumerate(leaf_index)
+            n_bodies += length(branches[i_leaf].bodies_index[i_system])
+            if n_bodies >= n_per_thread
+                leaf_assignments[i_system,i_thread] = i_start:i_end
+                i_start = i_end+1
+                i_thread += 1
+                n_bodies = 0
+            end
         end
+        i_thread <= n_threads && (leaf_assignments[i_system,i_thread] = i_start:length(leaf_index))
     end
-end
-
-@inline function translate_multipoles(branch, branches, harmonics, M, expansion_order)
-    if branch.n_branches > 0 # branch is not a leaf
-
-        # iterate over children
-        for child_branch in view(branches, branch.branch_index)
-            M2M!(branch, child_branch, harmonics, M, expansion_order)
-        end
-    end
-end
-
-function translate_multipoles_multi_thread!(branches, expansion_order, levels_index)
-    # initialize memory
-    n_threads = Threads.nthreads()
     
-    # iterate over levels
-    for level_index in view(levels_index,length(levels_index):-1:1)
-        
-        # if its too fine, no sense multithreading
-        if Threads.nthreads() < 5 # length(level_index) > 100 # this just isn't efficient for high numbers of threads
-
-            # divide chunks
-            n_per_chunk, rem = divrem(length(level_index),n_threads)
-            if n_per_chunk == 0
-                n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-                rem = 0 # no reason to spread a remainder
-            end
-
-            # loop over branches
-            Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(level_index))...)
-                chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
-
-                # initialize memory
-                harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-                M = zeros(eltype(branches[1].multipole_expansion), 4)
-
-                # loop over branches
-                for branch in view(branches,view(level_index,i_start:i_start+chunk_size-1)) # no need to create a multipole expansion at the very top level
-                    translate_multipoles(branch, branches, harmonics, M, expansion_order)
+    ## compute multipole expansion coefficients
+    Threads.@threads for i_thread in 1:n_threads
+        for (i_system,system) in enumerate(systems)
+            leaf_assignment = leaf_assignments[i_system,i_thread]
+            for i_branch in view(leaf_index, leaf_assignment)
+                branch = branches[i_branch]
+                Threads.lock(branch.lock) do
+                    B2M!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
                 end
             end
-        else
-            harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-            M = zeros(eltype(branches[1].multipole_expansion), 4)
-            for branch in view(branches,level_index)
-                translate_multipoles(branch, branches, harmonics, M, expansion_order)
-            end
         end
     end
-    return nothing
 end
 
-function translate_multipoles_single_thread!(branches, expansion_order, levels_index)
+function body_2_multipole_multithread!(branches, system, expansion_order::Val{P}, leaf_index) where P
+    ## load balance
+    n_threads = Threads.nthreads()
+    leaf_assignments = fill(1:0, n_threads)
+
+    # total number of bodies
+    n_bodies = 0
+    for i_leaf in leaf_index
+        n_bodies += length(branches[i_leaf].bodies_index)
+    end
+
+    # number of bodies per thread
+    n_per_thread, rem = divrem(n_bodies, n_threads)
+    rem > 0 && (n_per_thread += 1)
+
+    # if there are too many threads, we'll actually hurt performance
+    n_per_thread < MIN_NPT_B2M && (n_per_thread = MIN_NPT_B2M)
+
+    # create chunks
+    i_start = 1
+    i_thread = 1
+    n_bodies = 0
+    for (i_end,i_leaf) in enumerate(leaf_index)
+        n_bodies += length(branches[i_leaf].bodies_index)
+        if n_bodies >= n_per_thread
+            leaf_assignments[i_thread] = i_start:i_end
+            i_start = i_end+1
+            i_thread += 1
+            n_bodies = 0
+        end
+    end
+    i_thread <= n_threads && (leaf_assignments[i_thread] = i_start:length(leaf_index))
+
+    ## compute multipole expansion coefficients
+    Threads.@threads for i_thread in 1:n_threads
+        for i_branch in view(leaf_index, leaf_assignments[i_thread])
+            branch = branches[i_branch]
+            B2M!(system, branch, branch.bodies_index, branch.harmonics, expansion_order)
+        end
+    end
+end
+
+function translate_multipoles_multithread!(branches, expansion_order::Val{P}, levels_index) where P
     # initialize memory
     n_threads = Threads.nthreads()
     
     # iterate over levels
-    for level_index in view(levels_index,length(levels_index):-1:1)
-        harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-        M = zeros(eltype(branches[1].multipole_expansion), 4)
-        for branch in view(branches,level_index)
-            translate_multipoles(branch, branches, harmonics, M, expansion_order)
+    for level_index in view(levels_index,length(levels_index):-1:2)
+        
+        # load balance
+        n_branches = length(level_index)
+        n_per_thread, rem = divrem(n_branches, n_threads)
+        rem > 0 && (n_per_thread += 1)
+
+        # if there are too many threads, we'll actually hurt performance
+        n_per_thread < MIN_NPT_M2M && (n_per_thread = MIN_NPT_M2M)
+
+        # assign thread start branches
+        Threads.@threads for i_start in 1:n_per_thread:n_branches
+            # get final branch
+            i_end = min(n_branches, i_start+n_per_thread-1)
+
+            # loop over branches
+            for i_branch in view(level_index,i_start:i_end)
+                child_branch = branches[i_branch]
+                parent_branch = branches[child_branch.i_parent]
+                Threads.lock(parent_branch.lock) do
+                    M2M!(parent_branch, child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
+                end
+            end
         end
     end
-    return nothing
 end
 
-function upward_pass_multi_thread!(branches, systems, expansion_order, levels_index, leaf_index)
+function upward_pass_multithread!(branches, systems, expansion_order, levels_index, leaf_index)
     # create multipole expansions
-    println("b2m")
-    @time body_2_multipole_multi_thread!(branches, systems, expansion_order, leaf_index)
+    body_2_multipole_multithread!(branches, systems, expansion_order, leaf_index)
 
     # m2m translation
-    println("tm")
-    @time translate_multipoles_multi_thread!(branches, expansion_order, levels_index)
+    translate_multipoles_multithread!(branches, expansion_order, levels_index)
 end
 
 #####
 ##### horizontal pass
 #####
-function nearfield_single_thread!(target_system, target_branches, source_system, source_branches, direct_list)
+function nearfield_singlethread!(target_system, target_branches, source_system, source_branches, direct_list)
     for (i_target, j_source) in direct_list
         P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
     end
 end
 
-@inline function initialize_cost(source_branches::Vector{<:SingleBranch})
-    return 0
-end
+function nearfield_multithread!(target_system, target_branches, source_systems::Tuple, source_branches, direct_list)
+    ## load balance
+    n_threads = Threads.nthreads()
+    assignments = Vector{UnitRange{Int64}}(undef,n_threads)
+    
+    for (i_source_system, source_system) in enumerate(source_systems)
+        # total number of interactions
+        n_interactions = 0
+        for (i_target, i_source) in direct_list
+            target_leaf = view(target_branches,i_target)
+            source_leaf = view(source_branches,i_source)
+            n_interactions += get_n_bodies(target_leaf[].bodies_index) * get_n_bodies(source_leaf[].bodies_index[i_source_system])
+        end
+        
+        # interactions per thread
+        n_per_thread, rem = divrem(n_interactions, n_threads)
+        rem > 0 && (n_per_thread += 1)
 
-@inline function initialize_cost(source_branches::Vector{MultiBranch{<:Any,N}}) where N
-    return SVector{N,Int64}(0 for _ in 1:N)
-end
+        # if there are too many threads, we'll actually hurt performance
+        n_per_thread < MIN_NPT_NF && (n_per_thread = MIN_NPT_NF)
 
-@inline function branch_cost(branch::SingleBranch)
-    return length(branch.bodies_index)
-end
-
-@inline function branch_cost(branch::MultiBranch{<:Any,N}) where N
-    return SVector{N,Float64}(Float64(length(bodies_index)) for bodies_index in branch.bodies_index)
-end
-
-@inline function total_cost(target_branches, source_branches, direct_list)
-    t = initialize_cost(source_branches)
-    for (i_target, j_source) in direct_list
-        n_targets = get_n_bodies(target_branches[i_target])
-        t += n_targets * get_n_bodies_vec(source_branches[j_source])
-    end
-    return t
-end
-
-@inline function nearfield_create_chunks(target_branches, source_branches, direct_list, cost_per_chunk)
-    cost = 0.0
-    i_thread = 1
-    i_start = 1
-    i_end = 0
-    for (i_target, j_source) in direct_list
-        i_end += 1
-        cost += estimate_cost(get_n_bodies(target_branches[i_target]), source_branches[j_source].bodies_index, source_cost_parameters)
-        if cost >= cost_per_chunk || i_end == length(direct_list)
-            chunks[i_thread] = i_start:i_end
-            i_thread += 1
-            i_start = i_end + 1
-            cost = 0.0
+        # create assignments
+        for i in eachindex(assignments)
+            assignments[i] = 1:0
+        end
+        i_start = 1
+        i_thread = 1
+        n_interactions = 0
+        for (i_end,(i_target, j_source)) in enumerate(direct_list)
+            target_leaf = view(target_branches,i_target)
+            source_leaf = view(source_branches,j_source)
+            n_interactions += get_n_bodies(target_leaf[].bodies_index) * get_n_bodies(source_leaf[].bodies_index[i_source_system])
+            if n_interactions >= n_per_thread
+                assignments[i_thread] = i_start:i_end
+                i_start = i_end+1
+                i_thread += 1
+                n_interactions = 0
+            end
+        end
+        i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
+        
+        # execute tasks
+        Threads.@threads for i_thread in eachindex(assignments)
+            assignment = assignments[i_thread]
+            for (i_target, j_source) in view(direct_list, assignment)
+                target_branch = target_branches[i_target]
+                source_bodies_index = source_branches[j_source].bodies_index[i_source_system]
+                Threads.lock(target_branch.lock) do
+                    P2P!(target_system, target_branch, source_system, source_bodies_index)
+                end
+            end
         end
     end
-    resize!(chunks,i_thread-1)
-end
-
-function nearfield_multi_thread!(target_system, target_branches, source_system, source_branches, direct_list)
-    # divide chunks
-    n_threads = Threads.nthreads()
-    total_cost = total_cost(target_branches, source_branches, direct_list)
-    cost_per_chunk = total_cost / n_threads
-    
-    # create chunk map (first_direct_list_index, last_index)
-    chunks = nearfield_create_chunks(target_branches, source_branches, direct_list, cost_per_chunk)
-
-    # assign tasks
-    tasks = map(chunks) do chunk
-        Threads.@spawn nearfield_lock!(target_system, target_branches, source_system, source_branches, view(direct_list,chunk))
-    end
-
-    # synchronize
-    wait.(tasks)
 
     return nothing
 end
 
-function nearfield_lock!(target_system, target_branches, source_system, source_branches, direct_list)
-    for (i_target, j_source) in direct_list
-        Threads.lock(target_branches[i_target].lock) do
-            P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
-        end
-    end
-end
-
-function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order)
-    # harmonics = zeros(eltype(target_branches[1].multipole_expansion), (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
-    # L = zeros(eltype(target_branches[1].local_expansion), 4)
+function nearfield_multithread!(target_system, target_branches, source_system, source_branches, direct_list)
+    ## load balance
+    n_threads = Threads.nthreads()
+    assignments = Vector{UnitRange{Int64}}(undef,n_threads)
     
-    for (i_target, j_source) in m2l_list
-        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)        
-        # M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
+    # total number of interactions
+    n_interactions = 0
+    for (i_target, i_source) in direct_list
+        target_leaf = view(target_branches,i_target)
+        source_leaf = view(source_branches,i_source)
+        n_interactions += get_n_bodies(target_leaf[].bodies_index) * get_n_bodies(source_leaf[].bodies_index)
     end
     
+    # interactions per thread
+    n_per_thread, rem = divrem(n_interactions, n_threads)
+    rem > 0 && (n_per_thread += 1)
+
+    # if there are too many threads, we'll actually hurt performance
+    n_per_thread < MIN_NPT_NF && (n_per_thread = MIN_NPT_NF)
+
+    # create assignments
+    for i in eachindex(assignments)
+        assignments[i] = 1:0
+    end
+    i_start = 1
+    i_thread = 1
+    n_interactions = 0
+    for (i_end,(i_target, i_source)) in enumerate(direct_list)
+        target_leaf = view(target_branches,i_target)
+        source_leaf = view(source_branches,i_source)
+        n_interactions += get_n_bodies(target_leaf[].bodies_index) * get_n_bodies(source_leaf[].bodies_index)
+        if n_interactions >= n_per_thread
+            assignments[i_thread] = i_start:i_end
+            i_start = i_end+1
+            i_thread += 1
+            n_interactions = 0
+        end
+    end
+    i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
+    
+    # execute tasks
+    Threads.@threads for assignment in assignments
+        for (i_target, j_source) in view(direct_list, assignment)
+            target_branch = target_branches[i_target]
+            Threads.lock(target_branch.lock) do
+                P2P!(target_system, target_branch, source_system, source_branches[j_source])
+            end
+        end
+    end
+
+    return nothing
 end
 
-function horizontal_pass_lock!(target_branches, source_branches, m2l_list, expansion_order)
+function horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, expansion_order)
     for (i_target, j_source) in m2l_list
-        Threads.lock(target_branches[i_target].lock) do
-            M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
-        end
+        M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
     end
 end
 
-# function horizontal_pass_single_thread!(target_branches, source_branches, m2l_list, expansion_order, harmonics, L)
+# function horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, expansion_order, harmonics, L)
 #     for (i_target, j_source) in m2l_list
 #         @lock target_branches[i_target].lock M2L!(target_branches[i_target], source_branches[j_source], harmonics, L, expansion_order)
 #     end
@@ -275,34 +325,35 @@ end
 #     containers = [preallocate_horizontal_pass(expansion_type, expansion_order) for _ in 1:n]
 # end
 
-function horizontal_pass_multi_thread!(target_branches, source_branches, m2l_list, expansion_order)
-    # divide chunks
+function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, expansion_order::Val{P}) where {TF,P}
+    # number of translations per thread
     n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(m2l_list),n_threads)
-    if n_per_chunk == 0
-        n_per_chunk = 1
-        rem = 0
-    end
-    range_1 = range(1,step=n_per_chunk+1,length=rem)
-    range_2 = range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(m2l_list))
+    n_per_thread, rem = divrem(length(m2l_list),n_threads)
+    rem > 0 && (n_per_thread += 1)
+    assignments = 1:n_per_thread:length(m2l_list)
 
-    # preallocate containers for each task
-    # containers_1 = preallocate_horizontal_pass(eltype(target_branches[1].local_expansion), expansion_order, length(range_1))
-    # containers_2 = preallocate_horizontal_pass(eltype(target_branches[1].local_expansion), expansion_order, length(range_2))
+    # preallocate memory
+    # harmonics_preallocated = [initialize_harmonics(P,TF) for _ in 1:length(assignments)]
+    # ML_preallocated = [initialize_ML(P,TF) for _ in 1:length(assignments)]
 
-    # assign tasks
-    tasks_1 = map(range_1) do i_start
-        # tasks_1 = map(range_1, containers_1) do i_start, containers
-        Threads.@spawn horizontal_pass_lock!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk), expansion_order)#, containers...)
+    # execute tasks
+    Threads.@threads for i_thread in 1:length(assignments)
+	# Threads.@threads for i_start in 1:n_per_thread:length(m2l_list)
+        i_start = assignments[i_thread]
+        i_stop = min(i_start+n_per_thread-1, length(m2l_list))
+        # harmonics = harmonics_preallocated[i_thread]
+        # ML = ML_preallocated[i_thread]
+        # harmonics = initialize_harmonics(P,TF)
+        # ML = initialize_ML(P,TF)
+        for (i_target, j_source) in m2l_list[i_start:i_stop]
+            Threads.lock(target_branches[i_target].lock) do
+                M2L!(target_branches[i_target], source_branches[j_source], expansion_order)
+                # M2L!(target_branches[i_target], source_branches[j_source], harmonics, ML, expansion_order)
+            end
+            # target_branch = target_branches[i_target]
+            # Threads.@lock target_branch.lock M2L!(target_branch, source_branches[j_source], expansion_order)
+        end
     end
-    tasks_2 = map(range_2) do i_start
-        # tasks_2 = map(range_2, containers_2) do i_start, containers
-        Threads.@spawn horizontal_pass_lock!(target_branches, source_branches, view(m2l_list,i_start:i_start+n_per_chunk-1), expansion_order)#, containers...)
-    end
-
-    # synchronize
-    wait.(tasks_1)
-    wait.(tasks_2)
     
     return nothing
 end
@@ -310,21 +361,26 @@ end
 #####
 ##### downward pass
 #####
-function preallocate_l2b(float_type, expansion_type, expansion_order)
+function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}, n_threads) where P
+    containers = [preallocate_l2b(float_type, expansion_type, expansion_order) for _ in 1:n_threads]
+    return containers
+end
+
+@inline function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}) where P
     vector_potential = zeros(float_type,3)
     potential_jacobian = zeros(float_type,3,4)
     potential_hessian = zeros(float_type,3,3,4)
     #derivative_harmonics = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
     #derivative_harmonics_theta = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
     #derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics = zeros(expansion_type, 2, 3, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics = zeros(expansion_type, 2, 3, ((P+1) * (P+2)) >> 1)
     workspace = zeros(float_type,3,4)
     #return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
     return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace
 end
 
-function downward_pass_single_thread!(branches, systems, expansion_order)
-    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
+function downward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
+    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
     L = zeros(eltype(branches[1].multipole_expansion),2,4)
     #vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     vector_potential, potential_jacobian, potential_hessian, harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
@@ -337,114 +393,90 @@ function downward_pass_single_thread!(branches, systems, expansion_order)
             #println("L2B tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)")
         else
             for child_branch in view(branches,branch.branch_index)
-                #l = length(ReverseDiff.tape(systems[1].bodies[1].position[2]))
-                
-                L2L!(branch, child_branch, regular_harmonics, L, expansion_order)
-                #println("L2L tape entries: $(length(ReverseDiff.tape(systems[1].bodies[1].position[2])) - l)")
+                L2L!(branch, child_branch, regular_harmonics, branch.ML, expansion_order)
             end
         end
     end
 end
 
-@inline function translate_locals(branch, branches, harmonics, L, expansion_order)
-    if branch.n_branches > 0 # branch is not a leaf
-
-        # iterate over children
-        for child_branch in view(branches, branch.branch_index)
-            L2L!(branch, child_branch, harmonics, L, expansion_order)
-        end
-    end
-end
-
-function translate_locals_multi_thread!(branches, expansion_order, levels_index)
+function translate_locals_multithread!(branches, expansion_order::Val{P}, levels_index) where P
     # initialize memory
     n_threads = Threads.nthreads()
     
     # iterate over levels
-    for level_index in levels_index
+    for level_index in view(levels_index,2:length(levels_index))
         
-        # if its too fine, no sense multithreading
-        if Threads.nthreads() < 5 # length(level_index) > 100
+        # divide chunks
+        n_per_thread, rem = divrem(length(level_index),n_threads)
+        rem > 0 && (n_per_thread += 1)
 
-            # divide chunks
-            n_per_chunk, rem = divrem(length(level_index),n_threads)
-            if n_per_chunk == 0
-                n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-                rem = 0 # no reason to spread a remainder
-            end
+        # if there are too many threads, we'll actually hurt performance
+        n_per_thread < MIN_NPT_L2L && (n_per_thread = MIN_NPT_L2L)
+
+        # loop over branches
+        Threads.@threads for i_start in 1:n_per_thread:length(level_index)
+            i_stop = min(i_start+n_per_thread-1,length(level_index))
 
             # loop over branches
-            Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(level_index))...)
-                chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1 # some chunks are 1 branch longer to evenly spread the remainder in `n_per_chunk, rem = divrem(...)`
-
-                # initialize memory
-                harmonics = zeros(eltype(branches[1].multipole_expansion), 2,(expansion_order+1)*(expansion_order+1))
-                L = zeros(eltype(branches[1].multipole_expansion), 4)
-
-                # loop over branches
-                for branch in view(branches,view(level_index,i_start:i_start+chunk_size-1)) # no need to create a multipole expansion at the very top level
-                    translate_locals(branch, branches, harmonics, L, expansion_order)
-                end
-            end
-        else
-            harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (expansion_order+1)*(expansion_order+1))
-            L = zeros(eltype(branches[1].multipole_expansion), 4)
-            for branch in view(branches,level_index)
-                translate_locals(branch, branches, harmonics, L, expansion_order)
+            for child_branch in view(branches,view(level_index,i_start:i_stop))
+                L2L!(branches[child_branch.i_parent], child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
             end
         end
     end
     return nothing
 end
 
-function local_2_body_multi_thread!(branches, systems, expansion_order, leaf_index)
-    # divide chunks
+function local_2_body_multithread!(branches, systems, expansion_order, leaf_index)
+    # create assignments
     n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
-    if n_per_chunk == 0
-        n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-        rem = 0 # no reason to spread a remainder
+
+    n_bodies = 0
+    for i_leaf in leaf_index
+        n_bodies += get_n_bodies(branches[i_leaf])
     end
 
+    n_per_thread, rem = divrem(n_bodies,n_threads)
+    rem > 0 && (n_per_thread += 1)
+
+    assignments = fill(1:0,n_threads)
+    i_start = 1
+    i_thread = 0
+    n_bodies = 0
+    for (i_end,i_leaf) in enumerate(leaf_index)
+        n_bodies += get_n_bodies(branches[i_leaf])
+        if n_bodies >= n_per_thread
+            i_thread += 1
+            assignments[i_thread] = i_start:i_end
+            i_start = i_end+1
+            n_bodies = 0
+        end
+    end
+    if i_start <= length(leaf_index)
+        i_thread += 1
+        assignments[i_thread] = i_start:length(leaf_index)
+    end
+    resize!(assignments, i_thread)
+
+    # preallocate containers
+    containers = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order, n_threads)
+
     # spread remainder across rem chunks
-    Threads.@threads for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        #vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
-        chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
-        for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
-            #L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
-            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace)
+    Threads.@threads for i_thread in eachindex(assignments)
+        assignment = assignments[i_thread]
+        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = containers[i_thread]
+        for i_leaf in view(leaf_index,assignment)
+            leaf = branches[i_leaf]
+            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
         end
     end
 end
 
-function local_2_body_single_thread!(branches, systems, expansion_order, leaf_index)
-    # divide chunks
-    n_threads = Threads.nthreads()
-    n_per_chunk, rem = divrem(length(leaf_index),n_threads)
-    if n_per_chunk == 0
-        n_per_chunk = 1 # 1 task per thread, though not all threads get a task
-        rem = 0 # no reason to spread a remainder
-    end
-
-    # spread remainder across rem chunks
-    for i_start in (range(1,step=n_per_chunk+1,length=rem)...,range(1+(n_per_chunk+1)*rem,step=n_per_chunk,stop=length(leaf_index))...)
-        #vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
-        chunk_size = i_start > (n_per_chunk+1)*rem ? n_per_chunk : n_per_chunk + 1
-        for leaf in view(branches,view(leaf_index,i_start:i_start+chunk_size-1))
-            #L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
-            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, workspace)
-        end
-    end
-end
-
-function downward_pass_multi_thread!(branches, systems, expansion_order, levels_index, leaf_index)
+function downward_pass_multithread!(branches, systems, expansion_order, levels_index, leaf_index)
     # m2m translation
-    translate_locals_multi_thread!(branches, expansion_order, levels_index)
+	translate_locals_multithread!(branches, expansion_order, levels_index)
     
-    # create multipole expansions
-    local_2_body_multi_thread!(branches, systems, expansion_order, leaf_index)
+    # local to body interaction 
+    local_2_body_multithread!(branches, systems, expansion_order, leaf_index)
 end
 
 #####
@@ -454,14 +486,14 @@ function build_interaction_lists(branches, theta, farfield, nearfield)
     return build_interaction_lists(branches, branches, theta, farfield, nearfield)
 end
 
-function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield)
+function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield, self_induced)
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, theta, farfield, nearfield)
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
@@ -471,15 +503,15 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     summed_radii_squared *= summed_radii_squared
     if center_spacing_squared * theta * theta >= summed_radii_squared && farfield # meet M2L criteria
         push!(m2l_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield # both leaves
+    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && !(!self_induced && i_target==j_source) # both leaves
         push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
         end
     else
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield, self_induced)
         end
     end
 end
@@ -487,71 +519,39 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
-    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
+function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true)
+    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced=true, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
 end
 
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true)
     # reset multipole/local expansions
     reset_target_tree && (reset_expansions!(source_tree))
     reset_source_tree && (reset_expansions!(source_tree))
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield)
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield, self_induced)
+
     # run FMM
-    if true#Threads.nthreads() == 1
-        # println("nearfield")
-        nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+    if Threads.nthreads() == 1
+        nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
-            # println("upward pass:")
-            upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)
-            #@show target_tree.branches[20].local_expansion
-            # println("horizontal pass:")
-            for i=1:length(target_tree.branches)
-                for j=1:length(target_tree.branches[i].harmonics)
-                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].harmonics[j]))) > 0
-                        error("NaN in harmonics of tree $(i) in branch $(j)!")
-                    end
-                end
-            end
-            for i=1:length(target_tree.branches)
-                for j=1:length(target_tree.branches[i].ML)
-                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].ML[j]))) > 0
-                        error("NaN in ML of tree $(i) in branch $(j)!")
-                    end
-                end
-            end
-            for i=1:length(target_tree.branches)
-                for j=1:length(target_tree.branches[i].multipole_expansion)
-                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].multipole_expansion[j]))) > 0
-                        error("NaN in multipole expansion of tree $(i) in branch $(j)!")
-                    end
-                end
-            end
-            for i=1:length(target_tree.branches)
-                for j=1:length(target_tree.branches[i].local_expansion)
-                    if sum(isnan.(ForwardDiff.partials(target_tree.branches[i].local_expansion[j]))) > 0
-                        error("NaN in local expansion of tree $(i) in branch $(j)!")
-                    end
-                end
-            end
-            horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            
-            # println("downward pass:")
-            downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)
+            upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
+            horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+            downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order)
         end
     else # multithread
         # println("nearfield")
-        # nearfield && (nearfield_multi_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, source_tree.cost_parameters, direct_list))
-        nearfield && (nearfield_single_thread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        # @time nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
-            # println("upward pass:")
-            upward_pass_single_thread!(source_tree.branches, source_systems, source_tree.expansion_order)#, source_tree.levels_index, source_tree.leaf_index)
-            # upward_pass_multi_thread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-            # println("horizontal pass:")
-            horizontal_pass_single_thread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            # downward_pass_multi_thread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
-            # println("downward pass:")
-            downward_pass_single_thread!(target_tree.branches, target_systems, target_tree.expansion_order)#, target_tree.levels_index, target_tree.leaf_index)
+            # println("upward pass")
+            upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+            # @time upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+            # println("horizontal pass")
+            length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
+            # @time length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
+            # println("downward pass")
+            downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+            # @time downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
 
@@ -560,16 +560,13 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     unsort_source_bodies && (unsort!(source_systems, source_tree))
 end
 
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
     # create tree
-    tree = Tree(systems; expansion_order=expansion_order, n_per_branch=n_per_branch, ndivisions=ndivisions, shrink_recenter=shrink_recenter)
-    l = length(ReverseDiff.tape(tree.branches[1].radius))
-    println("tape length before running fmm: $l")
-
+    tree = Tree(systems; expansion_order, n_per_branch, ndivisions, shrink_recenter)
+    
     # perform fmm
-    fmm!(tree, systems; theta=theta, reset_tree=false, nearfield=nearfield, farfield=farfield, unsort_bodies=unsort_bodies)
-    l2 = length(ReverseDiff.tape(tree.branches[1].radius))
-    println("tape length after running fmm: $l2.\n$(l2-l) additional tape entries.")
+    fmm!(tree, systems; theta, reset_tree=false, nearfield, farfield, self_induced, unsort_bodies)
+    
     # visualize
     save_tree && (visualize(save_name, systems, tree))
     return tree
@@ -583,7 +580,7 @@ end
 
 @inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
@@ -591,7 +588,7 @@ function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_so
     source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter, ndivisions=ndivisions_source)
     target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
     # perform fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
+    fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
 
     # visualize
     save_tree && (visualize(save_name, systems, tree))

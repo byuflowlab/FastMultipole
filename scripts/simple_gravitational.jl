@@ -82,8 +82,16 @@ end
 
 function bm_fmm()
     expansion_order, n_per_branch, theta = 5, 100, 0.4
-    n_bodies = 10000
+    n_bodies = 10_000
     system = generate_gravitational(123, n_bodies)
+    # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
+    fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
+    return nothing
+end
+
+function bm_fmm_system(system)
+    expansion_order, n_per_branch, theta = 5, 100, 0.4
+    n_bodies = 10_000
     # tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=true)
     fmm.fmm!(system; expansion_order=expansion_order, n_per_branch=n_per_branch, theta=theta, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter=false)
     return nothing
@@ -97,15 +105,19 @@ function bm_direct()
 end
 
 function bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-    system = (generate_gravitational(123, n_bodies),)
+    system = generate_gravitational(123, n_bodies)
+    # system = (generate_gravitational(123, n_bodies),)
     println("Create tree")
     @time tree = fmm.Tree(system; expansion_order, n_per_branch, shrink_recenter=shrink_recenter)
     println("Run fmm")
     @time fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
+    # println("Run fmm again")
+    # @time fmm.fmm!(tree, system; theta=theta, reset_tree=true, nearfield=true, farfield=true, unsort_bodies=true)
     println("BEGIN DIRECT")
     system2 = generate_gravitational(123, n_bodies)
     @time fmm.direct!(system2, 1:n_bodies, system2, 1:n_bodies)
-    phi = system[1].potential[1,:]
+    phi = system.potential[1,:]
+    # phi = system[1].potential[1,:]
     phi2 = system2.potential[1,:]
     return maximum(abs.(phi2 - phi)), system, tree, system2
 end
@@ -304,11 +316,7 @@ end
 
 # shrink_recenter = false
 # farfield=nearfield=true
-<<<<<<< Updated upstream
-expansion_order, n_per_branch, theta = 4, 500, 0.6
-=======
 expansion_order, n_per_branch, theta = 10, 500, 0.4
->>>>>>> Stashed changes
 n_bodies = 10_000
 
 shrink_recenter, ndivisions = true, 15
@@ -320,27 +328,36 @@ shrink_recenter, ndivisions = true, 15
 # err, system, tree, system2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 
-<<<<<<< Updated upstream
 println("===== nthreads: $(Threads.nthreads()) =====")
-err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-=======
+# err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
+
+n_bodies = 100_000
+system = generate_gravitational(123, n_bodies)
+bm_fmm_system(system)
+# @time bm_fmm_system(system)
+
+# why is it spending so much time precompiling? Apparently because I am creating a new system in the benchmark function
+# using BenchmarkTools
+# system = generate_gravitational(123, n_bodies)
+# @btime bm_fmm_system($system)
+
 # println("===== nthreads: $(Threads.nthreads()) =====")
 # err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 # @show err
 # err_ns, sys_ns, tree_ns, sys2_ns = bm_fmm_accuracy(expansion_order, n_per_branch, theta, n_bodies, false)
 # @show err_ns
 
-err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
->>>>>>> Stashed changes
-@show err
-err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-@show err
-err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-@show err
-err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-@show err
-err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api_twice(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
-@show err
+# err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
+# err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
+# err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
+# err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
+# err, source_system, source_tree, target_system, target_tree, system2 = bm_fmm_accuracy_dual_tree_wrapped_multiple_nested_api_twice(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
+# @show err
 
 # bm_fmm_accuracy_dual_tree(expansion_order, n_per_branch, theta, n_bodies, shrink_recenter)
 

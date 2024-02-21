@@ -1,10 +1,15 @@
 import Statistics as S
 import FLOWFMM as fmm
 import PyPlot as plt
-
+using BSON
 
 scripts_dir = @__DIR__
+save_dir = "benchmark_results"
 include(joinpath(scripts_dir, "..", "test", "gravitational.jl"))
+
+if !isdir(joinpath(scripts_dir, save_dir))
+    mkdir(joinpath(scripts_dir, save_dir))
+end
 
 function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, theta=4)
     times_fmm = zeros(length(ns_fmm))
@@ -61,9 +66,10 @@ end
 
 
 # ns = [10^i for i in 1:6]
-ns = [10, 100, 1000]#, 10000, 50000, 100000, 1000000, 5000000]
+ns = [10, 100, 1000, 10_000, 50_000, 100_000, 1_000_000, 5_000_000]
 is_direct = 1:5
 times_fmm, times_direct, mean_errs = benchmark_fmm(ns, is_direct)
+BSON.@save joinpath(scripts_dir, save_dir,"benchmark_20240129_nthreads$(Threads.nthreads()).bson") ns is_direct times_fmm times_direct mean_errs
 
 fig = plt.figure("benchmark_fmm")
 fig.clear()
@@ -74,9 +80,11 @@ ax.plot(ns, times_direct, label="direct")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.legend()
+plt.savefig(joinpath(scripts_dir, save_dir,"benchmark_fmm.png"))
 
 fig = plt.figure("error")
 fig.clear()
 fig.add_subplot(111,xlabel="elements", ylabel="mean error")
 ax = fig.get_axes()[1]
 ax.plot(ns, mean_errs)
+plt.savefig(joinpath(scripts_dir, save_dir,"error.png"))

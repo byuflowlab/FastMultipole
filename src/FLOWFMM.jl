@@ -11,7 +11,15 @@ using WriteVTK
 
 const ONE_OVER_4PI = 1/4/pi
 
-for file in ["containers", "derivatives", "element", "tree", "direct", "spherical", "fmm", "sortwrapper", "compatibility", "b2m", "visualize", "estimate_cost", "rrules_definitions"]
+# multithreading parameters
+const MIN_NPT_B2M = 100
+const MIN_NPT_M2M = 100
+const MIN_NPT_M2L = 100
+const MIN_NPT_L2L = 100
+const MIN_NPT_L2B = 100
+const MIN_NPT_NF = 100
+
+for file in ["containers", "complex", "derivatives", "element", "tree", "direct", "spherical", "fmm", "sortwrapper", "compatibility", "b2m", "visualize", "rrules_definitions"]#, "estimate_cost"]
     include(file*".jl")
 end
 
