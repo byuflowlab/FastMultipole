@@ -475,10 +475,6 @@ end
 #####
 ##### create interaction lists
 #####
-function build_interaction_lists(branches, theta, farfield, nearfield)
-    return build_interaction_lists(branches, branches, theta, farfield, nearfield)
-end
-
 function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
@@ -496,7 +492,7 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     summed_radii_squared *= summed_radii_squared
     if center_spacing_squared * theta * theta >= summed_radii_squared && farfield # meet M2L criteria
         push!(m2l_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && !(!self_induced && i_target==j_source) # both leaves
+    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && (i_target!=j_source || self_induced) # both leaves
         push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
         for i_child in target_branch.branch_index
@@ -513,7 +509,7 @@ end
 ##### running FMM
 #####
 function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true)
-    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced=true, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
+    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
 end
 
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true)
