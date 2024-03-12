@@ -189,3 +189,14 @@ end
 function SortWrapper(system)
     return SortWrapper(system,collect(1:get_n_bodies(system)))
 end
+
+#####
+##### when we desire to evaluate the potential at locations not coincident with source centers
+#####
+struct ProbeSystem{TF,TSP,TVP,TV,TVG}
+    position::Vector{SVector{3,TF}}
+    scalar_potential::TSP
+    vector_potential::TVP
+    velocity::TV
+    velocity_gradient::TVG
+end

@@ -1489,3 +1489,19 @@ FLOWFMM.M2B!(target_potential, target, displ, irregular_harmonics, multipole_exp
 @test isapprox(target_potential[1], 0.022849841377239076; atol=1e-12)
 
 end
+
+@testset "probes" begin
+
+n_bodies = 101
+bodies = rand(8,n_bodies)
+bodies[5:8,2:n_bodies] .= 0.0
+probes = fmm.ProbeSystem(bodies[1:3,2:end]; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true)
+mass = Gravitational(bodies)
+fmm.fmm!(probes, mass; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4)
+fmm.fmm!(mass; expansion_order=5, n_per_branch=50, theta=0.4)
+
+for i_mass in 2:n_bodies
+    @test isapprox(mass.potential[1,i_mass], probes.scalar_potential[i_mass-1]; atol=1e-12)
+end
+
+end
