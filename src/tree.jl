@@ -2,6 +2,9 @@
 # global SHRINKING_OFFSET = .000001
 # away_from_center! is a bandaid fix
 
+const WARNING_FLAG_N_PER_BRANCH = Array{Bool,0}(undef)
+WARNING_FLAG_N_PER_BRANCH[] = true
+
 #####
 ##### tree constructor
 #####
@@ -39,7 +42,10 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
             parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
             push!(levels_index, parents_index)
         end
-        @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `ndivisions` > $(length(levels_index))"
+        if WARNING_FLAG_N_PER_BRANCH[]
+            @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `ndivisions` > $(length(levels_index))"
+            WARNING_FLAG_N_PER_BRANCH[] = false
+        end
     end
 
     # # check depth

@@ -146,13 +146,13 @@ end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
 
-abstract type Tree{P} end
+abstract type Tree{TF,P} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB,P} <: Tree{P}
+struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
@@ -165,7 +165,7 @@ struct MultiTree{TF,N,TB,P} <: Tree{P}
     # cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB,P} <: Tree{P}
+struct SingleTree{TF,TB,P} <: Tree{TF,P}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}

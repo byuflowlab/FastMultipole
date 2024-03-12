@@ -494,11 +494,11 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
         push!(m2l_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && (i_target!=j_source || self_induced) # both leaves
         push!(direct_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0)
+    elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
         end
-    else
+    else # source is not a leaf AND target is a leaf or is smaller
         for j_child in source_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield, self_induced)
         end

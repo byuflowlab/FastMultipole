@@ -290,7 +290,7 @@ function M2B!(target_potential, target, center, irregular_harmonics, multipole_e
     target_potential .+= d_potential
 end
 
-function M2B!(target_potential, target, i_branch, tree::Tree{P}) where P
+function M2B!(target_potential, target, i_branch, tree::Tree{<:Any,P}) where P
     branch = tree.branches[i_branch]
     irregular_harmonics = Matrix{eltype(branch.multipole_expansion[1])}(undef, 2, (P+1)^2)
     M2B!(target_potential, target, branch.center, irregular_harmonics, branch.multipole_expansion, P)
@@ -397,7 +397,7 @@ function M2L!(target_branch, source_branch, expansion_order::Val{P}) where P
     M2L_loop!(target_branch.local_expansion, target_branch.ML, source_branch.multipole_expansion, target_branch.harmonics, expansion_order)
 end
 
-function B2L!(tree::Tree{P}, i_branch, source_position, source_strength) where P
+function B2L!(tree::Tree{<:Any,P}, i_branch, source_position, source_strength) where P
     branch = tree.branches[i_branch]
     irregular_harmonics = Matrix{eltype(branch.multipole_expansion)}(undef, 2, (P+1)^2)
     r, theta, phi = cartesian_2_spherical(source_position - branch.center)
