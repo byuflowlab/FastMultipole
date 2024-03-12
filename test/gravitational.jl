@@ -37,8 +37,8 @@ Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = g.potential[1,i]
 Base.getindex(g::Gravitational, i, ::fmm.Velocity) = view(g.potential,i_VELOCITY,i)
 Base.getindex(g::Gravitational, i, ::fmm.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
 Base.getindex(g::Gravitational, i, ::fmm.ScalarStrength) = g.bodies[i].strength[1]
-Base.getindex(g::Gravitational, i) = g.bodies[i], view(g.potential,:,i)
-function Base.setindex!(g::Gravitational, val, i)
+Base.getindex(g::Gravitational, i, ::fmm.Body) = g.bodies[i], view(g.potential,:,i)
+function Base.setindex!(g::Gravitational, val, i, ::fmm.Body)
     body, potential = val
     g.bodies[i] = body
     g.potential[:,i] .= potential

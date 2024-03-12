@@ -345,14 +345,14 @@ end
 function sort_bodies!(system, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
     # sort indices
     for i_body in bodies_index
-        i_octant = get_octant(system[i_body,POSITION], center)
-        buffer[octant_indices[i_octant]] = system[i_body]
+        i_octant = get_octant(system[i_body, POSITION], center)
+        buffer[octant_indices[i_octant]] = system[i_body, BODY]
         sort_index_buffer[octant_indices[i_octant]] = sort_index[i_body]
         octant_indices[i_octant] += 1
     end
     # place buffers
     for i_body in bodies_index
-        system[i_body] = buffer[i_body]
+        system[i_body, BODY] = buffer[i_body]
     end
     sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
 end
@@ -396,10 +396,10 @@ end
 
 @inline function unsort!(system, buffer, inverse_sort_index)
     for i_body in 1:get_n_bodies(system)
-        buffer[i_body] = system[inverse_sort_index[i_body]]
+        buffer[i_body] = system[inverse_sort_index[i_body], BODY]
     end
     for i_body in 1:get_n_bodies(system)
-        system[i_body] = buffer[i_body]
+        system[i_body, BODY] = buffer[i_body]
     end
 end
 
