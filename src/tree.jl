@@ -118,8 +118,6 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
             # count bodies per octant
             census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
             update_octant_accumulator!(cumulative_octant_census)
-
-            # @show cumulative_octant_census parents_index get_population(cumulative_octant_census)
             
             # number of child branches
             if get_population(cumulative_octant_census) > n_per_branch
