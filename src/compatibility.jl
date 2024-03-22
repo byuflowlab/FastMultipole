@@ -87,7 +87,10 @@ end
 
 Base.getindex(sys, i, ::Vertex, i_vertex) = @error "`getindex!` not overloaded for `FLOWFMM.Vertex` for type $(typeof(sys)); cannot run FMM"
 
-Base.setindex!(sys, val, i) = @error "setindex! not overloaded for type $(typeof(sys))"
+function Base.setindex!(sys, val, i)
+    @error "setindex! not overloaded for type $(typeof(sys))"
+    return sum("hello")
+end
 
 Base.setindex!(sys, val, i, ::ScalarPotential) = nothing
 

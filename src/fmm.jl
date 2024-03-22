@@ -552,9 +552,11 @@ end
 
 function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
     # create tree
+    println("creating trees...")
     tree = Tree(systems; expansion_order, n_per_branch, ndivisions, shrink_recenter)
     
     # perform fmm
+    println("run fmm...")
     fmm!(tree, systems; theta, reset_tree=false, nearfield, farfield, self_induced, unsort_bodies)
     
     # visualize

@@ -1,3 +1,8 @@
+function ProbeSystem(n_probes::Int, TF=Float64; scalar_potential=false, vector_potential=false, velocity=false, velocity_gradient=false)
+    positions = Vector{SVector{3,TF}}(undef,n_probes)
+    return ProbeSystem(positions; scalar_potential, vector_potential, velocity, velocity_gradient)
+end
+
 function ProbeSystem(positions::Vector{SVector{3,TF}}; scalar_potential=false, vector_potential=false, velocity=false, velocity_gradient=false) where TF
     n_probes = length(positions)
     scalar_potentials = scalar_potential ? zeros(TF,n_probes) : nothing
@@ -14,32 +19,32 @@ function ProbeSystem(positions::Matrix{TF}; scalar_potential=false, vector_poten
 end
 
 # fast, flexible access that avoids excess storage
-@inline get_scalar_potential(probe_system::ProbeSystem{<:Any,Nothing,<:Any,<:Any,<:Any}, i) = nothing
+@inline get_scalar_potential(probe_system::ProbeSystem{TF,Nothing,<:Any,<:Any,<:Any}, i) where TF = zero(TF)
 @inline get_scalar_potential(probe_system::ProbeSystem, i) = probe_system.scalar_potential[i]
-@inline get_vector_potential(probe_system::ProbeSystem{<:Any,<:Any,Nothing,<:Any,<:Any}, i) = nothing
+@inline get_vector_potential(probe_system::ProbeSystem{TF,<:Any,Nothing,<:Any,<:Any}, i) where TF = zero(SVector{3,TF})
 @inline get_vector_potential(probe_system::ProbeSystem, i) = probe_system.vector_potential[i]
-@inline get_velocity(probe_system::ProbeSystem{<:Any,<:Any,<:Any,Nothing,<:Any}, i) = nothing
+@inline get_velocity(probe_system::ProbeSystem{TF,<:Any,<:Any,Nothing,<:Any}, i) where TF = zero(SVector{3,TF})
 @inline get_velocity(probe_system::ProbeSystem, i) = probe_system.velocity[i]
-@inline get_velocity_gradient(probe_system::ProbeSystem{<:Any,<:Any,<:Any,<:Any,Nothing}, i) = nothing
+@inline get_velocity_gradient(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,Nothing}, i) where TF = zero(SMatrix{3,3,TF,9})
 @inline get_velocity_gradient(probe_system::ProbeSystem, i) = probe_system.velocity_gradient[i]
-@inline set_scalar_potential!(probe_system::ProbeSystem{<:Any,Nothing,<:Any,<:Any,<:Any}, i) = nothing
+@inline set_scalar_potential!(probe_system::ProbeSystem{<:Any,Nothing,<:Any,<:Any,<:Any}, val, i) = nothing
 @inline set_scalar_potential!(probe_system::ProbeSystem, val, i) = probe_system.scalar_potential[i] = val
-@inline set_vector_potential!(probe_system::ProbeSystem{<:Any,<:Any,Nothing,<:Any,<:Any}, i) = nothing
+@inline set_vector_potential!(probe_system::ProbeSystem{<:Any,<:Any,Nothing,<:Any,<:Any}, val, i) = nothing
 @inline set_vector_potential!(probe_system::ProbeSystem, val, i) = probe_system.vector_potential[i] = val
 @inline set_velocity!(probe_system::ProbeSystem{<:Any,<:Any,<:Any,Nothing,<:Any}, val, i) = nothing
 @inline set_velocity!(probe_system::ProbeSystem, val, i) = probe_system.velocity[i] = val
-@inline set_velocity_gradient!(probe_system::ProbeSystem{<:Any,<:Any,<:Any,<:Any,Nothing}, i) = nothing
+@inline set_velocity_gradient!(probe_system::ProbeSystem{<:Any,<:Any,<:Any,<:Any,Nothing}, val, i) = nothing
 @inline set_velocity_gradient!(probe_system::ProbeSystem, val, i) = probe_system.velocity_gradient[i] = val
 
 # compatibility access functions
 Base.getindex(probe_system::ProbeSystem, i, ::Position) = probe_system.position[i]
 Base.getindex(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}, i, ::Radius) where TF = zero(TF)
-Base.getindex(probe_system::ProbeSystem, i, ::ScalarPotential) = probe_system.scalar_potential[i]
-Base.getindex(probe_system::ProbeSystem, i, ::VectorPotential) = probe_system.vector_potential[i]
-Base.getindex(probe_system::ProbeSystem, i, ::Velocity) = probe_system.velocity[i]
-Base.getindex(probe_system::ProbeSystem, i, ::VelocityGradient) = probe_system.velocity_gradient[i]
+Base.getindex(probe_system::ProbeSystem, i, ::ScalarPotential) = get_scalar_potential(probe_system, i)
+Base.getindex(probe_system::ProbeSystem, i, ::VectorPotential) = get_vector_potential(probe_system, i)
+Base.getindex(probe_system::ProbeSystem, i, ::Velocity) = get_velocity(probe_system, i)
+Base.getindex(probe_system::ProbeSystem, i, ::VelocityGradient) = get_velocity_gradient(probe_system, i)
 Base.getindex(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}, i, ::ScalarStrength) where TF = zero(TF)
-Base.getindex(probe_system::ProbeSystem, i, ::Body) = probe_system.position[i], get_scalar_potential(probe_system, i), get_vector_potential(probe_system, i), get_velocity(probe_system, i), get_velocity_gradient(probe_system, i)  
+Base.getindex(probe_system::ProbeSystem, i, ::Body) = probe_system.position[i], get_scalar_potential(probe_system, i), get_vector_potential(probe_system, i), get_velocity(probe_system, i), get_velocity_gradient(probe_system, i)
 
 function Base.setindex!(probe_system::ProbeSystem, val, i, ::Body)
     (position, scalar_potential, vector_potential, velocity, velocity_gradient) = val
