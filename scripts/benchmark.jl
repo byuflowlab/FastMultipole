@@ -1,5 +1,5 @@
 import Statistics as S
-import FLOWFMM as fmm
+import FastMultipole as fmm
 import PyPlot as plt
 using BSON
 

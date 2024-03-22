@@ -1,6 +1,6 @@
 # module VPM
 
-import FLOWFMM as fmm
+import FastMultipole as fmm
 import WriteVTK
 using SpecialFunctions:erf
 
@@ -67,7 +67,7 @@ end
 function Base.setindex!(vp::VortexParticles, val, i, ::fmm.VelocityGradient)
     vp.potential[i_VELOCITY_GRADIENT_vortex,i] .= reshape(val,9)
 end
-FLOWFMM.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
+FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
 Base.eltype(::VortexParticles{TF}) where TF = TF
 
 """

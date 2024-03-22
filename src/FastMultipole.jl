@@ -1,4 +1,4 @@
-module FLOWFMM
+module FastMultipole
 
 import Base.:^
 using LinearAlgebra, StaticArrays, WriteVTK#, DelimitedFiles
