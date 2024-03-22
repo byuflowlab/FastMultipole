@@ -1,3 +1,3 @@
 # Tutorial
 
-Here is how you run FLOWFMM.
+Here is how you run FastMultipole.

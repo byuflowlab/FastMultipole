@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = FLOWFMM
+CurrentModule = FastMultipole
 ```
 
-# FLOWFMM
+# FastMultipole
 
-Documentation for [FLOWFMM](https://github.com/byuflowlab/FLOWFMM).
+Documentation for [FastMultipole](https://github.com/byuflowlab/FastMultipole).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [FLOWFMM]
+Modules = [FastMultipole]
 ```

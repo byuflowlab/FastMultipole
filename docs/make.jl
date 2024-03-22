@@ -1,14 +1,14 @@
-using FLOWFMM
+using FastMultipole
 using Documenter
 
-DocMeta.setdocmeta!(FLOWFMM, :DocTestSetup, :(using FLOWFMM); recursive=true)
+DocMeta.setdocmeta!(FastMultipole, :DocTestSetup, :(using FastMultipole); recursive=true)
 
 makedocs(;
-    modules=[FLOWFMM],
+    modules=[FastMultipole],
     authors="Ryan Anderson <rymanderson@gmail.com> and contributors",
-    sitename="FLOWFMM.jl",
+    sitename="FastMultipole.jl",
     format=Documenter.HTML(;
-        canonical="https://flow.byu.edu/FLOWFMM",
+        canonical="https://flow.byu.edu/FastMultipole",
         edit_link="main",
         assets=String[],
     ),
@@ -22,6 +22,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/byuflowlab/FLOWFMM",
+    repo="github.com/byuflowlab/FastMultipole",
     devbranch="main",
 )
