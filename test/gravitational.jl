@@ -1,7 +1,7 @@
-import FLOWFMM as fmm
+import FastMultipole as fmm
 using WriteVTK
 import Base: getindex, setindex!
-using FLOWFMM.StaticArrays
+using FastMultipole.StaticArrays
 const i_POSITION = 1:3
 const i_RADIUS = 4
 const i_STRENGTH = 5:8
@@ -56,7 +56,7 @@ end
 function Base.setindex!(g::Gravitational, val, i, ::fmm.VelocityGradient)
     reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
 end
-FLOWFMM.get_n_bodies(g::Gravitational) = length(g.bodies)
+FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF
 
 fmm.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))

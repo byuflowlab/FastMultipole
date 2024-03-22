@@ -1,4 +1,4 @@
-name = "FLOWFMM"
+name = "FastMultipole"
 uuid = "ce07d0d3-2b9f-49ba-89eb-12c800257c85"
 authors = ["Ryan Anderson <rymanderson@gmail.com> and contributors"]
 version = "1.0.0-DEV"

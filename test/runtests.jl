@@ -2,10 +2,14 @@ using Test
 import Statistics
 S = Statistics
 
-import FLOWFMM
-fmm = FLOWFMM
+import FastMultipole
+fmm = FastMultipole
 
-using FLOWFMM.LinearAlgebra, FLOWFMM.StaticArrays, Random, LegendrePolynomials, SpecialFunctions
+using FastMultipole.LinearAlgebra
+using FastMultipole.StaticArrays
+using LegendrePolynomials
+using Random
+using SpecialFunctions
 
 test_dir = @__DIR__
 
@@ -1434,15 +1438,15 @@ normal /= area*2
 strength = 1.0
 P = 20
 expansion_order = Val(P)
-branch = FLOWFMM.SingleBranch(
+branch = FastMultipole.SingleBranch(
     1:1,
     0,
     1:0,
     0,
     SVector{3}(0.0,0.0,0.0) + displ,
     0.4,
-    FLOWFMM.initialize_expansion(P),
-    FLOWFMM.initialize_expansion(P),
+    FastMultipole.initialize_expansion(P),
+    FastMultipole.initialize_expansion(P),
     zeros(2, (P+1)*(P+1)),
     zeros(2,4),
     ReentrantLock(),
@@ -1461,9 +1465,9 @@ fmm._B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru
 
 # evaluate
 target_potential_dipole = zeros(4)
-irregular_harmonics_dipole = FLOWFMM.initialize_harmonics(P,Float64)
+irregular_harmonics_dipole = FastMultipole.initialize_harmonics(P,Float64)
 multipole_expansion_dipole = branch.multipole_expansion
-FLOWFMM.M2B!(target_potential_dipole, target, displ, irregular_harmonics_dipole, multipole_expansion_dipole, P)
+FastMultipole.M2B!(target_potential_dipole, target, displ, irregular_harmonics_dipole, multipole_expansion_dipole, P)
 
 this_potential = 0.0015577438029241901
 
@@ -1476,9 +1480,9 @@ panel_type = fmm.UniformSourcePanel()
 fmm._B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
 
 target_potential = zeros(4)
-irregular_harmonics = FLOWFMM.initialize_harmonics(P,Float64)
+irregular_harmonics = FastMultipole.initialize_harmonics(P,Float64)
 multipole_expansion = branch.multipole_expansion
-FLOWFMM.M2B!(target_potential, target, displ, irregular_harmonics, multipole_expansion, P)
+FastMultipole.M2B!(target_potential, target, displ, irregular_harmonics, multipole_expansion, P)
 
 @test isapprox(target_potential[1], 0.022849841377239076; atol=1e-12)
 

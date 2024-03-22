@@ -68,7 +68,7 @@ end
 function Base.setindex!(probe_system::ProbeSystem, val, i, ::VelocityGradient)
     set_velocity_gradient!(probe_system, val, i)
 end
-FLOWFMM.get_n_bodies(probe_system::ProbeSystem) = length(probe_system.position)
+get_n_bodies(probe_system::ProbeSystem) = length(probe_system.position)
 Base.eltype(::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}) where TF = TF
 
 buffer_element(probe_system::ProbeSystem) = probe_system.position[1], get_scalar_potential(probe_system,1), get_vector_potential(probe_system,1), get_velocity(probe_system,1), get_velocity_gradient(probe_system,1)
