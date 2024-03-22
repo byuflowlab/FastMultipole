@@ -1,9 +1,3 @@
-# activate test environment
-if splitpath(Base.active_project())[end-1] == "FLOWFMM"
-    import TestEnv
-    TestEnv.activate()
-end
-
 using Test
 import Statistics
 S = Statistics
