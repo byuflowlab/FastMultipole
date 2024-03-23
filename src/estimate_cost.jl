@@ -41,10 +41,10 @@ function allocate_l2b(expansion_order, type=Float64)
     potential_jacobian = zeros(type,3,4)
     potential_hessian = zeros(type,3,3,4)
     derivative_harmonics = zeros(Complex{type}, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta = zeros(Complex{type}, ((expansion_order+1) * (expansion_order+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(Complex{type}, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics_multipole_acceptance_criterion = zeros(Complex{type}, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    derivative_harmonics_multipole_acceptance_criterion_2 = zeros(Complex{type}, ((expansion_order+1) * (expansion_order+2)) >> 1)
     workspace = zeros(type,3,4)
-    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
+    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace
 end
 
 function get_tau_b2m(system, branch, b2m_n_bodies, harmonics_m2m_l2l, expansion_order)
@@ -74,15 +74,15 @@ function estimate_tau_fmm(expansion_order, type=Float64)
     # harmonics_l2l, L = allocate_m2m_l2l(expansion_order, type)
     # alloc_l2l = @belapsed harmonics_l2l, L = allocate_m2m_l2l(expansion_order, type)
     # tau_l2l = @belapsed L2L!(branch1, branch2, harmonics_l2l, L, expansion_order)
-    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b(expansion_order, type)
-    alloc_l2b = @elapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b(expansion_order, type)
-    alloc_l2b = @elapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = allocate_l2b(expansion_order, type)
+    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = allocate_l2b(expansion_order, type)
+    alloc_l2b = @elapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = allocate_l2b(expansion_order, type)
+    alloc_l2b = @elapsed vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = allocate_l2b(expansion_order, type)
     body_position = rand(SVector{3,type})
     expansion_center = 10 * rand(SVector{3,type})
     tau_l2b = @elapsed L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, 
-                branch2.local_expansion, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, expansion_order, workspace)
+                branch2.local_expansion, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, expansion_order, workspace)
     tau_l2b = @elapsed L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, 
-                branch2.local_expansion, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, expansion_order, workspace)
+                branch2.local_expansion, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, expansion_order, workspace)
     return alloc_m2m_l2l, tau_m2m_l2l, alloc_m2l, tau_m2l, alloc_l2b, tau_l2b
 end
 

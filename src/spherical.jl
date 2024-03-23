@@ -1,34 +1,34 @@
 function cartesian_2_spherical!(dx; EPSILON=1e-10)
     r = sqrt(dx' * dx)
-    theta = r < EPSILON ? 0.0 : acos(dx[3] / r)
+    multipole_acceptance_criterion = r < EPSILON ? 0.0 : acos(dx[3] / r)
     phi = r < EPSILON ? 0.0 : atan(dx[2], dx[1])
-    dx .= r, theta, phi
+    dx .= r, multipole_acceptance_criterion, phi
 end
 
 function cartesian_2_spherical(dx; EPSILON=1e-10)
     r = sqrt(dx' * dx)
-    theta = r < EPSILON ? 0.0 : acos(dx[3] / r)
+    multipole_acceptance_criterion = r < EPSILON ? 0.0 : acos(dx[3] / r)
     phi = r < EPSILON ? 0.0 : atan(dx[2], dx[1])
-    dx = SVector{3}(r, theta, phi)
+    dx = SVector{3}(r, multipole_acceptance_criterion, phi)
 end
 
 function cartesian_2_spherical(x, y, z; EPSILON=1e-10)
     r = sqrt(x*x + y*y + z*z)
-    theta = r < EPSILON ? 0.0 : acos(z / r)
+    multipole_acceptance_criterion = r < EPSILON ? 0.0 : acos(z / r)
     phi = r < EPSILON ? 0.0 : atan(y, x)
-    return r, theta, phi
+    return r, multipole_acceptance_criterion, phi
 end
 
-function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, theta, phi)
+function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, rho, multipole_acceptance_criterion, phi)
     a = 0
     # get partial derivatives of the coordinates
-    s_theta, c_theta = sincos(theta)
+    s_multipole_acceptance_criterion, c_multipole_acceptance_criterion = sincos(multipole_acceptance_criterion)
     s_phi, c_phi = sincos(phi)
     
     drjdxi = @SMatrix [
-        s_theta*c_phi c_theta*c_phi/rho -s_phi/rho/s_theta
-        s_theta * s_phi c_theta * s_phi / rho c_phi / rho / s_theta
-        c_theta -s_theta / rho 0.0
+        s_multipole_acceptance_criterion*c_phi c_multipole_acceptance_criterion*c_phi/rho -s_phi/rho/s_multipole_acceptance_criterion
+        s_multipole_acceptance_criterion * s_phi c_multipole_acceptance_criterion * s_phi / rho c_phi / rho / s_multipole_acceptance_criterion
+        c_multipole_acceptance_criterion -s_multipole_acceptance_criterion / rho 0.0
     ]
     # convert Hessian to cartesian coordinates
     workspace3x3 = view(workspace,:,1:3)
@@ -37,23 +37,23 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
         mul!(workspace3x3, drjdxi, view(potential_hessian,:,:,ind))
         mul!(view(potential_hessian,:,:,ind), workspace3x3, transpose(drjdxi))
     end
-    for k_coord in 1:3 # loop over r, theta, and phi to save me some space on the stack
+    for k_coord in 1:3 # loop over r, multipole_acceptance_criterion, and phi to save me some space on the stack
         if k_coord == 1 # r coordinate
             drkdxidxj = @SMatrix [
-                (1-c_phi^2 * s_theta^2)/rho -s_theta^2*c_phi*s_phi/rho -s_theta*c_phi*c_theta/rho;
-                (-s_theta^2*c_phi*s_phi)/rho (1-s_theta^2*s_phi^2)/rho -s_theta*s_phi*c_theta/rho;
-                -s_theta*c_phi*c_theta/rho -s_theta*s_phi*c_theta/rho s_theta^2/rho
+                (1-c_phi^2 * s_multipole_acceptance_criterion^2)/rho -s_multipole_acceptance_criterion^2*c_phi*s_phi/rho -s_multipole_acceptance_criterion*c_phi*c_multipole_acceptance_criterion/rho;
+                (-s_multipole_acceptance_criterion^2*c_phi*s_phi)/rho (1-s_multipole_acceptance_criterion^2*s_phi^2)/rho -s_multipole_acceptance_criterion*s_phi*c_multipole_acceptance_criterion/rho;
+                -s_multipole_acceptance_criterion*c_phi*c_multipole_acceptance_criterion/rho -s_multipole_acceptance_criterion*s_phi*c_multipole_acceptance_criterion/rho s_multipole_acceptance_criterion^2/rho
             ]
-        elseif k_coord == 2 # theta coordinate
+        elseif k_coord == 2 # multipole_acceptance_criterion coordinate
             drkdxidxj = @SMatrix [
-                c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
-                -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
-                c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
+                c_multipole_acceptance_criterion/s_multipole_acceptance_criterion*(1-c_phi^2*(1+2*s_multipole_acceptance_criterion^2))/rho^2 -c_multipole_acceptance_criterion/s_multipole_acceptance_criterion*s_phi*c_phi*(1+2*s_multipole_acceptance_criterion^2)/rho^2 c_phi*(1-2*c_multipole_acceptance_criterion^2)/rho^2;
+                -c_multipole_acceptance_criterion/s_multipole_acceptance_criterion*s_phi*c_phi*(1+2*s_multipole_acceptance_criterion^2)/rho^2 c_multipole_acceptance_criterion/s_multipole_acceptance_criterion*(1-s_phi^2*(1+2*s_multipole_acceptance_criterion^2))/rho^2 (2*s_multipole_acceptance_criterion^2-1)/rho^2*s_phi;
+                c_phi*(1-2*c_multipole_acceptance_criterion^2)/rho^2 (2*s_multipole_acceptance_criterion^2-1)/rho^2*s_phi 2*s_multipole_acceptance_criterion*c_multipole_acceptance_criterion/rho^2
             ]
         else # phi coordinate
             drkdxidxj = @SMatrix [
-                2*c_phi*s_phi/rho^2/s_theta^2 (2*s_phi^2-1)/rho^2/s_theta^2 0;
-                (2*s_phi^2-1)/rho^2/s_theta^2 -2*s_phi*c_phi/rho^2/s_theta^2 0;
+                2*c_phi*s_phi/rho^2/s_multipole_acceptance_criterion^2 (2*s_phi^2-1)/rho^2/s_multipole_acceptance_criterion^2 0;
+                (2*s_phi^2-1)/rho^2/s_multipole_acceptance_criterion^2 -2*s_phi*c_phi/rho^2/s_multipole_acceptance_criterion^2 0;
                 0 0 0
             ]
         end
@@ -92,8 +92,8 @@ end
 
 @inline ipow2l(n::Int) = n >= 0 ? 1 : odd_or_even(n);
 
-function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, theta, phi::TF, P) where TF
-    y,x = sincos(theta)
+function regular_harmonic!(harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, rho, multipole_acceptance_criterion, phi::TF, P) where TF
+    y,x = sincos(multipole_acceptance_criterion)
     invY = y == 0 ? 0 : 1 / y
     fact = 1.0
     pl = 1.0
@@ -113,12 +113,12 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
         # harmonics[lml] = conj(harmonics[lpl])
         p1 = p
         p = x * (2 * m + 1) * p1
-        #harmonics_theta[lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
-        harmonics_theta[1,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[1]
-        harmonics_theta[2,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[2]
-        #harmonics_theta_2[lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim
-        harmonics_theta_2[1,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[1]
-        harmonics_theta_2[2,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[2]
+        #harmonics_multipole_acceptance_criterion[lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim
+        harmonics_multipole_acceptance_criterion[1,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[1]
+        harmonics_multipole_acceptance_criterion[2,lpl] = rhom * (p - (m + 1) * x * p1) * invY * eim[2]
+        #harmonics_multipole_acceptance_criterion_2[lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim
+        harmonics_multipole_acceptance_criterion_2[1,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[1]
+        harmonics_multipole_acceptance_criterion_2[2,lpl] = rhom * (-x * p + (-m + (m+1)^2 * x^2) * p1) * invY^2 * eim[2]
         rhom *= rho
         rhol = rhom
         for l=m+1:P
@@ -133,12 +133,12 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
             p2 = p1
             p1 = p
             p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
-            #harmonics_theta[lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
-            harmonics_theta[1,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[1]
-            harmonics_theta[2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[2]
-            #harmonics_theta_2[lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
-            harmonics_theta_2[1,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[1]
-            harmonics_theta_2[2,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[2]
+            #harmonics_multipole_acceptance_criterion[lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
+            harmonics_multipole_acceptance_criterion[1,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[1]
+            harmonics_multipole_acceptance_criterion[2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim[2]
+            #harmonics_multipole_acceptance_criterion_2[lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
+            harmonics_multipole_acceptance_criterion_2[1,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[1]
+            harmonics_multipole_acceptance_criterion_2[2,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim[2]
             rhol *= rho
         end
         rhom /= -(2 * m + 2) * (2 * m + 1)
@@ -149,8 +149,8 @@ function regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, rho, t
     end
 end
 
-function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
-    y,x = sincos(theta)
+function regular_harmonic!(harmonics, rho, multipole_acceptance_criterion, phi::TF, P) where TF
+    y,x = sincos(multipole_acceptance_criterion)
     fact = 1.0
     pl = 1.0
     rhom = 1.0 # rho^l / (l+m)! * (-1)^l
@@ -195,8 +195,8 @@ function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     end
 end
 
-function irregular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
-    y, x = sincos(theta)
+function irregular_harmonic!(harmonics, rho, multipole_acceptance_criterion, phi::TF, P) where TF
+    y, x = sincos(multipole_acceptance_criterion)
     fact = 1
     pl = 1
     invR = -1.0 / rho
@@ -254,8 +254,8 @@ end
 
 function M2B!(target_potential, target, center, irregular_harmonics, multipole_expansion, expansion_order)
     dx = target[1:3] - center
-    r, theta, phi = cartesian_2_spherical(dx)
-    irregular_harmonic!(irregular_harmonics, r, theta, phi, expansion_order)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx)
+    irregular_harmonic!(irregular_harmonics, r, multipole_acceptance_criterion, phi, expansion_order)
     d_potential = zeros(4)
     for l in 0:expansion_order
         for m in 0:l
@@ -273,8 +273,8 @@ end
 
 function M2B!(target_potential, target, center, irregular_harmonics, multipole_expansion::Matrix{Complex{Float64}}, expansion_order)
     dx = target[1:3] - center
-    r, theta, phi = cartesian_2_spherical(dx)
-    irregular_harmonic!(irregular_harmonics, r, theta, phi, expansion_order)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx)
+    irregular_harmonic!(irregular_harmonics, r, multipole_acceptance_criterion, phi, expansion_order)
     d_potential = zeros(4)
     for l in 0:expansion_order
         for m in 0:l
@@ -299,8 +299,8 @@ end
 function M2M!(branch, child, harmonics, M, expansion_order::Val{P}) where P
     # get distance vector
     dx, dy, dz = branch.center - child.center
-    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, r, theta, phi, P)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx, dy, dz)
+    regular_harmonic!(harmonics, r, multipole_acceptance_criterion, phi, P)
 
     for j in 0:P # iterate over new Multipole coefficients B_j^k
         for k in 0:j
@@ -385,23 +385,23 @@ end
 
 function M2L!(target_branch, source_branch, harmonics, L, expansion_order::Val{P}) where P
     dx, dy, dz = target_branch.center - source_branch.center
-    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(harmonics, r, theta, phi, P<<1)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx, dy, dz)
+    irregular_harmonic!(harmonics, r, multipole_acceptance_criterion, phi, P<<1)
     M2L_loop!(target_branch.local_expansion, L, source_branch.multipole_expansion, harmonics, expansion_order)
 end
 
 function M2L!(target_branch, source_branch, expansion_order::Val{P}) where P
     dx, dy, dz = target_branch.center - source_branch.center
-    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(target_branch.harmonics, r, theta, phi, P<<1)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx, dy, dz)
+    irregular_harmonic!(target_branch.harmonics, r, multipole_acceptance_criterion, phi, P<<1)
     M2L_loop!(target_branch.local_expansion, target_branch.ML, source_branch.multipole_expansion, target_branch.harmonics, expansion_order)
 end
 
 function B2L!(tree::Tree{<:Any,P}, i_branch, source_position, source_strength) where P
     branch = tree.branches[i_branch]
     irregular_harmonics = Matrix{eltype(branch.multipole_expansion)}(undef, 2, (P+1)^2)
-    r, theta, phi = cartesian_2_spherical(source_position - branch.center)
-    irregular_harmonic!(irregular_harmonics, r, theta, -phi, P)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(source_position - branch.center)
+    irregular_harmonic!(irregular_harmonics, r, multipole_acceptance_criterion, -phi, P)
     for l in 0:P
         for m in 0:l
             i_abb = (l * (l+1)) >> 1 + m + 1
@@ -417,8 +417,8 @@ end
 
 function L2L!(branch, child, regular_harmonics, L, expansion_order::Val{P}) where P
     dx, dy, dz = child.center - branch.center
-    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(regular_harmonics, r, theta, phi, P)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx, dy, dz)
+    regular_harmonic!(regular_harmonics, r, multipole_acceptance_criterion, phi, P)
     for j in 0:P
         for k in 0:j
             jks = (j * (j + 1)) >> 1 + k + 1
@@ -470,23 +470,23 @@ end
 #     end
 # end
 
-function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(systems, branch::MultiBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
     for (i_system, system) in enumerate(systems)
-        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+        L2B!(system, branch.bodies_index[i_system], branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
     end
 end
 
-function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
-    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(system, branch::SingleBranch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+    L2B!(system, branch.bodies_index, branch.local_expansion, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
 end
 
-function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
     for i_body in bodies_index
         vector_potential .= zero(eltype(vector_potential))
         potential_jacobian .= zero(eltype(potential_jacobian))
         potential_hessian .= zero(eltype(potential_hessian))
         body_position = system[i_body,POSITION]
-        scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order, workspace)
+        scalar_potential = L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, expansion_order, workspace)
         system[i_body,SCALAR_POTENTIAL] += scalar_potential
         # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
         vpx, vpy, vpz = system[i_body,VECTOR_POTENTIAL]
@@ -508,10 +508,10 @@ function L2B!(system, bodies_index, local_expansion, expansion_order, expansion_
     end
 end
 
-function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order::Val{P}, workspace) where P
+function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, expansion_order::Val{P}, workspace) where P
     dx, dy, dz = body_position - expansion_center
-    r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    regular_harmonic!(harmonics, harmonics_theta, harmonics_theta_2, r, theta, phi, P)
+    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(dx, dy, dz)
+    regular_harmonic!(harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, r, multipole_acceptance_criterion, phi, P)
     scalar_potential = zero(eltype(vector_potential))
     for n in 0:P
         # nm = n * n + n + 1 # m = 0
@@ -527,18 +527,18 @@ function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body
         for ind in 1:4
             # store derivatives of the potential in spherical coordinates here
             #potential_jacobian[1,ind] += n/r * real(local_expansion[ind,nms] * harmonics[nms]) # dPsi/dr
-            #potential_jacobian[2,ind] += real(local_expansion[ind,nms] * harmonics_theta[nms]) # dPsi/dtheta
+            #potential_jacobian[2,ind] += real(local_expansion[ind,nms] * harmonics_multipole_acceptance_criterion[nms]) # dPsi/dmultipole_acceptance_criterion
             potential_jacobian[1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # dPsi/dr
-            potential_jacobian[2,ind] += local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms] # dPsi/dtheta
+            potential_jacobian[2,ind] += local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms] # dPsi/dmultipole_acceptance_criterion
             # dJ_potential[3,ind] += 0 # dPsi/dphi
             potential_hessian[1,1,ind] += n * (n-1) / r^2 * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # d2Psi/dr2
-            potential_hessian[2,1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dtheta dr
+            potential_hessian[2,1,ind] += n/r * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms]) # d2Psi/dmultipole_acceptance_criterion dr
             # potential_hessian[3,1,ind] += 0 # d2Psi/dphi dr
-            potential_hessian[1,2,ind] += n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dr dtheta
-            potential_hessian[2,2,ind] += local_expansion[1,ind,nms] * harmonics_theta_2[1,nms] - local_expansion[2,ind,nms] * harmonics_theta_2[2,nms] # d2Psi/dtheta2
-            # potential_hessian[3,2,ind] += 0 # d2Psi/dphi dtheta
+            potential_hessian[1,2,ind] += n/r * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms]) # d2Psi/dr dmultipole_acceptance_criterion
+            potential_hessian[2,2,ind] += local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion_2[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion_2[2,nms] # d2Psi/dmultipole_acceptance_criterion2
+            # potential_hessian[3,2,ind] += 0 # d2Psi/dphi dmultipole_acceptance_criterion
             # potential_hessian[1,3,ind] += 0 # d2Psi/dr dphi
-            # potential_hessian[2,3,ind] += 0 # d2Psi/dtheta dphi
+            # potential_hessian[2,3,ind] += 0 # d2Psi/dmultipole_acceptance_criterion dphi
             # potential_hessian[3,3,ind] += 0 # d2Psi/dphi2
             
         end
@@ -552,22 +552,22 @@ function L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body
             for ind in 1:4
                 # store derivatives of the potential in spherical harmonics here
                 potential_jacobian[1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # dPsi/dr
-                potential_jacobian[2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # dPsi/dtheta
+                potential_jacobian[2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms]) # dPsi/dmultipole_acceptance_criterion
                 #potential_jacobian[3,ind] += 2 * m * real(im * local_expansion[ind,nms] * harmonics[nms]) # dPsi/dphi
                 potential_jacobian[3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics[2,nms] + local_expansion[2,ind,nms] * harmonics[1,nms]) # dPsi/dphi
                 potential_hessian[1,1,ind] += 2 * n * (n-1) / r^2 * (local_expansion[1,ind,nms] * harmonics[1,nms] - local_expansion[2,ind,nms] * harmonics[2,nms]) # d2Psi/dr2
-                potential_hessian[2,1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dtheta dr
+                potential_hessian[2,1,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms]) # d2Psi/dmultipole_acceptance_criterion dr
                 potential_hessian[3,1,ind] += -2 * n * m / r * (local_expansion[1,ind,nms] * harmonics[2,nms] + local_expansion[2,ind,nms] * harmonics[1,nms]) # d2Psi/dphi dr
-                potential_hessian[1,2,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics_theta[1,nms] - local_expansion[2,ind,nms] * harmonics_theta[2,nms]) # d2Psi/dr dtheta
-                potential_hessian[2,2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics_theta_2[1,nms] - local_expansion[2,ind,nms] * harmonics_theta_2[2,nms]) # d2Psi/dtheta2
-                potential_hessian[3,2,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics_theta[2,nms] + local_expansion[2,ind,nms] * harmonics_theta[1,nms]) # d2Psi/dphi dtheta
+                potential_hessian[1,2,ind] += 2 * n/r * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms]) # d2Psi/dr dmultipole_acceptance_criterion
+                potential_hessian[2,2,ind] += 2 * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion_2[1,nms] - local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion_2[2,nms]) # d2Psi/dmultipole_acceptance_criterion2
+                potential_hessian[3,2,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms] + local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms]) # d2Psi/dphi dmultipole_acceptance_criterion
                 potential_hessian[1,3,ind] += -2 * n * m / r * (local_expansion[1,ind,nms] * harmonics[2,nms] + local_expansion[2,ind,nms] * harmonics[1,nms]) # d2Psi/dr dphi
-                potential_hessian[2,3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics_theta[2,nms] + local_expansion[2,ind,nms] * harmonics_theta[1,nms]) # d2Psi/dtheta dphi
+                potential_hessian[2,3,ind] += -2 * m * (local_expansion[1,ind,nms] * harmonics_multipole_acceptance_criterion[2,nms] + local_expansion[2,ind,nms] * harmonics_multipole_acceptance_criterion[1,nms]) # d2Psi/dmultipole_acceptance_criterion dphi
                 potential_hessian[3,3,ind] += 2 * -m^2 * (local_expansion[1,ind,nms] * harmonics[2,nms] - local_expansion[2,ind,nms] * harmonics[1,nms]) # d2Psi/dphi2
             end
         end
     end
-    spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, theta, phi)
+    spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r, multipole_acceptance_criterion, phi)
     flatten_derivatives!(potential_jacobian, potential_hessian) # compute velocity and velocity gradient
     return scalar_potential
 end

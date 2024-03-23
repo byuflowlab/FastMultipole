@@ -371,19 +371,19 @@ end
     potential_jacobian = zeros(float_type,3,4)
     potential_hessian = zeros(float_type,3,3,4)
     derivative_harmonics = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_theta = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_multipole_acceptance_criterion = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_multipole_acceptance_criterion_2 = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
     workspace = zeros(float_type,3,4)
-    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
+    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace
 end
 
 function downward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
     # L = zeros(eltype(branches[1].multipole_expansion),4)
-    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     for branch in branches
         if branch.n_branches == 0 # leaf level
-            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace)
         else
             for child_branch in view(branches,branch.branch_index)
                 L2L!(branch, child_branch, regular_harmonics, branch.ML, expansion_order)
@@ -456,10 +456,10 @@ function local_2_body_multithread!(branches, systems, expansion_order, leaf_inde
     # spread remainder across rem chunks
     Threads.@threads for i_thread in eachindex(assignments)
         assignment = assignments[i_thread]
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = containers[i_thread]
+        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = containers[i_thread]
         for i_leaf in view(leaf_index,assignment)
             leaf = branches[i_leaf]
-            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace)
         end
     end
 end
@@ -475,14 +475,14 @@ end
 #####
 ##### create interaction lists
 #####
-function build_interaction_lists(target_branches, source_branches, theta, farfield, nearfield, self_induced)
+function build_interaction_lists(target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, theta, farfield, nearfield, self_induced)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
@@ -490,17 +490,17 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
     summed_radii_squared = target_branch.radius + source_branch.radius
     summed_radii_squared *= summed_radii_squared
-    if center_spacing_squared * theta * theta >= summed_radii_squared && farfield # meet M2L criteria
+    if center_spacing_squared * multipole_acceptance_criterion * multipole_acceptance_criterion >= summed_radii_squared && farfield # meet M2L criteria
         push!(m2l_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && (i_target!=j_source || self_induced) # both leaves
         push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, theta, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
         end
     else # source is not a leaf AND target is a leaf or is smaller
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, theta, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
         end
     end
 end
@@ -508,17 +508,17 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, systems; theta=0.4, reset_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true)
-    fmm!(tree, systems, tree, systems; theta, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
+function fmm!(tree::Tree, systems; multipole_acceptance_criterion=0.4, reset_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true)
+    fmm!(tree, systems, tree, systems; multipole_acceptance_criterion, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
 end
 
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; theta=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true)
+function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; multipole_acceptance_criterion=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true)
     # reset multipole/local expansions
     reset_target_tree && (reset_expansions!(source_tree))
     reset_source_tree && (reset_expansions!(source_tree))
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, theta, farfield, nearfield, self_induced)
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
 
     # run FMM
     if Threads.nthreads() == 1
@@ -550,12 +550,12 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     unsort_source_bodies && (unsort!(source_systems, source_tree))
 end
 
-function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(systems; expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
     # create tree
-    tree = Tree(systems; expansion_order, n_per_branch, ndivisions, shrink_recenter)
+    tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter)
     
     # perform fmm
-    fmm!(tree, systems; theta, reset_tree=false, nearfield, farfield, self_induced, unsort_bodies)
+    fmm!(tree, systems; multipole_acceptance_criterion, reset_tree=false, nearfield, farfield, self_induced, unsort_bodies)
     
     # visualize
     save_tree && (visualize(save_name, systems, tree))
@@ -571,16 +571,44 @@ end
 
 @inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
 
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, theta=0.4, ndivisions_source=7, ndivisions_target=7, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
+"""
+    fmm!(target_systems, source_systems; kwargs...)
+
+Apply all interactions of `source_systems` acting on `target_systems` using the fast multipole method. Assumes compatibility functions have been overloaded for both source and target systems.
+
+# Arguments
+
+- `target_systems`: either
+
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+    
+- `source_systems`: either
+    
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+
+- `reference`: Reference parameters (see [`Reference`](@ref))
+- `freestream`: Freestream parameters (see [`Freestream`](@ref))
+    
+# Optional Arguments
+
+- `expansion_order::Int`: the expansion order to be used
+- `n_per_branch_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
+- `n_per_branch_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
+- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+
+"""
+function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter, ndivisions=ndivisions_source)
-    target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter, ndivisions=ndivisions_target)
+    source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems; theta=theta, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
+    fmm!(target_tree, target_systems, source_tree, source_systems; multipole_acceptance_criterion=multipole_acceptance_criterion, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
 
     # visualize
     save_tree && (visualize(save_name, systems, tree))

@@ -193,12 +193,12 @@ function convect!(vortex_particles::VortexParticles, nsteps;
         # integration options
         integrate!::IntegrationScheme=Euler(1.0),
         # fmm options
-        fmm_p=4, fmm_ncrit=50, fmm_theta=0.5, fmm_targets=fmm.SVector{1}(Int8(1)),
+        fmm_p=4, fmm_ncrit=50, fmm_multipole_acceptance_criterion=0.5, fmm_targets=fmm.SVector{1}(Int8(1)),
         direct::Bool=false,
         # save options
         save::Bool=true, filename::String="default", compress::Bool=false,
     )
-    fmm_options = fmm.Options(fmm_p, fmm_ncrit, fmm_theta, fmm_targets)
+    fmm_options = fmm.Options(fmm_p, fmm_ncrit, fmm_multipole_acceptance_criterion, fmm_targets)
     save && save_vtk(filename, vortex_particles; compress)
     for istep in 1:nsteps
         integrate!(vortex_particles, fmm_options, direct)

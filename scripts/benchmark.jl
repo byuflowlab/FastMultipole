@@ -11,7 +11,7 @@ if !isdir(joinpath(scripts_dir, save_dir))
     mkdir(joinpath(scripts_dir, save_dir))
 end
 
-function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, theta=4)
+function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, multipole_acceptance_criterion=4)
     times_fmm = zeros(length(ns_fmm))
     times_direct = zeros(length(ns_fmm)) .* NaN
     # max_errs = zeros(length(orders))
@@ -23,7 +23,7 @@ function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, 
     ms = rand(n)
     xs = rand(n,3)
     masses = [Mass(xs[i,:],[ms[i]],zeros(1),zeros(3)) for i in 1:length(ms)]
-    @elapsed fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, theta)
+    @elapsed fmm.fmm!(masses, derivatives, expansion_order, n_per_branch, multipole_acceptance_criterion)
     @elapsed fmm.direct!(masses; reflex=false)
 
     println("\nBegin Benchmark Test:")
@@ -38,7 +38,7 @@ function benchmark_fmm(ns_fmm, is_direct; expansion_order = 2, n_per_branch=50, 
         # fmm
         # println("\t\tBuilding Tree...")
         println("\t\tComputing FMM...")
-        times_fmm[i] = @elapsed tree = fmm.fmm!(masses, expansion_order, n_per_branch, theta, B2M!, P2P!)
+        times_fmm[i] = @elapsed tree = fmm.fmm!(masses, expansion_order, n_per_branch, multipole_acceptance_criterion, B2M!, P2P!)
         println("\t\tFMM time: $(times_fmm[i]) seconds")
         for ii in 1:n
             potentials_fmm[ii] = masses[ii].potential[1]

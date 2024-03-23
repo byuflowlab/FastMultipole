@@ -8,7 +8,7 @@ WARNING_FLAG_N_PER_BRANCH[] = true
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
+function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
     # initialize variables
     octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
     cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
@@ -28,7 +28,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
 
     # grow branches
     levels_index = [parents_index] # store branches at each level
-    for i_divide in 1:ndivisions
+    for i_divide in 1:n_divisions
         if n_children > 0
             parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
             push!(levels_index, parents_index)
@@ -43,7 +43,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
             push!(levels_index, parents_index)
         end
         if WARNING_FLAG_N_PER_BRANCH[]
-            @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `ndivisions` > $(length(levels_index))"
+            @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
             WARNING_FLAG_N_PER_BRANCH[] = false
         end
     end
