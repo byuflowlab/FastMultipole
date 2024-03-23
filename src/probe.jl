@@ -76,3 +76,18 @@ buffer_element(probe_system::ProbeSystem) = probe_system.position[1], get_scalar
 B2M!(system::ProbeSystem, args...) = nothing
 
 direct!(target_system, target_index, source_system::ProbeSystem, source_index) = nothing
+
+function reset!(values::Vector{TV}) where TV
+    for i in eachindex(values)
+        values[i] = zero(TV)
+    end
+end
+
+reset!(::Nothing) = nothing
+
+function reset!(probes::ProbeSystem)
+    reset!(probes.scalar_potential)
+    reset!(probes.vector_potential)
+    reset!(probes.velocity)
+    reset!(probes.velocity_gradient)
+end
