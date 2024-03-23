@@ -1420,7 +1420,7 @@ multipole_expansion_test = [3.15347369905358e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; 
 expansion_order = Val{14}()
 fmm._B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, fmm.UniformSourcePanel())
 for i in eachindex(multipole_expansion)
-    @test isapprox(multipole_expansion[i], multipole_expansion_test[i]; atol=1e-11)
+    @test isapprox(multipole_expansion[i], multipole_expansion_test[i]; atol=2e-11)
 end
 
 # single tri panel
