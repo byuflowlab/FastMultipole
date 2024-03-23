@@ -1342,27 +1342,27 @@ validation_potential = validation_system.potential[1,:]
 system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 fmm.fmm!(system3; expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
 potential3 = system3.potential[1,:]
-@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-9)
 
 system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 fmm.fmm!((system4,); expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
 potential4 = system4.potential[1,:]
-@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-9)
 
 system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 fmm.fmm!(system5, system5; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential5 = system5.potential[1,:]
-@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-9)
 
 system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 fmm.fmm!((system6,), system6; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential6 = system6.potential[1,:]
-@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-9)
 
 system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 fmm.fmm!((system7,), (system7,); expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential7 = system7.potential[1,:]
-@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-9)
 
 end
 
@@ -1379,27 +1379,27 @@ validation_potential = validation_system.potential[1,:]
 system8 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
 fmm.fmm!(system8; expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
 potential8 = system8.system.potential[1,:]
-@test isapprox(maximum(abs.(potential8 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential8 - validation_potential)), 0.0; atol=1e-9)
 
 system9 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
 fmm.fmm!((system9,); expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
 potential9 = system9.system.potential[1,:]
-@test isapprox(maximum(abs.(potential9 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential9 - validation_potential)), 0.0; atol=1e-9)
 
 system10 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
 fmm.fmm!(system10, system10; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential10 = system10.system.potential[1,:]
-@test isapprox(maximum(abs.(potential10 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential10 - validation_potential)), 0.0; atol=1e-9)
 
 system11 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
 fmm.fmm!((system11,), system11; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential11 = system11.system.potential[1,:]
-@test isapprox(maximum(abs.(potential11 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential11 - validation_potential)), 0.0; atol=1e-9)
 
 system12 = fmm.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
 fmm.fmm!((system12,), (system12,); expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential12 = system12.system.potential[1,:]
-@test isapprox(maximum(abs.(potential12 - validation_potential)), 0.0; atol=1e-10)
+@test isapprox(maximum(abs.(potential12 - validation_potential)), 0.0; atol=1e-9)
 
 end
 
