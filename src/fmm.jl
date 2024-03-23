@@ -587,9 +587,6 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
     
     - a system object for which compatibility functions have been overloaded, or
     - a tuple of system objects for which compatibility functions have been overloaded
-
-- `reference`: Reference parameters (see [`Reference`](@ref))
-- `freestream`: Freestream parameters (see [`Freestream`](@ref))
     
 # Optional Arguments
 
