@@ -73,7 +73,7 @@ Base.eltype(::VortexParticles{TF}) where TF = TF
 """
 Classical formulation so far.
 """
-function fmm.direct!(target_system, target_index, source_system::VortexParticles, source_index)
+function fmm.direct!(target_system, target_index, derivatives_switch, source_system::VortexParticles, source_index)
     jacobian = zeros(eltype(target_system),3,4)
     hessian = zeros(eltype(target_system),3,3,4)
     for j_source in source_index
@@ -110,7 +110,7 @@ function fmm.direct!(target_system, target_index, source_system::VortexParticles
                 hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
                 hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
             end
-            fmm.flatten_derivatives!(jacobian, hessian)
+            fmm.flatten_derivatives!(jacobian, hessian, derivatives_switch)
 
             target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
             target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)

@@ -49,6 +49,24 @@ struct UniformSourcePanel <: AbstractKernel end
 struct UniformNormalDipolePanel <: AbstractKernel end
 struct UniformSourceNormalDipolePanel <: AbstractKernel end
 
+#####
+##### dispatch convenience functions to determine which derivatives are desired
+#####
+struct DerivativesSwitch{PS,VPS,VS,GS} end
+
+function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_systems::Tuple)
+    return Tuple(DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}() for _ in target_systems)
+end
+
+function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_system)
+    return DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}()
+end
+
+function DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+    return Tuple(DerivativesSwitch(ps,vps,vs,gs) for (ps,vps,vs,gs) in zip(scalar_potential, vector_potential, velocity, velocity_gradient))
+end
+
+DerivativesSwitch() = DerivativesSwitch{true, true, true, true}()
 
 #####
 ##### cost parameters

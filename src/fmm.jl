@@ -1,38 +1,38 @@
 #####
 ##### direct interactions
 #####
-function P2P!(target_system, target_branch::SingleBranch, source_system, source_branch::SingleBranch)
-    _direct!(target_system, target_branch.bodies_index, source_system, source_branch.bodies_index)
+function P2P!(target_system, target_branch::SingleBranch, derivatives_switch, source_system, source_branch::SingleBranch)
+    _direct!(target_system, target_branch.bodies_index, derivatives_switch, source_system, source_branch.bodies_index)
 end
 
-function P2P!(target_system, target_branch::SingleBranch, source_systems, source_branch::MultiBranch)
+function P2P!(target_system, target_branch::SingleBranch, derivatives_switch, source_systems, source_branch::MultiBranch)
     for (source_system, source_bodies_index) in zip(source_systems, source_branch.bodies_index)
-        _direct!(target_system, target_branch.bodies_index, source_system, source_bodies_index)
+        _direct!(target_system, target_branch.bodies_index, derivatives_switch, source_system, source_bodies_index)
     end
 end
 
-function P2P!(target_systems, target_branch::MultiBranch, source_system, source_branch::SingleBranch)
-    for (target_system, target_bodies_index) in zip(target_systems, target_branch.bodies_index)
-        _direct!(target_system, target_bodies_index, source_system, source_branch.bodies_index)
+function P2P!(target_systems, target_branch::MultiBranch, derivatives_switches, source_system, source_branch::SingleBranch)
+    for (target_system, target_bodies_index, derivatives_switch) in zip(target_systems, target_branch.bodies_index, derivatives_switches)
+        _direct!(target_system, target_bodies_index, derivatives_switch, source_system, source_branch.bodies_index)
     end
 end
 
-function P2P!(target_systems, target_branch::MultiBranch, source_systems, source_branch::MultiBranch)
+function P2P!(target_systems, target_branch::MultiBranch, derivatives_switches, source_systems, source_branch::MultiBranch)
     for (source_system, source_bodies_index) in zip(source_systems, source_branch.bodies_index)
-        for (target_system, target_bodies_index) in zip(target_systems, target_branch.bodies_index)
-            _direct!(target_system, target_bodies_index, source_system, source_bodies_index)
+        for (target_system, target_bodies_index, derivatives_switch) in zip(target_systems, target_branch.bodies_index, derivatives_switches)
+            _direct!(target_system, target_bodies_index, derivatives_switch, source_system, source_bodies_index)
         end
     end
 end
 
-function P2P!(target_systems, target_branch::MultiBranch, source_system, source_bodies_index::UnitRange)
-    for (target_system, target_bodies_index) in zip(target_systems, target_branch.bodies_index)
-        _direct!(target_system, target_bodies_index, source_system, source_bodies_index)
+function P2P!(target_systems, target_branch::MultiBranch, derivatives_switches, source_system, source_bodies_index::UnitRange)
+    for (target_system, target_bodies_index, derivatives_switch) in zip(target_systems, target_branch.bodies_index, derivatives_switches)
+        _direct!(target_system, target_bodies_index, derivatives_switch, source_system, source_bodies_index)
     end
 end
 
-function P2P!(target_system, target_branch::SingleBranch, source_system, source_bodies_index::UnitRange)
-    _direct!(target_system, target_branch.bodies_index, source_system, source_bodies_index)
+function P2P!(target_system, target_branch::SingleBranch, derivatives_switch, source_system, source_bodies_index::UnitRange)
+    _direct!(target_system, target_branch.bodies_index, derivatives_switch, source_system, source_bodies_index)
 end
 
 #####
@@ -187,13 +187,13 @@ end
 #####
 ##### horizontal pass
 #####
-function nearfield_singlethread!(target_system, target_branches, source_system, source_branches, direct_list)
+function nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, source_branches, direct_list)
     for (i_target, j_source) in direct_list
-        P2P!(target_system, target_branches[i_target], source_system, source_branches[j_source])
+        P2P!(target_system, target_branches[i_target], derivatives_switch, source_system, source_branches[j_source])
     end
 end
 
-function nearfield_multithread!(target_system, target_branches, source_systems::Tuple, source_branches, direct_list)
+function nearfield_multithread!(target_system, target_branches, derivatives_switch, source_systems::Tuple, source_branches, direct_list)
     ## load balance
     n_threads = Threads.nthreads()
     assignments = Vector{UnitRange{Int64}}(undef,n_threads)
@@ -241,7 +241,7 @@ function nearfield_multithread!(target_system, target_branches, source_systems::
                 target_branch = target_branches[i_target]
                 source_bodies_index = source_branches[j_source].bodies_index[i_source_system]
                 Threads.lock(target_branch.lock) do
-                    P2P!(target_system, target_branch, source_system, source_bodies_index)
+                    P2P!(target_system, target_branch, derivatives_switch, source_system, source_bodies_index)
                 end
             end
         end
@@ -250,7 +250,7 @@ function nearfield_multithread!(target_system, target_branches, source_systems::
     return nothing
 end
 
-function nearfield_multithread!(target_system, target_branches, source_system, source_branches, direct_list)
+function nearfield_multithread!(target_system, target_branches, derivatives_switch, source_system, source_branches, direct_list)
     ## load balance
     n_threads = Threads.nthreads()
     assignments = Vector{UnitRange{Int64}}(undef,n_threads)
@@ -295,7 +295,7 @@ function nearfield_multithread!(target_system, target_branches, source_system, s
         for (i_target, j_source) in view(direct_list, assignment)
             target_branch = target_branches[i_target]
             Threads.lock(target_branch.lock) do
-                P2P!(target_system, target_branch, source_system, source_branches[j_source])
+                P2P!(target_system, target_branch, derivatives_switch, source_system, source_branches[j_source])
             end
         end
     end
@@ -371,19 +371,20 @@ end
     potential_jacobian = zeros(float_type,3,4)
     potential_hessian = zeros(float_type,3,3,4)
     derivative_harmonics = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_multipole_acceptance_criterion = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_multipole_acceptance_criterion_2 = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_theta = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
+    derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
     workspace = zeros(float_type,3,4)
-    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace
+    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
 end
 
-function downward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
+function downward_pass_singlethread!(branches, systems, derivatives_switches, expansion_order::Val{P}) where P
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
     # L = zeros(eltype(branches[1].multipole_expansion),4)
-    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
+    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     for branch in branches
         if branch.n_branches == 0 # leaf level
-            L2B!(systems, branch, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace)
+            L2B!(systems, branch, derivatives_switches, expansion_order, vector_potential, potential_jacobian, potential_hessian, 
+                derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
         else
             for child_branch in view(branches,branch.branch_index)
                 L2L!(branch, child_branch, regular_harmonics, branch.ML, expansion_order)
@@ -419,7 +420,7 @@ function translate_locals_multithread!(branches, expansion_order::Val{P}, levels
     return nothing
 end
 
-function local_2_body_multithread!(branches, systems, expansion_order, leaf_index)
+function local_2_body_multithread!(branches, systems, derivatives_switches, expansion_order, leaf_index)
     # create assignments
     n_threads = Threads.nthreads()
 
@@ -456,20 +457,20 @@ function local_2_body_multithread!(branches, systems, expansion_order, leaf_inde
     # spread remainder across rem chunks
     Threads.@threads for i_thread in eachindex(assignments)
         assignment = assignments[i_thread]
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace = containers[i_thread]
+        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = containers[i_thread]
         for i_leaf in view(leaf_index,assignment)
             leaf = branches[i_leaf]
-            L2B!(systems, leaf, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_multipole_acceptance_criterion, derivative_harmonics_multipole_acceptance_criterion_2, workspace)
+            L2B!(systems, leaf, derivatives_switches, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
         end
     end
 end
 
-function downward_pass_multithread!(branches, systems, expansion_order, levels_index, leaf_index)
+function downward_pass_multithread!(branches, systems, derivatives_switch, expansion_order, levels_index, leaf_index)
     # m2m translation
 	translate_locals_multithread!(branches, expansion_order, levels_index)
     
     # local to body interaction 
-    local_2_body_multithread!(branches, systems, expansion_order, leaf_index)
+    local_2_body_multithread!(branches, systems, derivatives_switch, expansion_order, leaf_index)
 end
 
 #####
@@ -508,11 +509,27 @@ end
 #####
 ##### running FMM
 #####
-function fmm!(tree::Tree, systems; multipole_acceptance_criterion=0.4, reset_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true)
-    fmm!(tree, systems, tree, systems; multipole_acceptance_criterion, reset_source_tree=reset_tree, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_bodies, unsort_target_bodies=false)
+function fmm!(tree::Tree, systems; 
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
+    multipole_acceptance_criterion=0.4, reset_tree=true, 
+    nearfield=true, farfield=true, self_induced=true, 
+    unsort_bodies=true
+)
+    fmm!(tree, systems, tree, systems;
+        scalar_potential, vector_potential, velocity, velocity_gradient,
+        multipole_acceptance_criterion, reset_source_tree=reset_tree, reset_target_tree=false, 
+        nearfield, farfield, self_induced, 
+        unsort_source_bodies=unsort_bodies, unsort_target_bodies=false
+    )
 end
 
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems; multipole_acceptance_criterion=0.4, reset_source_tree=true, reset_target_tree=true, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true)
+function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
+    multipole_acceptance_criterion=0.4, 
+    reset_source_tree=true, reset_target_tree=true, 
+    nearfield=true, farfield=true, self_induced=true, 
+    unsort_source_bodies=true, unsort_target_bodies=true
+)
     # reset multipole/local expansions
     reset_target_tree && (reset_expansions!(source_tree))
     reset_source_tree && (reset_expansions!(source_tree))
@@ -520,17 +537,20 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # create interaction lists
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
 
+    # assemble derivatives switch
+    derivatives_switch = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
+
     # run FMM
     if Threads.nthreads() == 1
-        nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
         if farfield
             upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
             horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order)
+            downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order)
         end
     else # multithread
         # println("nearfield")
-        nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
+        nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
         # @time nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, source_systems, source_tree.branches, direct_list))
         if farfield
             # println("upward pass")
@@ -540,7 +560,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
             # @time length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
             # println("downward pass")
-            downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+            downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
             # @time downward_pass_multithread!(target_tree.branches, target_systems, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
     end
@@ -550,12 +570,23 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     unsort_source_bodies && (unsort!(source_systems, source_tree))
 end
 
-function fmm!(systems; expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(systems; 
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
+    expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4, 
+    nearfield=true, farfield=true, self_induced=true, 
+    unsort_bodies=true, shrink_recenter=true, 
+    save_tree=false, save_name="tree"
+)
     # create tree
     tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter)
     
     # perform fmm
-    fmm!(tree, systems; multipole_acceptance_criterion, reset_tree=false, nearfield, farfield, self_induced, unsort_bodies)
+    fmm!(tree, systems;
+        scalar_potential, vector_potential, velocity, velocity_gradient,
+        multipole_acceptance_criterion, reset_tree=false, 
+        nearfield, farfield, self_induced, 
+        unsort_bodies
+    )
     
     # visualize
     save_tree && (visualize(save_name, systems, tree))
@@ -596,16 +627,29 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 - `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 
 """
-function fmm!(target_systems, source_systems; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4, nearfield=true, farfield=true, self_induced=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=true, target_shrink_recenter=true, save_tree=false, save_name="tree")
+function fmm!(target_systems, source_systems;
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
+    expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4, 
+    nearfield=true, farfield=true, self_induced=true, 
+    unsort_source_bodies=true, unsort_target_bodies=true, 
+    source_shrink_recenter=true, target_shrink_recenter=true, 
+    save_tree=false, save_name="tree"
+)
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order=expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
+    source_tree = Tree(source_systems; expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems; multipole_acceptance_criterion=multipole_acceptance_criterion, reset_source_tree=false, reset_target_tree=false, nearfield=nearfield, farfield=farfield, self_induced, unsort_source_bodies=unsort_source_bodies, unsort_target_bodies=unsort_target_bodies)
+    fmm!(target_tree, target_systems, source_tree, source_systems; 
+        scalar_potential, vector_potential, velocity, velocity_gradient, 
+        multipole_acceptance_criterion, 
+        reset_source_tree=false, reset_target_tree=false, 
+        nearfield, farfield, self_induced, 
+        unsort_source_bodies, unsort_target_bodies
+    )
 
     # visualize
     save_tree && (visualize(save_name, systems, tree))

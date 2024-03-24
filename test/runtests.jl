@@ -19,8 +19,8 @@ test_dir = @__DIR__
 include(joinpath(test_dir, "gravitational.jl"))
 
 fmm.M2M!(branch, child, harmonics, M, expansion_order::Int) = fmm.M2M!(branch, child, harmonics, M, Val(expansion_order))
-fmm.L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, expansion_order::Int, workspace) = 
-    fmm.L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, Val(expansion_order), workspace)
+fmm.L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order::Int, workspace) = 
+    fmm.L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, Val(expansion_order), workspace)
 fmm.M2L!(target_branch, source_branch, harmonics, L, expansion_order::Int) = fmm.M2L!(target_branch, source_branch, harmonics, L, Val(expansion_order))
 fmm.upward_pass_singlethread!(branches, systems, expansion_order::Int) = fmm.upward_pass_singlethread!(branches, systems, Val(expansion_order))
 fmm.M2L!(target_branch, source_branch, expansion_order::Int) = fmm.M2L!(target_branch, source_branch, Val(expansion_order))
@@ -160,12 +160,12 @@ end
 @testset "cartesian to spherical" begin
     # cartesian to spherical
     rho = 1.0
-    multipole_acceptance_criterion = pi/4
+    theta = pi/4
     phi = pi/2
-    that = [rho, multipole_acceptance_criterion, phi]
-    x = rho * sin(multipole_acceptance_criterion) * cos(phi)
-    y = rho * sin(multipole_acceptance_criterion) * sin(phi)
-    z = rho * cos(multipole_acceptance_criterion)
+    that = [rho, theta, phi]
+    x = rho * sin(theta) * cos(phi)
+    y = rho * sin(theta) * sin(phi)
+    z = rho * cos(theta)
     this = [x,y,z]
     fmm.cartesian_2_spherical!(this)
     for i in 1:3
@@ -178,31 +178,31 @@ end
 # once I begin using multiple kernels
 @testset "solid harmonics" begin
 
-function Ylm(multipole_acceptance_criterion, phi, l, m)
+function Ylm(theta, phi, l, m)
     lm! = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m))))
-    plm = Plm(cos(multipole_acceptance_criterion), l, abs(m))
+    plm = Plm(cos(theta), l, abs(m))
     eim = exp(im * m * phi)
     ylm = lm! * plm * eim
 end
 
-function regular_harmonic_manual(rho, multipole_acceptance_criterion, phi, p)
+function regular_harmonic_manual(rho, theta, phi, p)
     reg_harmonics = Vector{Complex{Float64}}(undef,(p+1)^2)
     i = 1
     for l in 0:p
         for m in -l:l
-            reg_harmonics[i] = Ylm(multipole_acceptance_criterion, phi, l, m) * rho^l
+            reg_harmonics[i] = Ylm(theta, phi, l, m) * rho^l
             i+=1
         end
     end
     return reg_harmonics
 end
 
-function irregular_harmonic_manual(rho, multipole_acceptance_criterion, phi, p)
+function irregular_harmonic_manual(rho, theta, phi, p)
     reg_harmonics = Vector{Complex{Float64}}(undef,(p+1)^2)
     i = 1
     for l in 0:p
         for m in -l:l
-            reg_harmonics[i] = Ylm(multipole_acceptance_criterion, phi, l, m) / rho^(l+1)
+            reg_harmonics[i] = Ylm(theta, phi, l, m) / rho^(l+1)
             i+=1
         end
     end
@@ -217,8 +217,8 @@ P = 3
 
 rh_man = regular_harmonic_manual(rho, alpha, beta, P)
 rh_fmm = zeros(Complex{Float64},length(rh_man))
-rh_fmm_multipole_acceptance_criterion = zeros(Complex{Float64},length(rh_man))
-fmm.regular_harmonic!(rh_fmm, rh_fmm_multipole_acceptance_criterion, rho, alpha, beta, P)
+rh_fmm_theta = zeros(Complex{Float64},length(rh_man))
+fmm.regular_harmonic!(rh_fmm, rh_fmm_theta, rho, alpha, beta, P)
 
 for i in 1:length(rh_man)
     @test isapprox(rh_man[i], rh_fmm[i]; atol=1e-11)
@@ -287,8 +287,8 @@ u_fmm = target_potential[1]
 dx = x_target - xs[1,:]
 u_check = ms[1] / sqrt(dx' * dx)
 
-function Ylm(multipole_acceptance_criterion, phi, l, m)
-    ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(multipole_acceptance_criterion), l, abs(m)) * exp(im * m * phi)
+function Ylm(theta, phi, l, m)
+    ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(theta), l, abs(m)) * exp(im * m * phi)
 end
 
 function evaluate_biot_savart(x_source, x_target, q_source, P)
@@ -403,9 +403,9 @@ source_i = new_order_index[1] # just needs to be farther away than the target to
 dx_source = fmm.cartesian_2_spherical(elements[source_i,fmm.POSITION] - tree.branches[branch_i].center)
 dx_target = fmm.cartesian_2_spherical(elements[target_i,fmm.POSITION] - tree.branches[branch_i].center)
 
-local_coefficients_multipole_acceptance_criterion = zeros(Float64, 2, ((expansion_order+1)*(expansion_order+2))>>1)
+local_coefficients_theta = zeros(Float64, 2, ((expansion_order+1)*(expansion_order+2))>>1)
 local_coefficients_expanded = zeros(Float64, 2, (expansion_order+1)^2)
-local_coefficients_expanded_multipole_acceptance_criterion = zeros(Float64, 2, (expansion_order+1)^2)
+local_coefficients_expanded_theta = zeros(Float64, 2, (expansion_order+1)^2)
 fmm.irregular_harmonic!(local_coefficients_expanded, dx_source..., expansion_order)
 local_coefficients_expanded .*= ms[1]
 regular_harmonics_expanded = zeros(Float64, 2, (expansion_order+1)^2)
@@ -414,10 +414,10 @@ fmm.regular_harmonic!(regular_harmonics_expanded, dx_target..., expansion_order)
 fmm.B2L!(tree, branch_i, elements[source_i,fmm.POSITION], elements.bodies[source_i].strength)
 
 harmonics = zeros(Float64, 2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion = zeros(Float64, 2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion_2 = zeros(Float64, 2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64, 2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64, 2, (expansion_order+1)^2)
 workspace = zeros(3,4)
-fmm.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, expansion_order, tree.branches[branch_i].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+fmm.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[branch_i].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,target_i]
 
 dx_direct = xs[4,:] - xs[1,:]
@@ -465,11 +465,11 @@ fmm.B2L!(tree, 2, elements[new_order_index[1],fmm.POSITION], elements.bodies[new
 
 # check L2P now:
 harmonics = zeros(Float64,2,(expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion = zeros(Float64,2,(expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion_2 = zeros(Float64,2,(expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2,(expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2,(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(52)
-fmm.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, expansion_order, tree.branches[2].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+fmm.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[2].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm_no_x = elements.potential[1,new_order_index[5]]
 elements.potential[1,new_order_index[5]] *= 0
 
@@ -482,7 +482,7 @@ fmm.irregular_harmonic!(local_coefficients_check, dx_check, dy_check, dz_check, 
 local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
-fmm.L2B!((elements,), tree.branches[7], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+fmm.L2B!((elements,), tree.branches[7], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,new_order_index[5]]
 
 dx_direct = elements[new_order_index[5],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
@@ -530,8 +530,8 @@ tree = fmm.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=fa
 i_branch_multipole = 7 # mass 5
 i_branch_local = 5 # mass 1
 harmonics = zeros(Float64,2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion = zeros(Float64,2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion_2 = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
 
 fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_order_index[5], harmonics, tree.expansion_order)
@@ -551,7 +551,7 @@ fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_ord
 m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), 2, (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
 L = zeros(eltype(tree.branches[1].local_expansion), 2, 4)
 fmm.M2L!(tree.branches[i_branch_local], tree.branches[i_branch_multipole], m2l_harmonics, L, expansion_order)
-fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, expansion_order, tree.branches[i_branch_local].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[i_branch_local].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm = elements.potential[1,new_order_index[1]]
 
 local_exp = tree.branches[i_branch_local].local_expansion[1]
@@ -623,7 +623,7 @@ u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
 m2l_list, direct_list = fmm.build_interaction_lists(tree.branches, tree.branches, multipole_acceptance_criterion, true, true, true)
-fmm.nearfield_singlethread!((elements,), tree.branches, (elements,), tree.branches, direct_list)
+fmm.nearfield_singlethread!((elements,), tree.branches, (fmm.DerivativesSwitch(),), (elements,), tree.branches, direct_list)
 fmm.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
 
 # consider the effect on branch 3 (mass 2)
@@ -632,9 +632,9 @@ elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at ma
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[1]])
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[2]])
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[3]])
-fmm.P2P!((elements,), tree.branches[3], (elements,), tree.branches[3])
-fmm.P2P!((elements,), tree.branches[3], (elements,), tree.branches[4])
-fmm.P2P!((elements,), tree.branches[3], (elements,), tree.branches[5])
+fmm.P2P!((elements,), tree.branches[3], (fmm.DerivativesSwitch(),), (elements,), tree.branches[3])
+fmm.P2P!((elements,), tree.branches[3], (fmm.DerivativesSwitch(),), (elements,), tree.branches[4])
+fmm.P2P!((elements,), tree.branches[3], (fmm.DerivativesSwitch(),), (elements,), tree.branches[5])
 u_fmm_123 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_12 = elements[new_order_index[2],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
@@ -647,10 +647,10 @@ u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
 # M2L is performed from branches 6, 7 to branch 3 (containing mass 2)
 harmonics = zeros(Float64,2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion = zeros(Float64,2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion_2 = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
-fmm.L2B!((elements,), tree.branches[3], expansion_order, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+fmm.L2B!((elements,), tree.branches[3], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_42 = elements[new_order_index[4],fmm.POSITION] - elements[new_order_index[2],fmm.POSITION]
@@ -693,21 +693,21 @@ include("vortex.jl")
 """
 dr_k/dx_idx_j
 """
-function d2rdx2(r, multipole_acceptance_criterion, phi)
+function d2rdx2(r, theta, phi)
     derivatives = zeros(3,3,3)
     derivatives[:,:,1] .= [
-        (1-cos(phi)^2 * sin(multipole_acceptance_criterion)^2)/r -sin(multipole_acceptance_criterion)^2*cos(phi)*sin(phi)/r -sin(multipole_acceptance_criterion)*cos(phi)*cos(multipole_acceptance_criterion)/r;
-        (-sin(multipole_acceptance_criterion)^2*cos(phi)*sin(phi))/r (1-sin(multipole_acceptance_criterion)^2*sin(phi)^2)/r -sin(multipole_acceptance_criterion)*sin(phi)*cos(multipole_acceptance_criterion)/r;
-        -sin(multipole_acceptance_criterion)*cos(phi)*cos(multipole_acceptance_criterion)/r -sin(multipole_acceptance_criterion)*sin(phi)*cos(multipole_acceptance_criterion)/r sin(multipole_acceptance_criterion)^2/r
+        (1-cos(phi)^2 * sin(theta)^2)/r -sin(theta)^2*cos(phi)*sin(phi)/r -sin(theta)*cos(phi)*cos(theta)/r;
+        (-sin(theta)^2*cos(phi)*sin(phi))/r (1-sin(theta)^2*sin(phi)^2)/r -sin(theta)*sin(phi)*cos(theta)/r;
+        -sin(theta)*cos(phi)*cos(theta)/r -sin(theta)*sin(phi)*cos(theta)/r sin(theta)^2/r
     ]
     derivatives[:,:,2] .= [
-        cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*(1-cos(phi)^2*(1+2*sin(multipole_acceptance_criterion)^2))/r^2 -cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*sin(phi)*cos(phi)*(1+2*sin(multipole_acceptance_criterion)^2)/r^2 cos(phi)*(1-2*cos(multipole_acceptance_criterion)^2)/r^2;
-        -cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*sin(phi)*cos(phi)*(1+2*sin(multipole_acceptance_criterion)^2)/r^2 cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*(1-sin(phi)^2*(1+2*sin(multipole_acceptance_criterion)^2))/r^2 (2*sin(multipole_acceptance_criterion)^2-1)/r^2*sin(phi);
-        cos(phi)*(1-2*cos(multipole_acceptance_criterion)^2)/r^2 (2*sin(multipole_acceptance_criterion)^2-1)/r^2*sin(phi) 2*sin(multipole_acceptance_criterion)*cos(multipole_acceptance_criterion)/r^2
+        cos(theta)/sin(theta)*(1-cos(phi)^2*(1+2*sin(theta)^2))/r^2 -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/r^2 cos(phi)*(1-2*cos(theta)^2)/r^2;
+        -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/r^2 cos(theta)/sin(theta)*(1-sin(phi)^2*(1+2*sin(theta)^2))/r^2 (2*sin(theta)^2-1)/r^2*sin(phi);
+        cos(phi)*(1-2*cos(theta)^2)/r^2 (2*sin(theta)^2-1)/r^2*sin(phi) 2*sin(theta)*cos(theta)/r^2
     ]
     derivatives[:,:,3] .= [
-        2*cos(phi)*sin(phi)/r^2/sin(multipole_acceptance_criterion)^2 (2*sin(phi)^2-1)/r^2/sin(multipole_acceptance_criterion)^2 0;
-        (2*sin(phi)^2-1)/r^2/sin(multipole_acceptance_criterion)^2 -2*sin(phi)*cos(phi)/r^2/sin(multipole_acceptance_criterion)^2 0;
+        2*cos(phi)*sin(phi)/r^2/sin(theta)^2 (2*sin(phi)^2-1)/r^2/sin(theta)^2 0;
+        (2*sin(phi)^2-1)/r^2/sin(theta)^2 -2*sin(phi)*cos(phi)/r^2/sin(theta)^2 0;
         0 0 0
     ]
     return derivatives
@@ -715,37 +715,37 @@ end
 
 function cartesian_2_spherical(x,y,z; vec=false)
     r = sqrt(x^2+y^2+z^2)
-    multipole_acceptance_criterion = acos(z/r)
+    theta = acos(z/r)
     phi = atan(y,x)
-    vec && return [r,multipole_acceptance_criterion,phi]
-    return r, multipole_acceptance_criterion, phi
+    vec && return [r,theta,phi]
+    return r, theta, phi
 end
 
 function d2rdx2_cart(x,y,z)
-    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(x,y,z)
-    return d2rdx2(r,multipole_acceptance_criterion,phi)
+    r, theta, phi = cartesian_2_spherical(x,y,z)
+    return d2rdx2(r,theta,phi)
 end
 
 """
 dr_j/dx_i
 """
-function drdx(r,multipole_acceptance_criterion,phi)
+function drdx(r,theta,phi)
     derivatives = [
-        sin(multipole_acceptance_criterion)*cos(phi) cos(multipole_acceptance_criterion)*cos(phi)/r -sin(phi)/r/sin(multipole_acceptance_criterion);
-        sin(multipole_acceptance_criterion)*sin(phi) cos(multipole_acceptance_criterion)*sin(phi)/r cos(phi)/r/sin(multipole_acceptance_criterion);
-        cos(multipole_acceptance_criterion) -sin(multipole_acceptance_criterion)/r 0
+        sin(theta)*cos(phi) cos(theta)*cos(phi)/r -sin(phi)/r/sin(theta);
+        sin(theta)*sin(phi) cos(theta)*sin(phi)/r cos(phi)/r/sin(theta);
+        cos(theta) -sin(theta)/r 0
     ]
     # derivatives = [
-    #     sin(multipole_acceptance_criterion)*cos(phi) sin(multipole_acceptance_criterion)*sin(phi) cos(multipole_acceptance_criterion);
-    #     cos(multipole_acceptance_criterion)*cos(phi)/r cos(multipole_acceptance_criterion)*sin(phi)/r -sin(multipole_acceptance_criterion)/r;
-    #     -sin(phi)/r/sin(multipole_acceptance_criterion) cos(phi)/r/sin(multipole_acceptance_criterion) 0
+    #     sin(theta)*cos(phi) sin(theta)*sin(phi) cos(theta);
+    #     cos(theta)*cos(phi)/r cos(theta)*sin(phi)/r -sin(theta)/r;
+    #     -sin(phi)/r/sin(theta) cos(phi)/r/sin(theta) 0
     # ]
     return derivatives
 end
 
 function drdx_cart(x,y,z)
-    r, multipole_acceptance_criterion, phi = cartesian_2_spherical(x,y,z)
-    return drdx(r, multipole_acceptance_criterion, phi)
+    r, theta, phi = cartesian_2_spherical(x,y,z)
+    return drdx(r, theta, phi)
 end
 
 function d2rdx2_fd(x,y,z)
@@ -786,21 +786,21 @@ end
 """
 dr_k/dx_idx_j
 """
-function d2rdx2(r, multipole_acceptance_criterion, phi)
+function d2rdx2(r, theta, phi)
     derivatives = zeros(3,3,3)
     derivatives[:,:,1] .= [
-        (1-cos(phi)^2 * sin(multipole_acceptance_criterion)^2)/r -sin(multipole_acceptance_criterion)^2*cos(phi)*sin(phi)/r -sin(multipole_acceptance_criterion)*cos(phi)*cos(multipole_acceptance_criterion)/r;
-        (-sin(multipole_acceptance_criterion)^2*cos(phi)*sin(phi))/r (1-sin(multipole_acceptance_criterion)^2*sin(phi)^2)/r -sin(multipole_acceptance_criterion)*sin(phi)*cos(multipole_acceptance_criterion)/r;
-        -sin(multipole_acceptance_criterion)*cos(phi)*cos(multipole_acceptance_criterion)/r -sin(multipole_acceptance_criterion)*sin(phi)*cos(multipole_acceptance_criterion)/r sin(multipole_acceptance_criterion)^2/r
+        (1-cos(phi)^2 * sin(theta)^2)/r -sin(theta)^2*cos(phi)*sin(phi)/r -sin(theta)*cos(phi)*cos(theta)/r;
+        (-sin(theta)^2*cos(phi)*sin(phi))/r (1-sin(theta)^2*sin(phi)^2)/r -sin(theta)*sin(phi)*cos(theta)/r;
+        -sin(theta)*cos(phi)*cos(theta)/r -sin(theta)*sin(phi)*cos(theta)/r sin(theta)^2/r
     ]
     derivatives[:,:,2] .= [
-        cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*(1-cos(phi)^2*(1+2*sin(multipole_acceptance_criterion)^2))/r^2 -cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*sin(phi)*cos(phi)*(1+2*sin(multipole_acceptance_criterion)^2)/r^2 cos(phi)*(1-2*cos(multipole_acceptance_criterion)^2)/r^2;
-        -cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*sin(phi)*cos(phi)*(1+2*sin(multipole_acceptance_criterion)^2)/r^2 cos(multipole_acceptance_criterion)/sin(multipole_acceptance_criterion)*(1-sin(phi)^2*(1+2*sin(multipole_acceptance_criterion)^2))/r^2 (2*sin(multipole_acceptance_criterion)^2-1)/r^2*sin(phi);
-        cos(phi)*(1-2*cos(multipole_acceptance_criterion)^2)/r^2 (2*sin(multipole_acceptance_criterion)^2-1)/r^2*sin(phi) 2*sin(multipole_acceptance_criterion)*cos(multipole_acceptance_criterion)/r^2
+        cos(theta)/sin(theta)*(1-cos(phi)^2*(1+2*sin(theta)^2))/r^2 -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/r^2 cos(phi)*(1-2*cos(theta)^2)/r^2;
+        -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/r^2 cos(theta)/sin(theta)*(1-sin(phi)^2*(1+2*sin(theta)^2))/r^2 (2*sin(theta)^2-1)/r^2*sin(phi);
+        cos(phi)*(1-2*cos(theta)^2)/r^2 (2*sin(theta)^2-1)/r^2*sin(phi) 2*sin(theta)*cos(theta)/r^2
     ]
     derivatives[:,:,3] .= [
-        2*cos(phi)*sin(phi)/r^2/sin(multipole_acceptance_criterion)^2 (2*sin(phi)^2-1)/r^2/sin(multipole_acceptance_criterion)^2 0;
-        (2*sin(phi)^2-1)/r^2/sin(multipole_acceptance_criterion)^2 -2*sin(phi)*cos(phi)/r^2/sin(multipole_acceptance_criterion)^2 0;
+        2*cos(phi)*sin(phi)/r^2/sin(theta)^2 (2*sin(phi)^2-1)/r^2/sin(theta)^2 0;
+        (2*sin(phi)^2-1)/r^2/sin(theta)^2 -2*sin(phi)*cos(phi)/r^2/sin(theta)^2 0;
         0 0 0
     ]
     return derivatives
@@ -809,16 +809,16 @@ end
 """
 dr_j/dx_i
 """
-function drdx(r,multipole_acceptance_criterion,phi)
+function drdx(r,theta,phi)
     derivatives = [
-        sin(multipole_acceptance_criterion)*cos(phi) cos(multipole_acceptance_criterion)*cos(phi)/r -sin(phi)/r/sin(multipole_acceptance_criterion);
-        sin(multipole_acceptance_criterion)*sin(phi) cos(multipole_acceptance_criterion)*sin(phi)/r cos(phi)/r/sin(multipole_acceptance_criterion);
-        cos(multipole_acceptance_criterion) -sin(multipole_acceptance_criterion)/r 0
+        sin(theta)*cos(phi) cos(theta)*cos(phi)/r -sin(phi)/r/sin(theta);
+        sin(theta)*sin(phi) cos(theta)*sin(phi)/r cos(phi)/r/sin(theta);
+        cos(theta) -sin(theta)/r 0
     ]
     # derivatives = [
-    #     sin(multipole_acceptance_criterion)*cos(phi) sin(multipole_acceptance_criterion)*sin(phi) cos(multipole_acceptance_criterion);
-    #     cos(multipole_acceptance_criterion)*cos(phi)/r cos(multipole_acceptance_criterion)*sin(phi)/r -sin(multipole_acceptance_criterion)/r;
-    #     -sin(phi)/r/sin(multipole_acceptance_criterion) cos(phi)/r/sin(multipole_acceptance_criterion) 0
+    #     sin(theta)*cos(phi) sin(theta)*sin(phi) cos(theta);
+    #     cos(theta)*cos(phi)/r cos(theta)*sin(phi)/r -sin(theta)/r;
+    #     -sin(phi)/r/sin(theta) cos(phi)/r/sin(theta) 0
     # ]
     return derivatives
 end
@@ -826,24 +826,24 @@ end
 # """
 # dr_i/dx_j
 # """
-# function drdx(r,multipole_acceptance_criterion,phi)
+# function drdx(r,theta,phi)
 #     # derivatives = [
-#     #     sin(multipole_acceptance_criterion)*cos(phi) cos(multipole_acceptance_criterion)*cos(phi)/r -sin(phi)/r/sin(multipole_acceptance_criterion);
-#     #     sin(multipole_acceptance_criterion)*sin(phi) cos(multipole_acceptance_criterion)*sin(multipole_acceptance_criterion)/r cos(phi)/r/sin(multipole_acceptance_criterion);
-#     #     cos(multipole_acceptance_criterion) -sin(multipole_acceptance_criterion)/r 0
+#     #     sin(theta)*cos(phi) cos(theta)*cos(phi)/r -sin(phi)/r/sin(theta);
+#     #     sin(theta)*sin(phi) cos(theta)*sin(theta)/r cos(phi)/r/sin(theta);
+#     #     cos(theta) -sin(theta)/r 0
 #     # ]
 #     derivatives = [
-#         sin(multipole_acceptance_criterion)*cos(phi) sin(multipole_acceptance_criterion)*sin(phi) cos(multipole_acceptance_criterion);
-#         cos(multipole_acceptance_criterion)*cos(phi)/r cos(multipole_acceptance_criterion)*sin(phi)/r -sin(multipole_acceptance_criterion)/r;
-#         -sin(phi)/r/sin(multipole_acceptance_criterion) cos(phi)/r/sin(multipole_acceptance_criterion) 0
+#         sin(theta)*cos(phi) sin(theta)*sin(phi) cos(theta);
+#         cos(theta)*cos(phi)/r cos(theta)*sin(phi)/r -sin(theta)/r;
+#         -sin(phi)/r/sin(theta) cos(phi)/r/sin(theta) 0
 #     ]
 #     return derivatives
 # end
 
-function derivatives_2_cartesian(first_derivatives, second_derivatives, r, multipole_acceptance_criterion, phi)
+function derivatives_2_cartesian(first_derivatives, second_derivatives, r, theta, phi)
     @assert size(spherical_derivatives) == (3,3)
-    d2_unit_vec = d2rdx2(r, multipole_acceptance_criterion, phi)
-    d_unit_vec = drdx(r,multipole_acceptance_criterion,phi)
+    d2_unit_vec = d2rdx2(r, theta, phi)
+    d_unit_vec = drdx(r,theta,phi)
     cartesian_derivatives = zeros(3,3)
     for k in 1:3
         cartesian_derivatives .+= d2_unit_vec[:,:,k] .* first_derivatives[k]
@@ -859,23 +859,23 @@ end
 
 function simple(X)
     r = X[1]
-    multipole_acceptance_criterion = X[2]
+    theta = X[2]
     phi = X[3]
-    return 3*r^4*cos(multipole_acceptance_criterion) + 2*multipole_acceptance_criterion - sin(phi)
+    return 3*r^4*cos(theta) + 2*theta - sin(phi)
 end
 
 function cartesian_2_spherical(x,y,z; vec=false)
     r = sqrt(x^2+y^2+z^2)
-    multipole_acceptance_criterion = acos(z/r)
+    theta = acos(z/r)
     phi = atan(y/x)
-    vec && return [r,multipole_acceptance_criterion,phi]
-    return r, multipole_acceptance_criterion, phi
+    vec && return [r,theta,phi]
+    return r, theta, phi
 end
 
-function spherical_2_cartesian(r,multipole_acceptance_criterion,phi; vec=false)
-    x = r*sin(multipole_acceptance_criterion)*cos(phi)
-    y = r*sin(multipole_acceptance_criterion)*sin(phi)
-    z = r*cos(multipole_acceptance_criterion)
+function spherical_2_cartesian(r,theta,phi; vec=false)
+    x = r*sin(theta)*cos(phi)
+    y = r*sin(theta)*sin(phi)
+    z = r*cos(theta)
     vec && return [x,y,z]
     return x,y,z
 end
@@ -885,20 +885,20 @@ function simple_cart(X)
     return simple(args)
 end
 
-r0, multipole_acceptance_criterion0, phi0 = rand(3)
+r0, theta0, phi0 = rand(3)
 
-dsdr(r,multipole_acceptance_criterion,phi) = 12 * r^3 * cos(multipole_acceptance_criterion)
-dsdt(r,multipole_acceptance_criterion,phi) = 3*r^4*-sin(multipole_acceptance_criterion) + 2
-dsdp(r,multipole_acceptance_criterion,phi) = -cos(phi)
-d2sdr2(r,multipole_acceptance_criterion,phi) = 36 * r^2 * cos(multipole_acceptance_criterion)
-d2sdrdt(r,multipole_acceptance_criterion,phi) = -12*r^3*sin(multipole_acceptance_criterion)
-d2sdrdp(r,multipole_acceptance_criterion,phi) = 0.0
-d2sdt2(r,multipole_acceptance_criterion,phi) = -3*r^4*cos(multipole_acceptance_criterion)
-d2sdtdp(r,multipole_acceptance_criterion,phi) = 0.0
-d2sdp2(r,multipole_acceptance_criterion,phi) = sin(phi)
+dsdr(r,theta,phi) = 12 * r^3 * cos(theta)
+dsdt(r,theta,phi) = 3*r^4*-sin(theta) + 2
+dsdp(r,theta,phi) = -cos(phi)
+d2sdr2(r,theta,phi) = 36 * r^2 * cos(theta)
+d2sdrdt(r,theta,phi) = -12*r^3*sin(theta)
+d2sdrdp(r,theta,phi) = 0.0
+d2sdt2(r,theta,phi) = -3*r^4*cos(theta)
+d2sdtdp(r,theta,phi) = 0.0
+d2sdp2(r,theta,phi) = sin(phi)
 
-testd = cs_derivative(simple,1,Complex{Float64}[r0,multipole_acceptance_criterion0,phi0])
-@test isapprox(testd, dsdr(r0,multipole_acceptance_criterion0,phi0);atol=1e-12)
+testd = cs_derivative(simple,1,Complex{Float64}[r0,theta0,phi0])
+@test isapprox(testd, dsdr(r0,theta0,phi0);atol=1e-12)
 
 function second_derivative(func,i,j,args; step=1e-8)
     first_func(args) = cs_derivative(func,i,args)
@@ -917,11 +917,11 @@ function fd_hessian(func, args)
     end
     return simple_jacobian
 end
-simple_jacobian = fd_hessian(simple,[r0,multipole_acceptance_criterion0,phi0])
+simple_jacobian = fd_hessian(simple,[r0,theta0,phi0])
 simple_jacobian_anal = [
-    d2sdr2(r0,multipole_acceptance_criterion0,phi0) d2sdrdt(r0,multipole_acceptance_criterion0,phi0) d2sdrdp(r0,multipole_acceptance_criterion0,phi0);
-    d2sdrdt(r0,multipole_acceptance_criterion0,phi0) d2sdt2(r0,multipole_acceptance_criterion0,phi0) d2sdtdp(r0,multipole_acceptance_criterion0,phi0);
-    d2sdrdp(r0,multipole_acceptance_criterion0,phi0) d2sdtdp(r0,multipole_acceptance_criterion0,phi0) d2sdp2(r0,multipole_acceptance_criterion0,phi0);
+    d2sdr2(r0,theta0,phi0) d2sdrdt(r0,theta0,phi0) d2sdrdp(r0,theta0,phi0);
+    d2sdrdt(r0,theta0,phi0) d2sdt2(r0,theta0,phi0) d2sdtdp(r0,theta0,phi0);
+    d2sdrdp(r0,theta0,phi0) d2sdtdp(r0,theta0,phi0) d2sdp2(r0,theta0,phi0);
 ]
 
 for i in 1:length(simple_jacobian)
@@ -929,7 +929,7 @@ for i in 1:length(simple_jacobian)
 end
 
 # test chain rule
-args = [r0,multipole_acceptance_criterion0,phi0]
+args = [r0,theta0,phi0]
 spherical_grad = [cs_derivative(simple,i,convert(Vector{Complex{Float64}},args)) for i in 1:3]
 spherical_hessian = fd_hessian(simple, args)
 d2rkdxidxj = d2rdx2(args...)
@@ -957,7 +957,7 @@ for i in 1:4
 end
 workspace = zeros(3,4)
 
-fmm.spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r0, multipole_acceptance_criterion0, phi0)
+fmm.spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r0, theta0, phi0, fmm.DerivativesSwitch())
 
 for i in 1:3
     for j in 1:3
@@ -1031,11 +1031,11 @@ fmm.M2L!(tree.branches[2], tree.branches[3], m2l_harmonics, L, Val(expansion_ord
 fmm.M2L!(tree.branches[3], tree.branches[2], m2l_harmonics, L, Val(expansion_order))
 # @show tree.branches[2].local_expansion
 harmonics = zeros(Float64,2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion = zeros(Float64,2, (expansion_order+1)^2)
-harmonics_multipole_acceptance_criterion_2 = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
+harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
-fmm.L2B!((vortexparticles,), tree.branches[2], Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
-fmm.L2B!((vortexparticles,), tree.branches[3], Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_multipole_acceptance_criterion, harmonics_multipole_acceptance_criterion_2, workspace)
+fmm.L2B!((vortexparticles,), tree.branches[2], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!((vortexparticles,), tree.branches[3], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
 update_velocity_stretching!(vortexparticles)
 
 for i in 1:2
@@ -1420,7 +1420,7 @@ multipole_expansion_test = [3.15347369905358e-5 0.0 0.0 0.0; 0.0 0.0 0.0 0.0;;; 
 expansion_order = Val{14}()
 fmm._B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, fmm.UniformSourcePanel())
 for i in eachindex(multipole_expansion)
-    @test isapprox(multipole_expansion[i], multipole_expansion_test[i]; atol=2e-11)
+    @test isapprox(multipole_expansion[i], multipole_expansion_test[i]; atol=1e-12)
 end
 
 # single tri panel
