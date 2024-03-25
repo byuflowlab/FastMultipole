@@ -509,6 +509,155 @@ end
 #####
 ##### running FMM
 #####
+
+"""
+    fmm!(target_systems, source_systems; kwargs...)
+
+Apply all interactions of `source_systems` acting on `target_systems` using the fast multipole method. Assumes compatibility functions have been overloaded for both source and target systems.
+
+# Arguments
+
+- `target_systems`: either
+
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+    
+- `source_systems`: either
+    
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+    
+# Optional Arguments
+
+- `expansion_order::Int`: the expansion order to be used
+- `n_per_branch_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
+- `n_per_branch_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
+- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
+- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
+- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
+- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
+- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
+- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
+- `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for the `source_systems`
+- `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for the `target_systems`
+- `source_shink_recenter::Bool`: indicates whether or not to resize branches for the `source_systems` octree after it is created to increase computational efficiency
+- `target_shink_recenter::Bool`: indicates whether or not to resize branches for the `target_systems` octree after it is created to increase computational efficiency
+- `save_tree::Bool`: indicates whether or not to save a VTK file for visualizing the octree
+- `save_name::String`: name and path of the octree visualization if `save_tree == true`
+
+"""
+function fmm!(target_systems, source_systems;
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
+    expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4, 
+    nearfield=true, farfield=true, self_induced=true, 
+    unsort_source_bodies=true, unsort_target_bodies=true, 
+    source_shrink_recenter=true, target_shrink_recenter=true, 
+    save_tree=false, save_name="tree"
+)
+    # check for duplicate systems
+    target_systems = wrap_duplicates(target_systems, source_systems)
+
+    # create trees
+    source_tree = Tree(source_systems; expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
+
+    # perform fmm
+    fmm!(target_tree, target_systems, source_tree, source_systems; 
+        scalar_potential, vector_potential, velocity, velocity_gradient, 
+        multipole_acceptance_criterion, 
+        reset_source_tree=false, reset_target_tree=false, 
+        nearfield, farfield, self_induced, 
+        unsort_source_bodies, unsort_target_bodies
+    )
+
+    # visualize
+    save_tree && (visualize(save_name, systems, tree))
+    
+    return source_tree, target_tree
+end
+
+"""
+    fmm!(systems; kwargs...)
+
+Apply all interactions of `systems` acting on itself using the fast multipole method. Assumes compatibility functions have been overloaded for both source and target systems.
+
+# Arguments
+
+- `systems`: either
+
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+
+# Optional Arguments
+
+- `expansion_order::Int`: the expansion order to be used
+- `n_per_branch::Int`: maximum number of bodies from `systems` allowed in a leaf-level branch
+- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
+- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
+- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
+- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
+- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
+- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
+- `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
+- `shink_recenter::Bool`: indicates whether or not to resize branches for the octree after it is created to increase computational efficiency
+- `save_tree::Bool`: indicates whether or not to save a VTK file for visualizing the octree
+- `save_name::String`: name and path of the octree visualization if `save_tree == true`
+    
+"""
+function fmm!(systems; 
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
+    expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4, 
+    nearfield=true, farfield=true, self_induced=true, 
+    unsort_bodies=true, shrink_recenter=true, 
+    save_tree=false, save_name="tree"
+)
+    # create tree
+    tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter)
+    
+    # perform fmm
+    fmm!(tree, systems;
+        scalar_potential, vector_potential, velocity, velocity_gradient,
+        multipole_acceptance_criterion, reset_tree=false, 
+        nearfield, farfield, self_induced, 
+        unsort_bodies
+    )
+    
+    # visualize
+    save_tree && (visualize(save_name, systems, tree))
+
+    return tree
+end
+
+"""
+    fmm!(tree, systems; kwargs...)
+
+Dispatches `fmm!` using an existing `::Tree`.
+
+# Arguments
+
+- `tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
+- `systems`: either
+
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+
+# Optional Arguments
+
+- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
+- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
+- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
+- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
+- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
+- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
+- `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
+    
+"""
 function fmm!(tree::Tree, systems; 
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     multipole_acceptance_criterion=0.4, reset_tree=true, 
@@ -523,6 +672,40 @@ function fmm!(tree::Tree, systems;
     )
 end
 
+
+"""
+    fmm!(target_tree, target_systems, source_tree, source_systems; kwargs...)
+
+Dispatches `fmm!` using existing `::Tree` objects.
+
+# Arguments
+
+- `target_tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
+- `target_systems`: either
+
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+
+- `source_tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
+- `source_systems`: either
+
+    - a system object for which compatibility functions have been overloaded, or
+    - a tuple of system objects for which compatibility functions have been overloaded
+
+# Optional Arguments
+
+- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
+- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
+- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
+- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
+- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
+- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
+- `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `source_systems`
+- `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
+
+"""
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     multipole_acceptance_criterion=0.4, 
@@ -568,91 +751,4 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # unsort bodies
     unsort_target_bodies && (unsort!(target_systems, target_tree))
     unsort_source_bodies && (unsort!(source_systems, source_tree))
-end
-
-function fmm!(systems; 
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4, 
-    nearfield=true, farfield=true, self_induced=true, 
-    unsort_bodies=true, shrink_recenter=true, 
-    save_tree=false, save_name="tree"
-)
-    # create tree
-    tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter)
-    
-    # perform fmm
-    fmm!(tree, systems;
-        scalar_potential, vector_potential, velocity, velocity_gradient,
-        multipole_acceptance_criterion, reset_tree=false, 
-        nearfield, farfield, self_induced, 
-        unsort_bodies
-    )
-    
-    # visualize
-    save_tree && (visualize(save_name, systems, tree))
-
-    return tree
-end
-
-@inline wrap_duplicates(target_systems::Tuple, source_systems::Tuple) = Tuple(target_system in source_systems ? SortWrapper(target_system) : target_system for target_system in target_systems)
-
-@inline wrap_duplicates(target_system, source_system) = target_system == source_system ? SortWrapper(target_system) : target_system
-
-@inline wrap_duplicates(target_system, source_systems::Tuple) = target_system in source_systems ? SortWrapper(target_system) : target_system
-
-@inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
-
-"""
-    fmm!(target_systems, source_systems; kwargs...)
-
-Apply all interactions of `source_systems` acting on `target_systems` using the fast multipole method. Assumes compatibility functions have been overloaded for both source and target systems.
-
-# Arguments
-
-- `target_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-    
-- `source_systems`: either
-    
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-    
-# Optional Arguments
-
-- `expansion_order::Int`: the expansion order to be used
-- `n_per_branch_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
-- `n_per_branch_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
-- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
-
-"""
-function fmm!(target_systems, source_systems;
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4, 
-    nearfield=true, farfield=true, self_induced=true, 
-    unsort_source_bodies=true, unsort_target_bodies=true, 
-    source_shrink_recenter=true, target_shrink_recenter=true, 
-    save_tree=false, save_name="tree"
-)
-    # check for duplicate systems
-    target_systems = wrap_duplicates(target_systems, source_systems)
-
-    # create trees
-    source_tree = Tree(source_systems; expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
-
-    # perform fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems; 
-        scalar_potential, vector_potential, velocity, velocity_gradient, 
-        multipole_acceptance_criterion, 
-        reset_source_tree=false, reset_target_tree=false, 
-        nearfield, farfield, self_induced, 
-        unsort_source_bodies, unsort_target_bodies
-    )
-
-    # visualize
-    save_tree && (visualize(save_name, systems, tree))
-    
-    return source_tree, target_tree
 end

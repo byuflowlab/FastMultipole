@@ -3,6 +3,23 @@ function ProbeSystem(n_probes::Int, TF=Float64; scalar_potential=false, vector_p
     return ProbeSystem(positions; scalar_potential, vector_potential, velocity, velocity_gradient)
 end
 
+"""
+    ProbeSystem(positions; kwargs...)
+
+A convenience system constructor for calculating the influence of source systems at locations not already described by a system object. It behaves like a system whose elements induce a null potential field.
+
+# Arguments
+
+- `positions::Vector{SVector{3,Float64}}`: a vector of position vectors of each probe
+
+# Optional Arguments
+
+- `scalar_potential::Bool`: whether or not to compute the scalar potential at each probe location
+- `vector_potential::Bool`: whether or not to compute the vector potential at each probe location
+- `velocity::Bool`: whether or not to compute the velocity at each probe location
+- `velocity_gradient::Bool`: whether or not to compute the velocity gradient at each probe location
+
+"""
 function ProbeSystem(positions::Vector{SVector{3,TF}}; scalar_potential=false, vector_potential=false, velocity=false, velocity_gradient=false) where TF
     n_probes = length(positions)
     scalar_potentials = scalar_potential ? zeros(TF,n_probes) : nothing
@@ -12,6 +29,11 @@ function ProbeSystem(positions::Vector{SVector{3,TF}}; scalar_potential=false, v
     return ProbeSystem(positions, scalar_potentials, vector_potentials, velocities, velocity_gradients)
 end
 
+"""
+    ProbeSystem(positions; kwargs...)
+
+Dispatch of [`ProbeSystem`](@ref) accepting a matrix of horizontally concatenated column vectors describing the position of each probe. Optional arguments are identical.
+"""
 function ProbeSystem(positions::Matrix{TF}; scalar_potential=false, vector_potential=false, velocity=false, velocity_gradient=false) where TF
     n_probes = size(positions,2)
     positions = [SVector{3,TF}(positions[1,i], positions[2,i], positions[3,i]) for i in 1:n_probes]
@@ -85,6 +107,15 @@ end
 
 reset!(::Nothing) = nothing
 
+"""
+    reset!(probes)
+
+Zeroes all values (e.g. scalar/vector potential, velocity, and/or velocity gradient) of all probes.
+
+# Arguments
+
+- `probes::ProbeSystem`: a [`::ProbeSystem`](@ref) object
+"""
 function reset!(probes::ProbeSystem)
     reset!(probes.scalar_potential)
     reset!(probes.vector_potential)

@@ -49,7 +49,12 @@ function spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace
                     -s_theta*c_phi*c_theta/rho -s_theta*s_phi*c_theta/rho s_theta^2/rho
                 ]
             elseif k_coord == 2 # theta coordinate
-                drkdxidxj = @SMatrix [
+                # drkdxidxj = @SMatrix [ # big typo in the conference paper!
+                #     c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta*s_phi*c_phi*(1+2*s_theta*c_phi)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
+                #     -c_theta*s_phi*c_phi*(1+2*s_theta*c_phi)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
+                #     c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
+                # ]
+                drkdxidxj = @SMatrix [ # this works? much better at least
                     c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
                     -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
                     c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
@@ -87,15 +92,15 @@ function flatten_derivatives!(jacobian, hessian, derivatives_switch::Derivatives
 
     if GS
         # velocity gradient
-        hessian[1,1,1] = -hessian[1,1,1]+hessian[2,1,4]-hessian[3,1,3]
-        hessian[2,1,1] = -hessian[2,1,1]+hessian[3,1,2]-hessian[1,1,4]
-        hessian[3,1,1] = -hessian[3,1,1]+hessian[1,1,3]-hessian[2,1,2]
-        hessian[1,2,1] = -hessian[1,2,1]+hessian[2,2,4]-hessian[3,2,3]
-        hessian[2,2,1] = -hessian[2,2,1]+hessian[3,2,2]-hessian[1,2,4]
-        hessian[3,2,1] = -hessian[3,2,1]+hessian[1,2,3]-hessian[2,2,2]
-        hessian[1,3,1] = -hessian[1,3,1]+hessian[2,3,4]-hessian[3,3,3]
-        hessian[2,3,1] = -hessian[2,3,1]+hessian[3,3,2]-hessian[1,3,4]
-        hessian[3,3,1] = -hessian[3,3,1]+hessian[1,3,3]-hessian[2,3,2]
+        hessian[1,1,1] = -hessian[1,1,1] + hessian[2,1,4] - hessian[3,1,3]
+        hessian[2,1,1] = -hessian[2,1,1] + hessian[3,1,2] - hessian[1,1,4]
+        hessian[3,1,1] = -hessian[3,1,1] + hessian[1,1,3] - hessian[2,1,2]
+        hessian[1,2,1] = -hessian[1,2,1] + hessian[2,2,4] - hessian[3,2,3]
+        hessian[2,2,1] = -hessian[2,2,1] + hessian[3,2,2] - hessian[1,2,4]
+        hessian[3,2,1] = -hessian[3,2,1] + hessian[1,2,3] - hessian[2,2,2]
+        hessian[1,3,1] = -hessian[1,3,1] + hessian[2,3,4] - hessian[3,3,3]
+        hessian[2,3,1] = -hessian[2,3,1] + hessian[3,3,2] - hessian[1,3,4]
+        hessian[3,3,1] = -hessian[3,3,1] + hessian[1,3,3] - hessian[2,3,2]
     end
 end
 
@@ -169,6 +174,7 @@ function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
     eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
+    @show theta
     for m=0:P # l=m up here
         p = pl
         lpl = m * m + 2 * m + 1
@@ -188,6 +194,7 @@ function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
             lmm = l * l + l - m + 1
             rhol /= -(l + m)
             #harmonics[lpm] = rhol * p * eim
+            @show l m p
             harmonics[1,lpm] = rhol * p * eim[1]
             harmonics[2,lpm] = rhol * p * eim[2]
             #harmonics[lmm] = conj(harmonics[lpm])
