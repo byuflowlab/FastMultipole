@@ -174,7 +174,6 @@ function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     ei = SVector{2,TF}(cos(phi), sin(phi))
     #eim = 1.0 # e^(i * m * phi)
     eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
-    @show theta
     for m=0:P # l=m up here
         p = pl
         lpl = m * m + 2 * m + 1
@@ -194,7 +193,52 @@ function regular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
             lmm = l * l + l - m + 1
             rhol /= -(l + m)
             #harmonics[lpm] = rhol * p * eim
-            @show l m p
+            harmonics[1,lpm] = rhol * p * eim[1]
+            harmonics[2,lpm] = rhol * p * eim[2]
+            #harmonics[lmm] = conj(harmonics[lpm])
+            harmonics[1,lmm] = harmonics[1,lpm]
+            harmonics[2,lmm] = -harmonics[2,lpm]
+            p2 = p1
+            p1 = p
+            p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
+            rhol *= rho
+        end
+        rhom /= -(2 * m + 2) * (2 * m + 1)
+        pl = -pl * fact * y
+        fact += 2
+        #eim *= ei
+        eim = SVector{2,TF}(eim[1]*ei[1] - eim[2]*ei[2], eim[1]*ei[2] + eim[2]*ei[1])
+    end
+end
+
+function regular_harmonic_salloum!(harmonics, rho, theta, phi::TF, ::Val{P}) where {TF,P}
+    y,x = sincos(theta)
+    fact = 1.0
+    pl = 1.0
+    rhom = 1.0 # rho^l / (l+m)! * (-1)^l
+    #ei = exp(im * phi)
+    ei = SVector{2,TF}(cos(phi), sin(phi))
+    #eim = 1.0 # e^(i * m * phi)
+    eim = SVector{2,TF}(1.0,0.0) # e^(i * m * phi)
+    for m=0:P # l=m up here
+        p = pl
+        lpl = m * m + 2 * m + 1
+        lml = m * m + 1
+        #harmonics[lpl] = rhom * p * eim
+        harmonics[1,lpl] = rhom * p * eim[1]
+        harmonics[2,lpl] = rhom * p * eim[2]
+        #harmonics[lml] = conj(harmonics[lpl])
+        harmonics[1,lml] = harmonics[1,lpl]
+        harmonics[2,lml] = -harmonics[2,lpl]
+        p1 = p
+        p = x * (2 * m + 1) * p1
+        rhom *= rho
+        rhol = rhom
+        for l=m+1:P # l>m in here
+            lpm = l * l + l + m + 1
+            lmm = l * l + l - m + 1
+            rhol /= -(l + m)
+            #harmonics[lpm] = rhol * p * eim
             harmonics[1,lpm] = rhol * p * eim[1]
             harmonics[2,lpm] = rhol * p * eim[2]
             #harmonics[lmm] = conj(harmonics[lpm])

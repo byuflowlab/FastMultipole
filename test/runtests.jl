@@ -7,6 +7,7 @@ fmm = FastMultipole
 
 using FastMultipole.LinearAlgebra
 using FastMultipole.StaticArrays
+using ForwardDiff
 using LegendrePolynomials
 using Random
 using SpecialFunctions
@@ -964,6 +965,162 @@ for i in 1:3
         @test isapprox(cartesian_hessian[i,j], potential_hessian[i,j,1]; rtol=1e-14)
     end
 end
+
+#--- first and second derivatives of the regular solid harmonics in theta ---#
+
+function test_rh_i(i; P=7, r=rand(), theta_test = rand()*pi, phi = rand()*2*pi)
+    P = 7
+    r = rand()
+    r < 1e-2 && (r = 0.4)
+    theta_test = rand() * pi
+    isapprox(theta_test, 0.0; atol=1e-1) && (theta_test = 1e-1)
+    isapprox(theta_test, pi; atol=1e-1) && (theta_test = pi - 1e-1)
+    phi = rand()*2*pi
+
+    function get_regular_harmonic_test(theta::TF; r=r, phi=phi, P=P) where TF
+        _, _, _, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, _ = fmm.preallocate_l2b(TF, TF, Val(P))
+        fmm.regular_harmonic!(derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, r, theta, phi, P)
+        return derivative_harmonics[:,i]
+    end
+
+    function get_regular_harmonic_theta_test(theta::TF; r=r, phi=phi, P=P) where TF
+        _, _, _, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, _ = fmm.preallocate_l2b(TF, TF, Val(P))
+        fmm.regular_harmonic!(derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, r, theta, phi, P)
+        return derivative_harmonics_theta[:,i]
+    end
+
+    function get_regular_harmonic_theta_2_test(theta::TF; r=r, phi=phi, P=P) where TF
+        _, _, _, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, _ = fmm.preallocate_l2b(TF, TF, Val(P))
+        fmm.regular_harmonic!(derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, r, theta, phi, P)
+        return derivative_harmonics_theta_2[:,i]
+    end
+
+    function check_regular_harmonic_theta(theta)
+        return ForwardDiff.derivative(get_regular_harmonic_test, theta)
+    end
+
+    function check_regular_harmonic_theta_2(theta)
+        return ForwardDiff.derivative((t) -> ForwardDiff.derivative(get_regular_harmonic_test, t), theta)
+    end
+
+    rh = get_regular_harmonic_test(theta_test)
+    rh_p = get_regular_harmonic_theta_test(theta_test)
+    rh_pp = get_regular_harmonic_theta_2_test(theta_test)
+    rh_p_check = check_regular_harmonic_theta(theta_test)
+    rh_pp_check = check_regular_harmonic_theta_2(theta_test)
+
+    @test isapprox(rh_p[1], rh_p_check[1]; atol=1e-12)
+    @test isapprox(rh_p[2], rh_p_check[2]; atol=1e-12)
+    @test isapprox(rh_pp[1], rh_pp_check[1]; atol=1e-12)
+    @test isapprox(rh_pp[2], rh_pp_check[2]; atol=1e-12)
+
+    return nothing
+end
+
+P = 7
+r = rand()
+theta_test = rand() * pi
+phi = rand()*2*pi
+
+for i in 1:36
+    test_rh_i(i; P, r, theta_test, phi)
+end
+
+#--- hessian of spherical coordinates w.r.t. cartesian coordinates ---#
+
+# r coordinate
+function get_dr2dxidxj(xvec)
+    x, y, z = xvec
+    rho, theta, phi = fmm.cartesian_2_spherical(x, y, z)
+    s_theta, c_theta = sincos(theta)
+    s_phi, c_phi = sincos(phi)
+    dr2dxidxj = @SMatrix [
+        (1-c_phi^2 * s_theta^2)/rho -s_theta^2*c_phi*s_phi/rho -s_theta*c_phi*c_theta/rho;
+        (-s_theta^2*c_phi*s_phi)/rho (1-s_theta^2*s_phi^2)/rho -s_theta*s_phi*c_theta/rho;
+        -s_theta*c_phi*c_theta/rho -s_theta*s_phi*c_theta/rho s_theta^2/rho
+    ]
+    return dr2dxidxj
+end
+
+function check_dr2dxidxj(xvec)
+    return ForwardDiff.jacobian((x) -> ForwardDiff.gradient((xx) -> sqrt(xx'*xx), x), xvec)
+end
+
+function test_dr2dxidxj(xvec)
+    dr2dxidxj = get_dr2dxidxj(xvec)
+    dr2dxidxj_check = check_dr2dxidxj(xvec)
+    for i in eachindex(dr2dxidxj)
+        @test isapprox(dr2dxidxj[i], dr2dxidxj_check[i]; atol=1e-12)
+    end
+end
+
+for _ in 1:10
+    test_dr2dxidxj(rand(3))
+    test_dr2dxidxj(rand(3)*10)
+end
+
+# theta coordinate
+function get_dtheta2dxidxj(xvec)
+    x, y, z = xvec
+    rho, theta, phi = fmm.cartesian_2_spherical(x, y, z)
+    s_theta, c_theta = sincos(theta)
+    s_phi, c_phi = sincos(phi)
+    dtheta2dxidxj = @SMatrix [ # this works? much better at least
+        c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
+        -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
+        c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
+    ]
+    return dtheta2dxidxj
+end
+
+function check_dtheta2dxidxj(xvec)
+    return ForwardDiff.jacobian((x) -> ForwardDiff.gradient((xx) -> acos(xx[3]/sqrt(xx'*xx)), x), xvec)
+end
+
+function test_dtheta2dxidxj(xvec)
+    dtheta2dxidxj = get_dtheta2dxidxj(xvec)
+    dtheta2dxidxj_check = check_dtheta2dxidxj(xvec)
+    for i in eachindex(dtheta2dxidxj)
+        @test isapprox(dtheta2dxidxj[i], dtheta2dxidxj_check[i]; atol=1e-12)
+    end
+end
+
+for _ in 1:10
+    test_dtheta2dxidxj(rand(3))
+    test_dtheta2dxidxj(rand(3)*10)
+end
+
+# phi coordinate
+function get_dphi2dxidxj(xvec)
+    x, y, z = xvec
+    rho, theta, phi = fmm.cartesian_2_spherical(x, y, z)
+    s_theta, c_theta = sincos(theta)
+    s_phi, c_phi = sincos(phi)
+    dphi2dxidxj = @SMatrix [
+        2*c_phi*s_phi/rho^2/s_theta^2 (2*s_phi^2-1)/rho^2/s_theta^2 0;
+        (2*s_phi^2-1)/rho^2/s_theta^2 -2*s_phi*c_phi/rho^2/s_theta^2 0;
+        0 0 0
+    ]
+    return dphi2dxidxj
+end
+
+function check_dphi2dxidxj(xvec)
+    return ForwardDiff.jacobian((x) -> ForwardDiff.gradient((xx) -> atan(xx[2]/xx[1]), x), xvec)
+end
+
+function test_dphi2dxidxj(xvec)
+    dphi2dxidxj = get_dphi2dxidxj(xvec)
+    dphi2dxidxj_check = check_dphi2dxidxj(xvec)
+    for i in eachindex(dphi2dxidxj)
+        @test isapprox(dphi2dxidxj[i], dphi2dxidxj_check[i]; atol=1e-12)
+    end
+end
+
+for _ in 1:10
+    test_dphi2dxidxj(rand(3))
+    test_dphi2dxidxj(rand(3)*10)
+end
+
 end
 
 @testset "2D vortex particles" begin
