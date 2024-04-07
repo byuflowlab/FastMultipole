@@ -28,6 +28,7 @@ jobs:
           - 'nightly'
         os:
           - ubuntu-latest
+          - macOS
         arch:
           - x64
     steps:
