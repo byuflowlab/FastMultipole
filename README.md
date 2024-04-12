@@ -1,2 +1,2 @@
 # FastMultipole.jl
-A flexible, multi-kernel implementation of the fast multipole method in the Julia language.
+A fast, multi-system, multi-kernel, differentiable implementation of the fast multipole method for use with scalar-plus-vector potential N-body problems in pure Julia.
