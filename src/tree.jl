@@ -659,7 +659,7 @@ function shrink_leaf!(branch, system)
     # recenter # turn this off for now- only shrink/expand radius
     # new_center = center_nonzero_radius(system, bodies_index)
     new_center = branch[].center
-    length(bodies_index) == 1 && (new_center += SVector{3}(sqrt(eps()),sqrt(eps()),sqrt(eps())))
+    # length(bodies_index) == 1 && (new_center += SVector{3}(sqrt(eps()),sqrt(eps()),sqrt(eps())))
     
     # shrink radius 
     new_radius = zero(branch[].radius)
