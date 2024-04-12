@@ -332,19 +332,19 @@ function L2L!(branch, child, regular_harmonics, L, expansion_order::Val{P}) wher
     end
 end
 
-function L2B!(systems, branch::MultiBranch, derivatives_switches, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(systems, branch::MultiBranch, derivatives_switches, expansion_order)
     for i in eachindex(systems)
-        L2B!(systems[i], branch.bodies_index[i], branch.local_expansion, derivatives_switches[i], expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+		L2B!(systems[i], branch.bodies_index[i], branch.local_expansion, derivatives_switches[i], expansion_order, branch.center)
     end
 end
 
-function L2B!(system, branch::SingleBranch, derivatives_switch, expansion_order, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
-    L2B!(system, branch.bodies_index, branch.local_expansion, derivatives_switch, expansion_order, branch.center, vector_potential, potential_jacobian, potential_hessian, harmonics, harmonics_theta, harmonics_theta_2, workspace)
+function L2B!(system, branch::SingleBranch, derivatives_switch, expansion_order)
+	L2B!(system, branch.bodies_index, branch.local_expansion, derivatives_switch, expansion_order, branch.center)
 end
 
 function L2B!(system, bodies_index, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order, expansion_center) where {PS,VPS,VS,GS}
     for i_body in bodies_index
-        scalar_potential, vector_potential, velocity, gradient = L2B(body_position, expansion_center, derivatives_switch, expansion_order)
+		scalar_potential, vector_potential, velocity, gradient = L2B(system[i_body,POSITION], expansion_center, local_expansion, derivatives_switch, expansion_order)
         if PS
             system[i_body,SCALAR_POTENTIAL] += scalar_potential
         end
@@ -374,20 +374,26 @@ function L2B!(system, bodies_index, local_expansion, derivatives_switch::Derivat
     end
 end
 
-@inline function L2B_scalar_potential(Lnm_real, Lnm_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m)
+const DEBUG_TOGGLE = Array{Bool,0}(undef)
+DEBUG_TOGGLE[] = false
+
+@inline function L2B_scalar_potential(Lnm_real, Lnm_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m; debug=false, n=-1, m=-1, theta=0.0, phi=0.0, r=0.0)
     return complex_multiply_real(Lnm_real, Lnm_imag, eimp_real, eimp_imag) * rn * Pnm * C_n_m
 end
 
-@inline function L2B_vector_potential(Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m)
-    return SVector{3}(
+@inline function L2B_vector_potential(Lnm_x_real::TF1, Lnm_x_imag::TF1, Lnm_y_real::TF1, Lnm_y_imag::TF1, Lnm_z_real::TF1, Lnm_z_imag::TF1, eimp_real::TF2, eimp_imag::TF2, rn, Pnm, C_n_m) where {TF1,TF2}
+	TF = promote_type(TF1,TF2)
+	return SVector{3,TF}(
         complex_multiply_real(Lnm_x_real, Lnm_x_imag, eimp_real, eimp_imag),
         complex_multiply_real(Lnm_y_real, Lnm_y_imag, eimp_real, eimp_imag),
         complex_multiply_real(Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag)
     ) * rn * Pnm * C_n_m
 end
 
-"Does not include the rotation matrix R yet."
-@inline function L2B_velocity(Lnm_real::TF, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag, rnm1, Pnm, dPdt, beta, C_n_m, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}) where {TF,PS,VPS}
+"Does not include the rotation matrix R yet. Eq 28 in S&L"
+@inline function L2B_velocity(Lnm_real::TF1, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real::TF2, eimp_imag, rnm1, Pnm, dPdt, beta, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}, ct) where {TF1,TF2,PS,VPS}
+	TF = promote_type(TF1,TF2)
+
     # initialize
     velocity = zero(SVector{3,TF})
     
@@ -396,29 +402,35 @@ end
     uy_real = dPdt
     uz_imag = m * beta
 
+	# rotate to cartesian
+	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)	
+	
     # velocity due to scalar potential
     if PS
         Lnm_eimp_real, Lnm_eimp_imag = complex_multiply(eimp_real, eimp_imag, Lnm_real, Lnm_imag)
-
-        velocity += SVector{3}(
-            ux_real * Lnm_eimp_real,
-            uy_real * Lnm_eimp_real,
-            -uz_imag * Lnm_eimp_imag
+	
+        velocity -= SVector{3}(
+			complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_eimp_real, Lnm_eimp_imag),
+			complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_eimp_real, Lnm_eimp_imag),
+			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_eimp_real, Lnm_eimp_imag)
         ) * rnm1 * C_n_m
     end
 
     # velocity due to vector potential
     if VPS
-        vx_real, vx_imag = eimp_real * ux_real, eimp_imag * ux_real
-        vy_real, vy_imag = eimp_real * uy_real, eimp_imag * uy_real
-        vz_real, vz_imag = -eimp_imag * uz_imag, eimp_real * uz_imag
-        velocity += rnm1 * C_n_m * complex_cross_real(vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+
+		Lnm_x_eimp_real, Lnm_x_eimp_imag = complex_multiply(Lnm_x_real, Lnm_x_imag, eimp_real, eimp_imag)
+		Lnm_y_eimp_real, Lnm_y_eimp_imag = complex_multiply(Lnm_y_real, Lnm_y_imag, eimp_real, eimp_imag)
+		Lnm_z_eimp_real, Lnm_z_eimp_imag = complex_multiply(Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag)
+
+		velocity += rnm1 * C_n_m * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_eimp_real, Lnm_x_eimp_imag, Lnm_y_eimp_real, Lnm_y_eimp_imag, Lnm_z_eimp_real, Lnm_z_eimp_imag)
     end
 
-    return -velocity
+    return velocity
 end
 
-@inline function L2B_velocity_gradient(Lnm_real::TF, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag, rnm2, Pnm, dPdt, d2Pdt2, ddt_Pnm_st, alpha, beta, st, ct, sp, cp, C_n_m, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}) where {TF,PS,VPS}
+"Eq 35-37 S&L"
+@inline function L2B_velocity_gradient(Lnm_real::TF, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag, rnm2, Pnm, dPdt, d2Pdt2, ddt_Pnm_st, alpha, beta, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}) where {TF,PS,VPS}
 	ncheck = 3
 	mcheck = 3
     # initialize outputs
@@ -443,18 +455,21 @@ end
     vy_real, vy_imag = eimp_real * u1y_real, eimp_imag * u1y_real
     vz_real, vz_imag = -eimp_imag * u1z_imag, eimp_real * u1z_imag
 
+	# transform to cartesian
+	u_real_cartesian, u_imag_cartesian = complex_multiply(R, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
+
     # due to scalar potential
     if PS
-        dudr += nm1 * rnm2Cnm * SVector{3}(
-            complex_multiply_real(vx_real, vx_imag, Lnm_real, Lnm_imag),
-            complex_multiply_real(vy_real, vy_imag, Lnm_real, Lnm_imag),
-            complex_multiply_real(vz_real, vz_imag, Lnm_real, Lnm_imag)
+        dudr -= nm1 * rnm2Cnm * SVector{3}(
+			complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_real, Lnm_imag),
+			complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_real, Lnm_imag),
+			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
         )
     end
     
     # due to vector potential
     if VPS
-        dudr += nm1 * rnm2Cnm * complex_cross_real(vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+		dudr += nm1 * rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
     end
 
     #####
@@ -470,18 +485,20 @@ end
     vy_real, vy_imag = eimp_real * u2y_real, eimp_imag * u2y_real
     vz_real, vz_imag = -eimp_imag * u2z_imag, eimp_real * u2z_imag
 
+	u_real_cartesian, u_imag_cartesian = complex_multiply(R, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
+
     # due to scalar potential
     if PS
-        dudt_r += rnm2Cnm * SVector{3}(
-            complex_multiply_real(vx_real, vx_imag, Lnm_real, Lnm_imag),
-            complex_multiply_real(vy_real, vy_imag, Lnm_real, Lnm_imag),
-            complex_multiply_real(vz_real, vz_imag, Lnm_real, Lnm_imag)
+        dudt_r -= rnm2Cnm * SVector{3}(
+			complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_real, Lnm_imag),
+			complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_real, Lnm_imag),
+			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
         )
     end
     
     # due to vector potential
     if VPS
-        dudt_r += rnm2Cnm * complex_cross_real(vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+		dudt_r += rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
     end
     
     #####
@@ -503,7 +520,7 @@ end
     
     # due to scalar potential
     if PS
-        dudp_r_st += SVector{3}(
+        dudp_r_st -= SVector{3}(
             complex_multiply_real(vx_real, vx_imag, Lnm_real, Lnm_imag),
             complex_multiply_real(vy_real, vy_imag, Lnm_real, Lnm_imag),
 			complex_multiply_real(vz_real, vz_imag, Lnm_real, Lnm_imag)
@@ -518,17 +535,16 @@ end
 	return dudr, dudt_r, dudp_r_st
 end
 
-@inline function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
     #=
     R_n^m(\rho, \theta, \phi) &= (-1)^n \frac{\rho^n}{(n+\|m\|)!} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
     I_n^m(\rho, \theta, \phi) &= (-1)^n \frac{(n-\|m\|)!}{\rho^{n+1}} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
     phi = \sum \limits_{n=0}^P \sum \limits_{m=-n}^n L_n^m R_n^m
     =#
-
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-
-    #--- the following is inspired by Salloum and Lakkis (2020) with some improvements ---#
+    
+	#--- the following is inspired by Salloum and Lakkis (2020) with some improvements ---#
 
     # initialization
     scalar_potential = zero(TF)
@@ -541,6 +557,10 @@ end
 
     st, ct = sincos(theta)
     sp, cp = sincos(phi)
+
+	if VS || GS
+		R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0) 
+	end
 
     # note that by definition beta_n^m=0 for m<1 and alpha_n^m=0 for m<2
     
@@ -560,8 +580,8 @@ end
     index = 1           # index of the local expansion corresponding to n and m
 
     if PS
-        scalar_potential += L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-        # scalar_potential += local_expansion[1,1,index]
+		scalar_potential += L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
+		# scalar_potential += local_expansion[1,1,index]
     end
 
     if VPS
@@ -616,7 +636,7 @@ end
         end
 
         if VS
-            velocity += L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, n, m, derivatives_switch)
+            velocity += L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
         end
         
         #--- m = 1, n = 1 ---#
@@ -662,12 +682,12 @@ end
         end
 
         if VS
-            velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, n, m, derivatives_switch)
+			velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
         end
 
     end
     
-    #--- m = 0 (velocity gradient only), m = 1, n > 1 ---#
+    #--- m = 0, m = 1, n > 1 ---#
 
     if P > 1
         
@@ -703,6 +723,7 @@ end
             
             # C_n_m
             n_plus_m += 1
+            C_n_0 = -C_n_m
             C_n_m /= -n_plus_m
             
             # beta
@@ -743,6 +764,7 @@ end
 
             # index
             index = (n * (n + 1)) >> 1 + m + 1
+			index_m0 = (n * (n + 1)) >> 1 + 0 + 1
 
             # eimp is unchanged
 
@@ -751,24 +773,24 @@ end
             #####
 
             if PS
+				scalar_potential += L2B_scalar_potential(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
                 scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
             end
     
             if VPS
+				vector_potential += L2B_vector_potential(local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
                 vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
             end
     
             if VS
-                velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, n, m, derivatives_switch)
+				velocity += L2B_velocity(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch, ct)
+				velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
             end
 
             if GS
                 # m = 0
-                m0 = 0
-                index_m0 = index - 1
-                Cnm_m0 = C_n_m * n_plus_m
                 ddt_Pn0_st = zero(TF)
-                this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm2, P_n_0, dPdt_n_0, d2Pdt2_n_0, ddt_Pn0_st, alpha_n_0, beta_n_0, st, ct, sp, cp, Cnm_m0, n, m0, derivatives_switch)
+                this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm2, P_n_0, dPdt_n_0, d2Pdt2_n_0, ddt_Pn0_st, alpha_n_0, beta_n_0, st, ct, sp, cp, C_n_0, R, n, 0, derivatives_switch)
                 
                 dudr += this_dudr
                 dudt_r += this_dudt_r
@@ -776,7 +798,7 @@ end
                 
                 # m = 1
 
-                this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, Pnm, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_0, beta_n_m, st, ct, sp, cp, C_n_m, n, m, derivatives_switch)
+                this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, Pnm, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_0, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
                 
 				dudr += 2 * this_dudr
                 dudt_r += 2 * this_dudt_r
@@ -788,10 +810,13 @@ end
         #--- m > 1, n > 1 ---#
 
         # double factorial
-        double_factorial = 3
+        # double_factorial = 3
 
         # sin^(n-2)(theta)
-        st_nm2 = one(TF)
+        # st_nm2 = one(TF)
+
+		# alpha_n_n
+		alpha_n_n = TF(3.0) # sin(theta)^(n-2) (2*n-1)!! for n=2
 
         # rn
         rnm2 = zero(TF) # n=-1...
@@ -824,7 +849,7 @@ end
             C_n_m /= n_plus_m
 
             # alpha_n_n = (-1)^n * st^(n-2) * double_factorial(2*n-1)
-            alpha_n_m = st_nm2 * double_factorial
+			alpha_n_m = alpha_n_n
             alpha_nm1_m = 0.0
             alpha_nm2_m = 0.0
 
@@ -855,19 +880,19 @@ end
             #####
 
             if PS
-                scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
-            end
+				scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
+			end
     
             if VPS
                 vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
             end
     
             if VS
-                velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, n, m, derivatives_switch)
+				velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
             end
 
             if GS
-                this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m, n, m, derivatives_switch)
+                this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
                 
 				dudr += 2 * this_dudr
                 dudt_r += 2 * this_dudt_r
@@ -932,11 +957,11 @@ end
                 end
         
                 if VS
-                    velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, n, m, derivatives_switch)
+					velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch, ct)
                 end
     
                 if GS
-                    this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2_loop, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m_loop, n, m, derivatives_switch)
+                    this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2_loop, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m_loop, R, n, m, derivatives_switch)
                     
                     dudr += 2 * this_dudr
                     dudt_r += 2 * this_dudt_r
@@ -945,19 +970,18 @@ end
             end
 
             # tail recursion
-			double_factorial *= 2*n+1
-            st_nm2 *= -st
+			alpha_n_n *= -st * (2*n+1)
+			# double_factorial *= 2*n+1
+            # st_nm2 *= -st
 
         end
 
     end
 
     # rotate to cartesian
-    R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
-
-    velocity = R * velocity
-    duidrk = hcat(R*dudr, R*dudt_r, dudp_r_st)
-    gradient = -duidrk * R'
-
-    return scalar_potential, vector_potential, velocity, gradient
+    # R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
+    duidrk = hcat(dudr, dudt_r, dudp_r_st)
+    gradient = duidrk * R'
+    
+	return scalar_potential, vector_potential, velocity, gradient
 end

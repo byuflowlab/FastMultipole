@@ -366,25 +366,11 @@ function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}, n_
     return containers
 end
 
-@inline function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}) where P
-    vector_potential = zeros(float_type,3)
-    potential_jacobian = zeros(float_type,3,4)
-    potential_hessian = zeros(float_type,3,3,4)
-    derivative_harmonics = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_theta = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    derivative_harmonics_theta_2 = zeros(expansion_type, 2, ((P+1) * (P+2)) >> 1)
-    workspace = zeros(float_type,3,4)
-    return vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace
-end
-
 function downward_pass_singlethread!(branches, systems, derivatives_switches, expansion_order::Val{P}) where P
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
-    # L = zeros(eltype(branches[1].multipole_expansion),4)
-    vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order)
     for branch in branches
         if branch.n_branches == 0 # leaf level
-            L2B!(systems, branch, derivatives_switches, expansion_order, vector_potential, potential_jacobian, potential_hessian, 
-                derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+			L2B!(systems, branch, derivatives_switches, expansion_order)
         else
             for child_branch in view(branches,branch.branch_index)
                 L2L!(branch, child_branch, regular_harmonics, branch.ML, expansion_order)
@@ -451,16 +437,12 @@ function local_2_body_multithread!(branches, systems, derivatives_switches, expa
     end
     resize!(assignments, i_thread)
 
-    # preallocate containers
-    containers = preallocate_l2b(eltype(branches[1]), eltype(branches[1].multipole_expansion), expansion_order, n_threads)
-
     # spread remainder across rem chunks
     Threads.@threads for i_thread in eachindex(assignments)
         assignment = assignments[i_thread]
-        vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace = containers[i_thread]
         for i_leaf in view(leaf_index,assignment)
             leaf = branches[i_leaf]
-            L2B!(systems, leaf, derivatives_switches, expansion_order, vector_potential, potential_jacobian, potential_hessian, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, workspace)
+			L2B!(systems, leaf, derivatives_switches, expansion_order)
         end
     end
 end

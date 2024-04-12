@@ -30,3 +30,17 @@ end
         complex_multiply_real(ux_real, ux_imag, vy_real, vy_imag) - complex_multiply_real(vx_real, vx_imag, uy_real, uy_imag)
     )
 end
+
+@inline function complex_multiply(A::AbstractMatrix, ux_real, ux_imag, uy_real, uy_imag, uz_real, uz_imag)
+	product_real = SVector{3}(
+		A[1,1] * ux_real + A[1,2] * uy_real + A[1,3] * uz_real,
+		A[2,1] * ux_real + A[2,2] * uy_real + A[2,3] * uz_real,
+		A[3,1] * ux_real + A[3,2] * uy_real + A[3,3] * uz_real
+	)
+	product_imag = SVector{3}(
+		A[1,1] * ux_imag + A[1,2] * uy_imag + A[1,3] * uz_imag,
+		A[2,1] * ux_imag + A[2,2] * uy_imag + A[2,3] * uz_imag,
+		A[3,1] * ux_imag + A[3,2] * uy_imag + A[3,3] * uz_imag
+	)
+	return product_real, product_imag
+end

@@ -1,4 +1,5 @@
 import FastMultipole as fmm
+using FastMultipole
 using WriteVTK
 import Base: getindex, setindex!
 using FastMultipole.StaticArrays

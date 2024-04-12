@@ -17,11 +17,11 @@ test_dir = @__DIR__
 #####
 ##### define gravitational kernel and mass elements
 #####
+
 include(joinpath(test_dir, "gravitational.jl"))
 
+# allow expansion_order::Int to be used while testing
 fmm.M2M!(branch, child, harmonics, M, expansion_order::Int) = fmm.M2M!(branch, child, harmonics, M, Val(expansion_order))
-fmm.L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, expansion_order::Int, workspace) = 
-    fmm.L2B_loop!(vector_potential, potential_jacobian, potential_hessian, body_position, expansion_center, local_expansion, harmonics, harmonics_theta, harmonics_theta_2, Val(expansion_order), workspace)
 fmm.M2L!(target_branch, source_branch, harmonics, L, expansion_order::Int) = fmm.M2L!(target_branch, source_branch, harmonics, L, Val(expansion_order))
 fmm.upward_pass_singlethread!(branches, systems, expansion_order::Int) = fmm.upward_pass_singlethread!(branches, systems, Val(expansion_order))
 fmm.M2L!(target_branch, source_branch, expansion_order::Int) = fmm.M2L!(target_branch, source_branch, Val(expansion_order))
@@ -51,6 +51,11 @@ fmm.M2L!(target_branch, source_branch, expansion_order::Int) = fmm.M2L!(target_b
     @test imag(z1/z2) ≈ fmm.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[2]
     @test real(z1/z2) ≈ fmm.complex_divide_real(real(z1), imag(z1), real(z2), imag(z2))
     @test imag(z1/z2) ≈ fmm.complex_divide_imag(real(z1), imag(z1), real(z2), imag(z2))
+
+	# cross product
+	z1_vec = SVector{3}(rand(Complex{Float64}) for _ in 1:3)
+	z2_vec = SVector{3}(rand(Complex{Float64}) for _ in 1:3)
+	@test real.(cross(z1_vec,z2_vec)) ≈ fmm.complex_cross_real(real(z1_vec[1]), imag(z1_vec[1]), real(z1_vec[2]), imag(z1_vec[2]), real(z1_vec[3]), imag(z1_vec[3]), real(z2_vec[1]), imag(z2_vec[1]), real(z2_vec[2]), imag(z2_vec[2]), real(z2_vec[3]), imag(z2_vec[3])) 
 end
 
 @testset "direct" begin
@@ -174,66 +179,6 @@ end
     end
 end
 
-#= Renormalized, so these tests don't work anymore
-# However, I may need to revert the normalization
-# once I begin using multiple kernels
-@testset "solid harmonics" begin
-
-function Ylm(theta, phi, l, m)
-    lm! = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m))))
-    plm = Plm(cos(theta), l, abs(m))
-    eim = exp(im * m * phi)
-    ylm = lm! * plm * eim
-end
-
-function regular_harmonic_manual(rho, theta, phi, p)
-    reg_harmonics = Vector{Complex{Float64}}(undef,(p+1)^2)
-    i = 1
-    for l in 0:p
-        for m in -l:l
-            reg_harmonics[i] = Ylm(theta, phi, l, m) * rho^l
-            i+=1
-        end
-    end
-    return reg_harmonics
-end
-
-function irregular_harmonic_manual(rho, theta, phi, p)
-    reg_harmonics = Vector{Complex{Float64}}(undef,(p+1)^2)
-    i = 1
-    for l in 0:p
-        for m in -l:l
-            reg_harmonics[i] = Ylm(theta, phi, l, m) / rho^(l+1)
-            i+=1
-        end
-    end
-    return reg_harmonics
-end
-
-rho = 1.2
-alpha = pi/4 * 1.4
-beta = pi/6 * 0.9
-P = 3
-# rh_exa = regular_harmonic(rho, alpha, beta, P+1)
-
-rh_man = regular_harmonic_manual(rho, alpha, beta, P)
-rh_fmm = zeros(Complex{Float64},length(rh_man))
-rh_fmm_theta = zeros(Complex{Float64},length(rh_man))
-fmm.regular_harmonic!(rh_fmm, rh_fmm_theta, rho, alpha, beta, P)
-
-for i in 1:length(rh_man)
-    @test isapprox(rh_man[i], rh_fmm[i]; atol=1e-11)
-end
-
-ih_man = irregular_harmonic_manual(rho, alpha, beta, P)
-ih_fmm = zeros(Complex{Float64},length(rh_man))
-fmm.irregular_harmonic!(ih_fmm, rho, alpha, beta, P)
-
-for i in 1:length(ih_man)
-    @test isapprox(ih_man[i], ih_fmm[i]; atol=1e-11)
-end
-end
-=#
 
 new_order = [4,5,2,3,1]
 
@@ -414,11 +359,7 @@ fmm.regular_harmonic!(regular_harmonics_expanded, dx_target..., expansion_order)
 
 fmm.B2L!(tree, branch_i, elements[source_i,fmm.POSITION], elements.bodies[source_i].strength)
 
-harmonics = zeros(Float64, 2, (expansion_order+1)^2)
-harmonics_theta = zeros(Float64, 2, (expansion_order+1)^2)
-harmonics_theta_2 = zeros(Float64, 2, (expansion_order+1)^2)
-workspace = zeros(3,4)
-fmm.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[branch_i].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[branch_i].center)
 u_fmm = elements.potential[1,target_i]
 
 dx_direct = xs[4,:] - xs[1,:]
@@ -470,7 +411,7 @@ harmonics_theta = zeros(Float64,2,(expansion_order+1)^2)
 harmonics_theta_2 = zeros(Float64,2,(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(52)
-fmm.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[2].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[2].center)
 u_fmm_no_x = elements.potential[1,new_order_index[5]]
 elements.potential[1,new_order_index[5]] *= 0
 
@@ -483,7 +424,7 @@ fmm.irregular_harmonic!(local_coefficients_check, dx_check, dy_check, dz_check, 
 local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
-fmm.L2B!((elements,), tree.branches[7], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!((elements,), tree.branches[7], (fmm.DerivativesSwitch(),), Val(expansion_order))
 u_fmm = elements.potential[1,new_order_index[5]]
 
 dx_direct = elements[new_order_index[5],fmm.POSITION] - elements[new_order_index[1],fmm.POSITION]
@@ -501,7 +442,7 @@ u_man = sum(regular_harmonics[1,:].*local_coefficients_check[1,:] .+ regular_har
 
 end
 
-@testset "spherical: M2L" begin
+@testset "spherical M2L" begin
 xs = [
     1.2 1.1 0.8;
     0.8 0.9 0.2;
@@ -537,34 +478,37 @@ workspace = zeros(3,4)
 
 fmm.B2M!(elements, tree.branches[i_branch_multipole], new_order_index[5]:new_order_index[5], harmonics, tree.expansion_order)
 
-# # test Multipole # checks out
-# dx_mp = xs[5,:] - tree.branches[i_branch_multipole].center
-# fmm.cartesian_2_spherical!(dx_mp)
-# fmm.regular_harmonic!(harmonics, dx_mp..., expansion_order)
-# multipole_check =  harmonics * ms[5]
-# dx_mp = xs[1,:] - tree.branches[i_branch_multipole].center
-# fmm.cartesian_2_spherical!(dx_mp)
-# fmm.irregular_harmonic!(harmonics, dx_mp..., expansion_order)
-# u_check_mp = real(sum(harmonics' * multipole_check))
+# test Multipole # checks out
+dx_mp = xs[5,:] - tree.branches[i_branch_multipole].center
+dx_mp = fmm.cartesian_2_spherical(dx_mp)
+fmm.regular_harmonic!(harmonics, dx_mp..., expansion_order)
 
-# @show tree.branches[i_branch_multipole].multipole_expansion[1][1:10] multipole_check[1:10]
-# ###
+these_harmonics = harmonics[1,:] + im .* harmonics[2,:]
+multipole_check =  these_harmonics * ms[5]
+dx_mp = xs[1,:] - tree.branches[i_branch_multipole].center
+dx_mp = fmm.cartesian_2_spherical(dx_mp)
+fmm.irregular_harmonic!(harmonics, dx_mp..., expansion_order)
+those_harmonics = harmonics[1,:] + im .* harmonics[2,:]
+u_check_mp = real(sum(those_harmonics' * multipole_check))
+# reformat_expansion = tree.branches[i_branch_multipole].multipole_expansion[1,1,:] .+ im .* tree.branches[i_branch_multipole].multipole_expansion[2,1,:]
+# @show tree.branches[i_branch_multipole].multipole_expansion[:,1,1:10] multipole_check[1:10]
+# @show size(reformat_expansion) size(multipole_check)
+# for i in eachindex(multipole_check)
+# 	@test isapprox(reformat_expansion[i], multipole_check[i]; atol=1e-12)
+# end
+
 m2l_harmonics = zeros(eltype(tree.branches[1].multipole_expansion), 2, (expansion_order<<1 + 1)*(expansion_order<<1 + 1))
 L = zeros(eltype(tree.branches[1].local_expansion), 2, 4)
 fmm.M2L!(tree.branches[i_branch_local], tree.branches[i_branch_multipole], m2l_harmonics, L, expansion_order)
-fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[i_branch_local].center, zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!(elements, new_order_index[1]:new_order_index[1], tree.branches[i_branch_local].local_expansion, fmm.DerivativesSwitch(), Val(expansion_order), tree.branches[i_branch_local].center)
 u_fmm = elements.potential[1,new_order_index[1]]
 
 local_exp = tree.branches[i_branch_local].local_expansion[1]
 
-# test local
-# dx_l = xs[1,:] - tree.branches[i_branch_local].center
-# fmm.regular_harmonic!(harmonics, dx_l..., expansion_order)
-# u_check_local = real(sum(harmonics' * local_exp))
-
 dx_direct = elements[new_order_index[1],fmm.POSITION] - elements[new_order_index[5], fmm.POSITION]
 u_direct = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_direct' * dx_direct)
 
+@test isapprox(u_direct, u_check_mp; atol=1e-12)
 @test isapprox(u_fmm, u_direct; atol=1e-12)
 
 end
@@ -651,7 +595,7 @@ harmonics = zeros(Float64,2, (expansion_order+1)^2)
 harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
 harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
-fmm.L2B!((elements,), tree.branches[3], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!((elements,), tree.branches[3], (fmm.DerivativesSwitch(),), Val(expansion_order))
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_42 = elements[new_order_index[4],fmm.POSITION] - elements[new_order_index[2],fmm.POSITION]
@@ -780,346 +724,44 @@ anal = d2rdx2_cart(x,y,z)
 for i in 1:length(fd)
     @test isapprox(fd[i], anal[i]; atol=1e-3)
 end
+
+expansion_order = 9
+Random.seed!(123)
+local_expansion = rand(2,4,55)
+target = SVector{3}([0.0, 0.5, 0.0])
+center = SVector{3}([0.01, 0.52, -0.03])
+
+phi_fd(x) = fmm.L2B(x, center, local_expansion, fmm.DerivativesSwitch(), Val(expansion_order))[1]
+psi_fd(x) = fmm.L2B(x, center, local_expansion, fmm.DerivativesSwitch(), Val(expansion_order))[2]
+
+function vector_velocity_fd(x) 
+	j_psi = ForwardDiff.jacobian(psi_fd, x)
+	v_psi = SVector{3}(j_psi[3,2] - j_psi[2,3],
+		j_psi[1,3] - j_psi[3,1],
+	 	j_psi[2,1] - j_psi[1,2])
+	return v_psi
 end
 
-@testset "chain rule" begin
-
-"""
-dr_k/dx_idx_j
-"""
-function d2rdx2(r, theta, phi)
-    derivatives = zeros(3,3,3)
-    derivatives[:,:,1] .= [
-        (1-cos(phi)^2 * sin(theta)^2)/r -sin(theta)^2*cos(phi)*sin(phi)/r -sin(theta)*cos(phi)*cos(theta)/r;
-        (-sin(theta)^2*cos(phi)*sin(phi))/r (1-sin(theta)^2*sin(phi)^2)/r -sin(theta)*sin(phi)*cos(theta)/r;
-        -sin(theta)*cos(phi)*cos(theta)/r -sin(theta)*sin(phi)*cos(theta)/r sin(theta)^2/r
-    ]
-    derivatives[:,:,2] .= [
-        cos(theta)/sin(theta)*(1-cos(phi)^2*(1+2*sin(theta)^2))/r^2 -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/r^2 cos(phi)*(1-2*cos(theta)^2)/r^2;
-        -cos(theta)/sin(theta)*sin(phi)*cos(phi)*(1+2*sin(theta)^2)/r^2 cos(theta)/sin(theta)*(1-sin(phi)^2*(1+2*sin(theta)^2))/r^2 (2*sin(theta)^2-1)/r^2*sin(phi);
-        cos(phi)*(1-2*cos(theta)^2)/r^2 (2*sin(theta)^2-1)/r^2*sin(phi) 2*sin(theta)*cos(theta)/r^2
-    ]
-    derivatives[:,:,3] .= [
-        2*cos(phi)*sin(phi)/r^2/sin(theta)^2 (2*sin(phi)^2-1)/r^2/sin(theta)^2 0;
-        (2*sin(phi)^2-1)/r^2/sin(theta)^2 -2*sin(phi)*cos(phi)/r^2/sin(theta)^2 0;
-        0 0 0
-    ]
-    return derivatives
+function scalar_velocity_fd(x) 
+	v_phi = -ForwardDiff.gradient(phi_fd, x)
+	return v_phi
 end
 
-"""
-dr_j/dx_i
-"""
-function drdx(r,theta,phi)
-    derivatives = [
-        sin(theta)*cos(phi) cos(theta)*cos(phi)/r -sin(phi)/r/sin(theta);
-        sin(theta)*sin(phi) cos(theta)*sin(phi)/r cos(phi)/r/sin(theta);
-        cos(theta) -sin(theta)/r 0
-    ]
-    # derivatives = [
-    #     sin(theta)*cos(phi) sin(theta)*sin(phi) cos(theta);
-    #     cos(theta)*cos(phi)/r cos(theta)*sin(phi)/r -sin(theta)/r;
-    #     -sin(phi)/r/sin(theta) cos(phi)/r/sin(theta) 0
-    # ]
-    return derivatives
-end
+scalar_velocity_gradient_fd(x) = ForwardDiff.jacobian(scalar_velocity_fd, x)
+vector_velocity_gradient_fd(x) = ForwardDiff.jacobian(vector_velocity_fd, x)
 
-# """
-# dr_i/dx_j
-# """
-# function drdx(r,theta,phi)
-#     # derivatives = [
-#     #     sin(theta)*cos(phi) cos(theta)*cos(phi)/r -sin(phi)/r/sin(theta);
-#     #     sin(theta)*sin(phi) cos(theta)*sin(theta)/r cos(phi)/r/sin(theta);
-#     #     cos(theta) -sin(theta)/r 0
-#     # ]
-#     derivatives = [
-#         sin(theta)*cos(phi) sin(theta)*sin(phi) cos(theta);
-#         cos(theta)*cos(phi)/r cos(theta)*sin(phi)/r -sin(theta)/r;
-#         -sin(phi)/r/sin(theta) cos(phi)/r/sin(theta) 0
-#     ]
-#     return derivatives
-# end
+_, _, scalar_velocity_check_fmm, scalar_velocity_gradient_check_fmm = fmm.L2B(target, center, local_expansion, fmm.DerivativesSwitch(true, false, true, true), Val(expansion_order))
+_, _, vector_velocity_check_fmm, vector_velocity_gradient_check_fmm = fmm.L2B(target, center, local_expansion, fmm.DerivativesSwitch(false, true, true, true), Val(expansion_order))
 
-function derivatives_2_cartesian(first_derivatives, second_derivatives, r, theta, phi)
-    @assert size(spherical_derivatives) == (3,3)
-    d2_unit_vec = d2rdx2(r, theta, phi)
-    d_unit_vec = drdx(r,theta,phi)
-    cartesian_derivatives = zeros(3,3)
-    for k in 1:3
-        cartesian_derivatives .+= d2_unit_vec[:,:,k] .* first_derivatives[k]
-    end
-    cartesian_derivatives .+= d_unit_vec * second_derivatives * transpose(d_unit_vec)
-    return cartesian_derivatives
-end
+scalar_velocity_check_fd = scalar_velocity_fd(target)
+vector_velocity_check_fd = vector_velocity_fd(target)
+scalar_velocity_gradient_check_fd = scalar_velocity_gradient_fd(target)
+vector_velocity_gradient_check_fd = vector_velocity_gradient_fd(target)
 
-function cs_derivative(func, i, args; step=1e-25)
-    args[i] += step*im
-    return imag(func(args))/step
-end
-
-function simple(X)
-    r = X[1]
-    theta = X[2]
-    phi = X[3]
-    return 3*r^4*cos(theta) + 2*theta - sin(phi)
-end
-
-function cartesian_2_spherical(x,y,z; vec=false)
-    r = sqrt(x^2+y^2+z^2)
-    theta = acos(z/r)
-    phi = atan(y/x)
-    vec && return [r,theta,phi]
-    return r, theta, phi
-end
-
-function spherical_2_cartesian(r,theta,phi; vec=false)
-    x = r*sin(theta)*cos(phi)
-    y = r*sin(theta)*sin(phi)
-    z = r*cos(theta)
-    vec && return [x,y,z]
-    return x,y,z
-end
-
-function simple_cart(X)
-    args = cartesian_2_spherical(X...; vec=true)
-    return simple(args)
-end
-
-r0, theta0, phi0 = rand(3)
-
-dsdr(r,theta,phi) = 12 * r^3 * cos(theta)
-dsdt(r,theta,phi) = 3*r^4*-sin(theta) + 2
-dsdp(r,theta,phi) = -cos(phi)
-d2sdr2(r,theta,phi) = 36 * r^2 * cos(theta)
-d2sdrdt(r,theta,phi) = -12*r^3*sin(theta)
-d2sdrdp(r,theta,phi) = 0.0
-d2sdt2(r,theta,phi) = -3*r^4*cos(theta)
-d2sdtdp(r,theta,phi) = 0.0
-d2sdp2(r,theta,phi) = sin(phi)
-
-testd = cs_derivative(simple,1,Complex{Float64}[r0,theta0,phi0])
-@test isapprox(testd, dsdr(r0,theta0,phi0);atol=1e-12)
-
-function second_derivative(func,i,j,args; step=1e-8)
-    first_func(args) = cs_derivative(func,i,args)
-    mask = zeros(length(args))
-    mask[j] += step
-    sec = (first_func(args + mask) - first_func(args))/step
-    return sec
-end
-
-function fd_hessian(func, args)
-    simple_jacobian = zeros(3,3)
-    for j in 1:3
-        for i in 1:3
-            simple_jacobian[j,i] = second_derivative(func,i,j,convert(Vector{Complex{Float64}},args))
-        end
-    end
-    return simple_jacobian
-end
-simple_jacobian = fd_hessian(simple,[r0,theta0,phi0])
-simple_jacobian_anal = [
-    d2sdr2(r0,theta0,phi0) d2sdrdt(r0,theta0,phi0) d2sdrdp(r0,theta0,phi0);
-    d2sdrdt(r0,theta0,phi0) d2sdt2(r0,theta0,phi0) d2sdtdp(r0,theta0,phi0);
-    d2sdrdp(r0,theta0,phi0) d2sdtdp(r0,theta0,phi0) d2sdp2(r0,theta0,phi0);
-]
-
-for i in 1:length(simple_jacobian)
-    @test isapprox(simple_jacobian[i], simple_jacobian_anal[i]; atol=1e-6)
-end
-
-# test chain rule
-args = [r0,theta0,phi0]
-spherical_grad = [cs_derivative(simple,i,convert(Vector{Complex{Float64}},args)) for i in 1:3]
-spherical_hessian = fd_hessian(simple, args)
-d2rkdxidxj = d2rdx2(args...)
-drjdxi = drdx(args...)
-
-cartesian_hessian = zeros(3,3)
-for k in 1:3
-    cartesian_hessian .+= d2rkdxidxj[:,:,k] * spherical_grad[k]
-end
-
-cartesian_hessian .+= drjdxi * spherical_hessian * transpose(drjdxi)
-
-cartesian_hessian_fd = fd_hessian(simple_cart, spherical_2_cartesian(args...;vec=true))
-
-for i in 1:length(cartesian_hessian)
-    @test isapprox(cartesian_hessian[i], cartesian_hessian_fd[i]; rtol=1e-3)
-end
-
-# now test FMM function
-potential_hessian = zeros(3,3,4)
-potential_jacobian = zeros(3,4)
-for i in 1:4
-    potential_hessian[:,:,i] .= spherical_hessian
-    potential_jacobian[:,i] .= spherical_grad
-end
-workspace = zeros(3,4)
-
-fmm.spherical_2_cartesian!(potential_jacobian, potential_hessian, workspace, r0, theta0, phi0, fmm.DerivativesSwitch())
-
-for i in 1:3
-    for j in 1:3
-        @test isapprox(cartesian_hessian[i,j], potential_hessian[i,j,1]; rtol=1e-14)
-    end
-end
-
-#--- first and second derivatives of the regular solid harmonics in theta ---#
-
-function test_rh_i(i; P=7, r=rand(), theta_test = rand()*pi, phi = rand()*2*pi)
-    P = 7
-    r = rand()
-    r < 1e-2 && (r = 0.4)
-    theta_test = rand() * pi
-    isapprox(theta_test, 0.0; atol=1e-1) && (theta_test = 1e-1)
-    isapprox(theta_test, pi; atol=1e-1) && (theta_test = pi - 1e-1)
-    phi = rand()*2*pi
-
-    function get_regular_harmonic_test(theta::TF; r=r, phi=phi, P=P) where TF
-        _, _, _, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, _ = fmm.preallocate_l2b(TF, TF, Val(P))
-        fmm.regular_harmonic!(derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, r, theta, phi, P)
-        return derivative_harmonics[:,i]
-    end
-
-    function get_regular_harmonic_theta_test(theta::TF; r=r, phi=phi, P=P) where TF
-        _, _, _, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, _ = fmm.preallocate_l2b(TF, TF, Val(P))
-        fmm.regular_harmonic!(derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, r, theta, phi, P)
-        return derivative_harmonics_theta[:,i]
-    end
-
-    function get_regular_harmonic_theta_2_test(theta::TF; r=r, phi=phi, P=P) where TF
-        _, _, _, derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, _ = fmm.preallocate_l2b(TF, TF, Val(P))
-        fmm.regular_harmonic!(derivative_harmonics, derivative_harmonics_theta, derivative_harmonics_theta_2, r, theta, phi, P)
-        return derivative_harmonics_theta_2[:,i]
-    end
-
-    function check_regular_harmonic_theta(theta)
-        return ForwardDiff.derivative(get_regular_harmonic_test, theta)
-    end
-
-    function check_regular_harmonic_theta_2(theta)
-        return ForwardDiff.derivative((t) -> ForwardDiff.derivative(get_regular_harmonic_test, t), theta)
-    end
-
-    rh = get_regular_harmonic_test(theta_test)
-    rh_p = get_regular_harmonic_theta_test(theta_test)
-    rh_pp = get_regular_harmonic_theta_2_test(theta_test)
-    rh_p_check = check_regular_harmonic_theta(theta_test)
-    rh_pp_check = check_regular_harmonic_theta_2(theta_test)
-
-    @test isapprox(rh_p[1], rh_p_check[1]; atol=1e-12)
-    @test isapprox(rh_p[2], rh_p_check[2]; atol=1e-12)
-    @test isapprox(rh_pp[1], rh_pp_check[1]; atol=1e-12)
-    @test isapprox(rh_pp[2], rh_pp_check[2]; atol=1e-12)
-
-    return nothing
-end
-
-P = 7
-r = rand()
-theta_test = rand() * pi
-phi = rand()*2*pi
-
-for i in 1:36
-    test_rh_i(i; P, r, theta_test, phi)
-end
-
-#--- hessian of spherical coordinates w.r.t. cartesian coordinates ---#
-
-# r coordinate
-function get_dr2dxidxj(xvec)
-    x, y, z = xvec
-    rho, theta, phi = fmm.cartesian_2_spherical(x, y, z)
-    s_theta, c_theta = sincos(theta)
-    s_phi, c_phi = sincos(phi)
-    dr2dxidxj = @SMatrix [
-        (1-c_phi^2 * s_theta^2)/rho -s_theta^2*c_phi*s_phi/rho -s_theta*c_phi*c_theta/rho;
-        (-s_theta^2*c_phi*s_phi)/rho (1-s_theta^2*s_phi^2)/rho -s_theta*s_phi*c_theta/rho;
-        -s_theta*c_phi*c_theta/rho -s_theta*s_phi*c_theta/rho s_theta^2/rho
-    ]
-    return dr2dxidxj
-end
-
-function check_dr2dxidxj(xvec)
-    return ForwardDiff.jacobian((x) -> ForwardDiff.gradient((xx) -> sqrt(xx'*xx), x), xvec)
-end
-
-function test_dr2dxidxj(xvec)
-    dr2dxidxj = get_dr2dxidxj(xvec)
-    dr2dxidxj_check = check_dr2dxidxj(xvec)
-    for i in eachindex(dr2dxidxj)
-        @test isapprox(dr2dxidxj[i], dr2dxidxj_check[i]; atol=1e-12)
-    end
-end
-
-for _ in 1:10
-    test_dr2dxidxj(rand(3))
-    test_dr2dxidxj(rand(3)*10)
-end
-
-# theta coordinate
-function get_dtheta2dxidxj(xvec)
-    x, y, z = xvec
-    rho, theta, phi = fmm.cartesian_2_spherical(x, y, z)
-    s_theta, c_theta = sincos(theta)
-    s_phi, c_phi = sincos(phi)
-    dtheta2dxidxj = @SMatrix [ # this works? much better at least
-        c_theta/s_theta*(1-c_phi^2*(1+2*s_theta^2))/rho^2 -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_phi*(1-2*c_theta^2)/rho^2;
-        -c_theta/s_theta*s_phi*c_phi*(1+2*s_theta^2)/rho^2 c_theta/s_theta*(1-s_phi^2*(1+2*s_theta^2))/rho^2 (2*s_theta^2-1)/rho^2*s_phi;
-        c_phi*(1-2*c_theta^2)/rho^2 (2*s_theta^2-1)/rho^2*s_phi 2*s_theta*c_theta/rho^2
-    ]
-    return dtheta2dxidxj
-end
-
-function check_dtheta2dxidxj(xvec)
-    return ForwardDiff.jacobian((x) -> ForwardDiff.gradient((xx) -> acos(xx[3]/sqrt(xx'*xx)), x), xvec)
-end
-
-function test_dtheta2dxidxj(xvec)
-    dtheta2dxidxj = get_dtheta2dxidxj(xvec)
-    dtheta2dxidxj_check = check_dtheta2dxidxj(xvec)
-    for i in eachindex(dtheta2dxidxj)
-        @test isapprox(dtheta2dxidxj[i], dtheta2dxidxj_check[i]; atol=1e-12)
-    end
-end
-
-for _ in 1:10
-    test_dtheta2dxidxj(rand(3))
-    test_dtheta2dxidxj(rand(3)*10)
-end
-
-# phi coordinate
-function get_dphi2dxidxj(xvec)
-    x, y, z = xvec
-    rho, theta, phi = fmm.cartesian_2_spherical(x, y, z)
-    s_theta, c_theta = sincos(theta)
-    s_phi, c_phi = sincos(phi)
-    dphi2dxidxj = @SMatrix [
-        2*c_phi*s_phi/rho^2/s_theta^2 (2*s_phi^2-1)/rho^2/s_theta^2 0;
-        (2*s_phi^2-1)/rho^2/s_theta^2 -2*s_phi*c_phi/rho^2/s_theta^2 0;
-        0 0 0
-    ]
-    return dphi2dxidxj
-end
-
-function check_dphi2dxidxj(xvec)
-    return ForwardDiff.jacobian((x) -> ForwardDiff.gradient((xx) -> atan(xx[2]/xx[1]), x), xvec)
-end
-
-function test_dphi2dxidxj(xvec)
-    dphi2dxidxj = get_dphi2dxidxj(xvec)
-    dphi2dxidxj_check = check_dphi2dxidxj(xvec)
-    for i in eachindex(dphi2dxidxj)
-        @test isapprox(dphi2dxidxj[i], dphi2dxidxj_check[i]; atol=1e-12)
-    end
-end
-
-for _ in 1:10
-    test_dphi2dxidxj(rand(3))
-    test_dphi2dxidxj(rand(3)*10)
-end
+@test isapprox(scalar_velocity_check_fmm, scalar_velocity_check_fd; atol=1e-12)
+@test isapprox(vector_velocity_check_fmm, vector_velocity_check_fd; atol=1e-12)
+@test isapprox(scalar_velocity_gradient_check_fmm, scalar_velocity_gradient_check_fd; atol=1e-12)
+@test isapprox(vector_velocity_gradient_check_fmm, vector_velocity_gradient_check_fd; atol=1e-12)
 
 end
 
@@ -1191,8 +833,8 @@ harmonics = zeros(Float64,2, (expansion_order+1)^2)
 harmonics_theta = zeros(Float64,2, (expansion_order+1)^2)
 harmonics_theta_2 = zeros(Float64,2, (expansion_order+1)^2)
 workspace = zeros(3,4)
-fmm.L2B!((vortexparticles,), tree.branches[2], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
-fmm.L2B!((vortexparticles,), tree.branches[3], (fmm.DerivativesSwitch(),), Val(expansion_order), zeros(3), zeros(3,4), zeros(3,3,4), harmonics, harmonics_theta, harmonics_theta_2, workspace)
+fmm.L2B!((vortexparticles,), tree.branches[2], (fmm.DerivativesSwitch(),), Val(expansion_order))
+fmm.L2B!((vortexparticles,), tree.branches[3], (fmm.DerivativesSwitch(),), Val(expansion_order))
 update_velocity_stretching!(vortexparticles)
 
 for i in 1:2

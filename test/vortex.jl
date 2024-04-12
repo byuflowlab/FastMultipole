@@ -70,6 +70,28 @@ end
 FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
 Base.eltype(::VortexParticles{TF}) where TF = TF
 
+function flatten_derivatives!(jacobian, hessian, derivatives_switch::fmm.DerivativesSwitch{PS,VPS,VS,GS}) where {PS,VPS,VS,GS}
+    if VS
+        # velocity
+        jacobian[1,1] = -jacobian[1,1] + jacobian[2,4] - jacobian[3,3]
+        jacobian[2,1] = -jacobian[2,1] + jacobian[3,2] - jacobian[1,4]
+        jacobian[3,1] = -jacobian[3,1] + jacobian[1,3] - jacobian[2,2]
+    end
+
+    if GS
+        # velocity gradient
+        hessian[1,1,1] = -hessian[1,1,1] + hessian[2,1,4] - hessian[3,1,3]
+        hessian[2,1,1] = -hessian[2,1,1] + hessian[3,1,2] - hessian[1,1,4]
+        hessian[3,1,1] = -hessian[3,1,1] + hessian[1,1,3] - hessian[2,1,2]
+        hessian[1,2,1] = -hessian[1,2,1] + hessian[2,2,4] - hessian[3,2,3]
+        hessian[2,2,1] = -hessian[2,2,1] + hessian[3,2,2] - hessian[1,2,4]
+        hessian[3,2,1] = -hessian[3,2,1] + hessian[1,2,3] - hessian[2,2,2]
+        hessian[1,3,1] = -hessian[1,3,1] + hessian[2,3,4] - hessian[3,3,3]
+        hessian[2,3,1] = -hessian[2,3,1] + hessian[3,3,2] - hessian[1,3,4]
+        hessian[3,3,1] = -hessian[3,3,1] + hessian[1,3,3] - hessian[2,3,2]
+    end
+end
+
 """
 Classical formulation so far.
 """
@@ -110,7 +132,7 @@ function fmm.direct!(target_system, target_index, derivatives_switch, source_sys
                 hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
                 hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
             end
-            fmm.flatten_derivatives!(jacobian, hessian, derivatives_switch)
+            flatten_derivatives!(jacobian, hessian, derivatives_switch)
 
             target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
             target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)
