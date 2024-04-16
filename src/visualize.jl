@@ -34,17 +34,20 @@ function visualize_bodies(name, system, probe_indices=())
         body_radii = zeros(n_probes,1,1)
         scalar_strength = zeros(n_probes,1,1)
         vector_strength = zeros(3,n_probes,1,1)
+        scalar_potential = zeros(n_probes,1,1)
         for (i_probe,i_body) in enumerate(probe_indices)
             body_locations[:,i_probe,1,1] .= system[i_body,POSITION]
             body_radii[i_probe,1,1] = system[i_body,RADIUS]
             scalar_strength[i_probe,1,1] = system[i_body,SCALAR_STRENGTH]
             vector_strength[:,i_probe,1,1] .= system[i_body,VECTOR_STRENGTH]
+            scalar_potential[i_probe,1,1] = system[i_body,SCALAR_POTENTIAL]
         end
         vtk_grid(name*"_probes", body_locations) do vtk
             vtk["radius"] = body_radii
             vtk["scalar strength"] = scalar_strength
             vtk["vector strength"] = vector_strength
             vtk["index"] = probe_indices
+            vtk["scalar potential"] = scalar_potential
         end
     end
 end

@@ -548,6 +548,8 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # unsort bodies
     unsort_target_bodies && (unsort!(target_systems, target_tree))
     unsort_source_bodies && (unsort!(source_systems, source_tree))
+
+    return m2l_list, direct_list
 end
 
 function fmm!(systems; expansion_order=5, n_per_branch=50, theta=0.4, ndivisions=7, nearfield=true, farfield=true, self_induced=true, unsort_bodies=true, shrink_recenter=true, save_tree=false, save_name="tree")
