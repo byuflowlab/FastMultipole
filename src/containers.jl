@@ -39,15 +39,22 @@ const VECTOR_STRENGTH = VectorStrength()
 ##### 
 ##### dispatch convenience functions for multipole creation definition 
 #####
-abstract type AbstractKernel end
+abstract type AbstractKernel{sign} end
 
-struct VortexPoint <: AbstractKernel end
-struct VortexLine <: AbstractKernel end # not yet derived
-struct VortexPanel <: AbstractKernel end # not yet derived
-struct SourcePoint <: AbstractKernel end
-struct UniformSourcePanel <: AbstractKernel end
-struct UniformNormalDipolePanel <: AbstractKernel end
-struct UniformSourceNormalDipolePanel <: AbstractKernel end
+struct VortexPoint{sign} <: AbstractKernel{sign} end
+VortexPoint(sign=1) = VortexPoint{sign}()
+struct VortexLine{sign} <: AbstractKernel{sign} end # not yet derived
+VortexLine(sign=1) = VortexLine{sign}()
+struct VortexPanel{sign} <: AbstractKernel{sign} end # not yet derived
+VortexPanel(sign=1) = VortexPanel{sign}()
+struct SourcePoint{sign} <: AbstractKernel{sign} end
+SourcePoint(sign=1) = SourcePoint{sign}()
+struct UniformSourcePanel{sign} <: AbstractKernel{sign} end
+UniformSourcePanel(sign=1) = UniformSourcePanel{sign}()
+struct UniformNormalDipolePanel{sign} <: AbstractKernel{sign} end
+UniformNormalDipolePanel(sign=1) = UniformNormalDipolePanel{sign}()
+struct UniformSourceNormalDipolePanel{sign} <: AbstractKernel{sign} end
+UniformSourceNormalDipolePanel(sign=1) = UniformSourceNormalDipolePanel{sign}()
 
 #####
 ##### dispatch convenience functions to determine which derivatives are desired

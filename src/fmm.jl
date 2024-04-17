@@ -701,7 +701,9 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
     # create interaction lists
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
-    
+    if DEBUG_TOGGLE[]
+        @show m2l_list    
+    end
 	# assemble derivatives switch
     derivatives_switch = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
 

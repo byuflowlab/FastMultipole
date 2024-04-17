@@ -1,3 +1,6 @@
+const DEBUG_TOGGLE = Array{Bool,0}(undef)
+DEBUG_TOGGLE[] = false
+
 """
     direct!(systems; derivatives_switches)
 

@@ -355,7 +355,7 @@ function L2B!(system, bodies_index, local_expansion, derivatives_switch::Derivat
         end
         if VS
             vpx, vpy, vpz = system[i_body,VELOCITY]
-			system[i_body,VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[3]+vpy, velocity[3]+vpz)
+			system[i_body,VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
         end
         if GS
             v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
@@ -374,10 +374,7 @@ function L2B!(system, bodies_index, local_expansion, derivatives_switch::Derivat
     end
 end
 
-const DEBUG_TOGGLE = Array{Bool,0}(undef)
-DEBUG_TOGGLE[] = false
-
-@inline function L2B_scalar_potential(Lnm_real, Lnm_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m; debug=false, n=-1, m=-1, theta=0.0, phi=0.0, r=0.0)
+@inline function L2B_scalar_potential(Lnm_real, Lnm_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m)
     return complex_multiply_real(Lnm_real, Lnm_imag, eimp_real, eimp_imag) * rn * Pnm * C_n_m
 end
 
@@ -391,7 +388,7 @@ end
 end
 
 "Does not include the rotation matrix R yet. Eq 28 in S&L"
-@inline function L2B_velocity(Lnm_real::TF1, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real::TF2, eimp_imag, rnm1, Pnm, dPdt, beta, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}, ct) where {TF1,TF2,PS,VPS}
+@inline function L2B_velocity(Lnm_real::TF1, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real::TF2, eimp_imag, rnm1, Pnm, dPdt, beta, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}) where {TF1,TF2,PS,VPS}
 	TF = promote_type(TF1,TF2)
 
     # initialize
@@ -401,10 +398,10 @@ end
     ux_real = n * Pnm
     uy_real = dPdt
     uz_imag = m * beta
-
-	# rotate to cartesian
-	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)	
 	
+    # rotate to cartesian
+	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)	
+    
     # velocity due to scalar potential
     if PS
         Lnm_eimp_real, Lnm_eimp_imag = complex_multiply(eimp_real, eimp_imag, Lnm_real, Lnm_imag)
@@ -636,7 +633,7 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
         end
 
         if VS
-            velocity += L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
+            velocity += L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
         end
         
         #--- m = 1, n = 1 ---#
@@ -682,7 +679,7 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
         end
 
         if VS
-			velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
+            velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
         end
 
     end
@@ -783,8 +780,8 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
             end
     
             if VS
-				velocity += L2B_velocity(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch, ct)
-				velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
+                velocity += L2B_velocity(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch)
+                velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
             end
 
             if GS
@@ -888,7 +885,7 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
             end
     
             if VS
-				velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, ct)
+                velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
             end
 
             if GS
@@ -957,7 +954,7 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
                 end
         
                 if VS
-					velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch, ct)
+                    velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch)
                 end
     
                 if GS
