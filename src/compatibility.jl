@@ -109,7 +109,7 @@ function B2M!(system, branch, bodies_index, harmonics, expansion_order)
     return nothing
 end
 
-function direct!(target_system, target_index, source_system, source_index)
+function direct!(target_system, target_index, derivatives_switch, source_system, source_index)
     @warn "direct! function not overloaded for type $(typeof(source_system)); interaction ignored"
     return nothing
 end

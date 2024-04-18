@@ -10,8 +10,8 @@
         z = b_z - c_z
         y = b_y - c_y
         qx, qy, qz = system[i_body,VECTOR_STRENGTH]
-        r, multipole_acceptance_criterion, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r ,multipole_acceptance_criterion, -phi, P) # Ylm^* -> -dx[3]
+        r, theta, phi = cartesian_2_spherical(x,y,z)
+        regular_harmonic!(harmonics, r ,theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
         for l in 0:P
             for m in 0:l
@@ -39,8 +39,8 @@ end
         z = b_z - c_z
         y = b_y - c_y
         q = system[i_body,SCALAR_STRENGTH]
-        r, multipole_acceptance_criterion, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r, multipole_acceptance_criterion, -phi, P) # Ylm^* -> -dx[3]
+        r, theta, phi = cartesian_2_spherical(x,y,z)
+        regular_harmonic!(harmonics, r, theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
         for l in 0:P
             for m in 0:l
@@ -54,12 +54,12 @@ end
     end
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourcePanel, negative_1_n)
-    multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(inm_real, inm_imag, iam_real, iam_imag)
-    multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(inm_real, inm_imag, iam_real, iam_imag)
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourcePanel{sign}, negative_1_n) where sign
+    multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(inm_real, inm_imag, iam_real, iam_imag) * sign
+    multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(inm_real, inm_imag, iam_real, iam_imag) * sign
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformNormalDipolePanel, negative_1_n)
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformNormalDipolePanel{sign}, negative_1_n) where sign
     sum_iterm_real = (inm_prev_mp1_real + inm_prev_mm1_real)/2
     sum_iterm_imag = (inm_prev_mp1_imag + inm_prev_mm1_imag)/2
     x1_real, x1_imag = complex_multiply(inm_prev_mm1_real + inm_prev_mp1_real, inm_prev_mm1_imag + inm_prev_mp1_imag, 0.0, n[1]/2)
@@ -69,27 +69,27 @@ end
     # coeff_gumerov = strength_J_over_4pi * (lnm_real - im*lnm_imag) * (-1)^m / (1.0im)^m
     Mnm_real, Mnm_imag = complex_multiply(lnm_real, -lnm_imag, iam_real, iam_imag, negative_1_n*strength_J_over_4pi, 0.0)
 
-    multipole_expansion[1,1,i_compressed] += Mnm_real
-    multipole_expansion[2,1,i_compressed] += Mnm_imag
+    multipole_expansion[1,1,i_compressed] += Mnm_real * sign
+    multipole_expansion[2,1,i_compressed] += Mnm_imag * sign
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourceNormalDipolePanel, negative_1_n)
-    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[1], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformSourcePanel(), negative_1_n)
-    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformNormalDipolePanel(), negative_1_n)
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, panel_type::UniformSourceNormalDipolePanel{sign}, negative_1_n) where {sign}
+    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[1], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformSourcePanel(sign), negative_1_n)
+    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, iam_real, iam_imag, inm_prev_mm1_real, inm_prev_mm1_imag, inm_prev_m_real, inm_prev_m_imag, inm_prev_mp1_real, inm_prev_mp1_imag, n, UniformNormalDipolePanel(sign), negative_1_n)
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type::UniformSourcePanel)
-    multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * inm_real
-    multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * inm_imag
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type::UniformSourcePanel{sign}) where sign
+    multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * inm_real * sign
+    multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * inm_imag * sign
 end
 
 @inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type::UniformNormalDipolePanel)
     return nothing
 end
 
-@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type::UniformSourceNormalDipolePanel)
-    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[1], inm_real, inm_imag, UniformSourcePanel())
-    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, UniformNormalDipolePanel())
+@inline function update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, panel_type::UniformSourceNormalDipolePanel{sign}) where sign
+    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[1], inm_real, inm_imag, UniformSourcePanel(sign))
+    update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, UniformNormalDipolePanel(sign))
 end
 
 @inline function _B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order::Val{P}, panel_type::AbstractKernel) where P  
@@ -252,7 +252,7 @@ end
     end
 end
 
-function B2M!_quadpanel(system, branch, bodies_index, harmonics::AbstractArray{TF}, expansion_order::Val{P}, panel_type::AbstractKernel) where {TF,P}
+function B2M!_quadpanel(system, branch, bodies_index, harmonics::AbstractArray{TF}, expansion_order::Val{P}, panel_type::AbstractKernel{sign}; compute_normal=false, invert_normal=false) where {TF,P,sign}
     if P > 2
         harmonics .= zero(TF)
         qnm_prev = view(harmonics,1:2,1:P+2)
@@ -270,7 +270,12 @@ function B2M!_quadpanel(system, branch, bodies_index, harmonics::AbstractArray{T
         for i_side in 2:3
             Ru = system[i_body,VERTEX,i_side] - R0_global
             Rv = system[i_body,VERTEX,i_side + 1] - R0_global
-            normal = system[i_body,NORMAL]
+            if compute_normal
+                normal = cross(Rv, Ru)
+                normal /= norm(normal) * (-1)^invert_normal 
+            else
+                normal = system[i_body,NORMAL]
+            end
             _B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
         end
     end

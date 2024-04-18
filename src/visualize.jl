@@ -49,14 +49,14 @@ function visualize_bodies(name, system, probe_indices=())
     end
 end
 
-function visualize_bodies(name, systems::Tuple, probe_indices_list)
-    for (system, probe_indices) in zip(systems, probe_indices_list)
+function visualize_bodies(name_list, systems::Tuple, probe_indices_list)
+    for (name, system, probe_indices) in zip(name_list, systems, probe_indices_list)
         visualize_bodies(name, system, probe_indices)
     end
 end
 
-function visualize_bodies(name, systems::Tuple, probe_indices_list::Nothing)
-    for system in systems
+function visualize_bodies(name_list, systems::Tuple, probe_indices_list::Nothing)
+    for (name, system) in zip(name_list, systems)
         visualize_bodies(name, system)
     end
 end

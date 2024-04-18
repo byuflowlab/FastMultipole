@@ -1,4 +1,5 @@
 import FastMultipole as fmm
+using FastMultipole
 using WriteVTK
 import Base: getindex, setindex!
 using FastMultipole.StaticArrays
@@ -63,7 +64,7 @@ fmm.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52
 
 fmm.B2M!(system::Gravitational, args...) = fmm.B2M!_sourcepoint(system, args...)
 
-function fmm.direct!(target_system, target_index, source_system::Gravitational, source_index)
+function fmm.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_index)
     # nbad = 0
     for i_source in source_index
         source_x, source_y, source_z = source_system[i_source,fmm.POSITION]
