@@ -67,9 +67,9 @@ Switch indicating whether the scalar potential, vector potential, velocity, and/
 struct DerivativesSwitch{PS,VPS,VS,GS} end
 
 """
-    DerivativeSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
 
-Constructs a tuple of [`DerivativeSwitch`](@ref) objects.
+Constructs a tuple of [`DerivativesSwitch`](@ref) objects.
 
 # Arguments
 
@@ -84,9 +84,9 @@ function DerivativesSwitch(scalar_potential, vector_potential, velocity, velocit
 end
 
 """
-    DerivativeSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
 
-Constructs a single [`DerivativeSwitch`](@ref) object.
+Constructs a single [`DerivativesSwitch`](@ref) object.
 
 # Arguments
 
@@ -101,9 +101,9 @@ function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, veloc
 end
 
 """
-    DerivativeSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
+    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
 
-Constructs a `::Tuple` of indentical [`DerivativeSwitch`](@ref) objects of the same length as `target_systems` (if it is a `::Tuple`), or a single [`DerivativeSwitch`](@ref) (if `target_system` is not a `::Tuple`)
+Constructs a `::Tuple` of indentical [`DerivativesSwitch`](@ref) objects of the same length as `target_systems` (if it is a `::Tuple`), or a single [`DerivativesSwitch`](@ref) (if `target_system` is not a `::Tuple`)
 
 # Arguments
 
@@ -219,6 +219,11 @@ end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
 
+"""
+    abstract type Tree{TF,P} end
+
+Supertype of all octree structures with `TF` the floating point type and `P` the expansion order.
+"""
 abstract type Tree{TF,P} end
 
 """
@@ -279,6 +284,12 @@ end
 #####
 ##### when we desire to evaluate the potential at locations not coincident with source centers
 #####
+
+"""
+    ProbeSystem
+
+Convenience system for defining locations at which the potential, velocity, or velocity gradient may be desired.
+"""
 struct ProbeSystem{TF,TSP,TVP,TV,TVG}
     position::Vector{SVector{3,TF}}
     scalar_potential::TSP
