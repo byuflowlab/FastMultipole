@@ -1,6 +1,5 @@
 # const BRANCH_TYPE = Float64
 # global SHRINKING_OFFSET = .000001
-# away_from_center! is a bandaid fix
 
 const WARNING_FLAG_N_PER_BRANCH = Array{Bool,0}(undef)
 WARNING_FLAG_N_PER_BRANCH[] = true

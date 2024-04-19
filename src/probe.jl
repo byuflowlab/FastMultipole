@@ -114,7 +114,7 @@ Zeroes all values (e.g. scalar/vector potential, velocity, and/or velocity gradi
 
 # Arguments
 
-- `probes::ProbeSystem`: a [`::ProbeSystem`](@ref) object
+- `probes::ProbeSystem`: a `::`[`ProbeSystem`](@ref) object
 """
 function reset!(probes::ProbeSystem)
     reset!(probes.scalar_potential)
