@@ -17,6 +17,6 @@ for file in ["containers", "complex", "derivatives", "element", "tree", "direct"
     include(file*".jl")
 end
 
-export fmm!, direct!, Tree, SortWrapper, ProbeSystem, reset!, DerivativesSwitch
+export fmm!, direct!, Tree, SortWrapper, ProbeSystem, add_line!, reset!, DerivativesSwitch
 
 end # module

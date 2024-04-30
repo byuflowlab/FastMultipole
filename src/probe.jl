@@ -108,6 +108,35 @@ end
 reset!(::Nothing) = nothing
 
 """
+    add_line!(probes::ProbeSystem, x1, x2, n_probes, i_last)
+
+Adds `n_probes` probes in a line between `x1` and `x2`. Specifically, they are added at the midpoint of equally partiti    oned segments of the line.
+
+# Arguments
+
+* `probes::ProbeSystem`: the probe system whose `.position` field is to be updated
+* `x1::Vector{Float64}`: the first point defining the line along which probes are to be added
+* `x2::Vector{Float64}`: the second point defining the line along which probes are to be added
+* `n_probes::Int`: number of probes to be added
+* `i_last::Int`: index of the last probe in `probes`
+
+# Output
+
+* `i_last::Int`: updated index of the last probe in `probes`
+
+"""
+@inline function add_line!(probes::FastMultipole.ProbeSystem, x1, x2, n_probes, i_last)
+    dx = (x2 - x1) / n_probes
+    x = x1 + dx/2
+    for i in 1:n_probes
+        i_start += 1
+        probes.position[i_last + i] = x
+        x += dx
+    end
+    return i_last + n_probes
+end
+
+"""
     reset!(probes)
 
 Zeroes all values (e.g. scalar/vector potential, velocity, and/or velocity gradient) of all probes.
@@ -122,3 +151,4 @@ function reset!(probes::ProbeSystem)
     reset!(probes.velocity)
     reset!(probes.velocity_gradient)
 end
+
