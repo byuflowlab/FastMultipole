@@ -11,7 +11,7 @@
         y = b_y - c_y
         qx, qy, qz = system[i_body,VECTOR_STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
-        harmonics .= regular_harmonic!(harmonics, r ,theta, -phi, expansion_order) # Ylm^* -> -dx[3]
+        harmonics .= regular_harmonic!(harmonics, r ,theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
         for l in 0:P
             for m in 0:l
