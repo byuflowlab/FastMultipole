@@ -8,88 +8,133 @@ WARNING_FLAG_N_PER_BRANCH[] = true
 ##### tree constructor
 #####
 function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
-    # initialize variables
-    octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
-    cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
-    bodies_index = get_bodies_index(system)
-    center, radius = center_radius(system; scale_radius=scale_radius)
-    i_first_branch = 2
-    buffer = get_buffer(system)
-    sort_index = get_sort_index(system)
-    sort_index_buffer = get_sort_index_buffer(system)
-    
-    # grow root branch
-    root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, n_per_branch, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
-    branches = [root_branch] # this first branch will already have its child branches encoded
-    # estimated_n_branches = estimate_n_branches(system, n_per_branch, allocation_safety_factor)
-    # sizehint!(branches, estimated_n_branches)
-    parents_index = 1:1
+    # ensure `system` isn't empty; otherwise return an empty tree
+    if get_n_bodies(system) > 0
+        # initialize variables
+        octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
+        cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
+        bodies_index = get_bodies_index(system)
+        center, radius = center_radius(system; scale_radius=scale_radius)
+        i_first_branch = 2
+        buffer = get_buffer(system)
+        sort_index = get_sort_index(system)
+        sort_index_buffer = get_sort_index_buffer(system)
 
-    # grow branches
-    levels_index = [parents_index] # store branches at each level
-    for i_divide in 1:n_divisions
+        # grow root branch
+        root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, n_per_branch, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+        branches = [root_branch] # this first branch will already have its child branches encoded
+        # estimated_n_branches = estimate_n_branches(system, n_per_branch, allocation_safety_factor)
+        # sizehint!(branches, estimated_n_branches)
+        parents_index = 1:1
+
+        # grow branches
+        levels_index = [parents_index] # store branches at each level
+        for i_divide in 1:n_divisions
+            if n_children > 0
+                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                push!(levels_index, parents_index)
+            end
+        end
+
+        # check depth
         if n_children > 0
-            parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
-            push!(levels_index, parents_index)
+            n_children_prewhile = n_children
+            while n_children > 0
+                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                push!(levels_index, parents_index)
+            end
+            if WARNING_FLAG_N_PER_BRANCH[]
+                @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
+                WARNING_FLAG_N_PER_BRANCH[] = false
+            end
         end
-    end
-    
-    # check depth
-    if n_children > 0
-        n_children_prewhile = n_children
-        while n_children > 0
-            parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
-            push!(levels_index, parents_index)
+
+        # # check depth
+        # if n_children > 0
+        #     error("n_per_branch not reached; n_children = $n_children")
+        # end
+
+        # invert index
+        invert_index!(sort_index_buffer, sort_index)
+        inverse_sort_index = sort_index_buffer # reuse the buffer as the inverse index
+
+        # shrink and recenter branches to account for bodies of nonzero radius
+        if shrink_recenter
+            shrink_recenter!(branches, levels_index, system)
         end
-        if WARNING_FLAG_N_PER_BRANCH[]
-            @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
-            WARNING_FLAG_N_PER_BRANCH[] = false
+
+        # store leaves
+        leaf_index = Vector{Int}(undef,0)
+        sizehint!(leaf_index, length(levels_index[end]))
+        for (i_branch,branch) in enumerate(branches)
+            if branch.n_branches == 0
+                push!(leaf_index, i_branch)
+            end
         end
+
+        # # cost parameters
+        # if estimate_cost
+        #     params, errors, nearfield_params, nearfield_errors = estimate_tau(system; read_cost_file=read_cost_file, write_cost_file=write_cost_file)
+        #     cost_parameters = CostParameters(params..., nearfield_params)
+        # else
+        #     cost_parameters = CostParameters(system)
+        # end
+        # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
+
+        # assemble tree
+        tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch)#, cost_parameters)
+
+    else
+        tree = EmptyTree(system)
     end
-
-    # # check depth
-    # if n_children > 0
-    #     error("n_per_branch not reached; n_children = $n_children")
-    # end
-
-    # invert index
-    invert_index!(sort_index_buffer, sort_index)
-    inverse_sort_index = sort_index_buffer # reuse the buffer as the inverse index
-
-    # shrink and recenter branches to account for bodies of nonzero radius
-    if shrink_recenter
-        shrink_recenter!(branches, levels_index, system)
-    end
-
-    # store leaves
-    leaf_index = Vector{Int}(undef,0)
-    sizehint!(leaf_index, length(levels_index[end]))
-    for (i_branch,branch) in enumerate(branches)
-        if branch.n_branches == 0
-            push!(leaf_index, i_branch)
-        end
-    end
-
-    # # cost parameters
-    # if estimate_cost
-    #     params, errors, nearfield_params, nearfield_errors = estimate_tau(system; read_cost_file=read_cost_file, write_cost_file=write_cost_file)
-    #     cost_parameters = CostParameters(params..., nearfield_params)
-    # else
-    #     cost_parameters = CostParameters(system)
-    # end
-    # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
-
-    # assemble tree
-    tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch)#, cost_parameters)
 
     return tree
 end
 
-Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) =
     SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
-Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
+Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) =
     MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
+
+"""
+    EmptyTree(system)
+
+Returns an empty tree. Used if `system` is empty.
+
+# Arguments
+
+* `system`: the system from which a tree is to be created
+
+# Returns
+
+* `tree`: if `typeof(system)<:Tuple`, a `::MultiTree` is returned; otherwise, a `::SingleTree` is returned
+
+"""
+function EmptyTree(system)
+    branches = Vector{SingleBranch{Float64}}(undef,0)
+    levels_index = Vector{UnitRange{Int64}}(undef,0)
+    leaf_index = Int[]
+    sort_index = Int[]
+    inverse_sort_index = Int[]
+    buffer = nothing
+    expansion_order = Val(-1)
+    n_per_branch = -1
+    return Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
+end
+
+function EmptyTree(system::Tuple)
+    N = length(system)
+    branches = Vector{MultiBranch{Float64,N}}(undef,0)
+    levels_index = Vector{UnitRange{Int64}}(undef,0)
+    leaf_index = Int[]
+    sort_index_list = Tuple(Int[] for _ in 1:N)
+    inverse_sort_index = Tuple(Int[] for _ in 1:N)
+    buffer = nothing
+    expansion_order = Val(-1)
+    n_per_branch = -1
+    return Tree(branches, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, expansion_order, n_per_branch)
+end
 
 @inline function get_n_bodies(systems::Tuple)
     n_bodies = 0
@@ -117,11 +162,11 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
             # count bodies per octant
             census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
             update_octant_accumulator!(cumulative_octant_census)
-            
+
             # number of child branches
             if get_population(cumulative_octant_census) > n_per_branch
                 for i_octant in 1:8
-                    if get_population(cumulative_octant_census, i_octant) > 0  
+                    if get_population(cumulative_octant_census, i_octant) > 0
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
                         child_center = get_child_center(parent_branch.center, parent_branch.radius, i_octant)
                         child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, i_parent, n_per_branch, expansion_order)
@@ -140,12 +185,12 @@ end
 function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, i_parent, n_per_branch, expansion_order)
     # count bodies in each octant
     census!(octant_container, system, bodies_index, center)
-    
+
     # cumsum
     update_octant_accumulator!(octant_container)
     # number of child branches
     n_children = get_n_children(octant_container, n_per_branch)
-    
+
     if n_children > 0
         # get beginning index of sorted bodies
         octant_beginning_index!(octant_container, bodies_index)
@@ -269,12 +314,12 @@ end
 
 @inline function get_bodies_index(systems::Tuple)
     n_systems = length(systems)
-    return SVector{n_systems,UnitRange{Int64}}([get_bodies_index(system) for system in systems]) 
+    return SVector{n_systems,UnitRange{Int64}}([get_bodies_index(system) for system in systems])
     # TODO why does this require square brackets? ah, because StaticArrays tries to collect the unit range ONLY IF THERE IS ONLY ONE;
 end
 
 #####
-##### create buffers; overload for SortWrappers---in case we cannot sort bodies in place, 
+##### create buffers; overload for SortWrappers---in case we cannot sort bodies in place,
 #####                 wrap the body in a SortWrapper object with an index which can be sorted
 @inline function get_buffer(system::SortWrapper)
     return nothing
@@ -466,7 +511,7 @@ end
     elseif z > z_max
         z_max = z
     end
-    
+
     return x_min, y_min, z_min, x_max, y_max, z_max
 end
 
@@ -514,7 +559,7 @@ end
     x_max = max(x_max, x+radius)
     y_max = max(y_max, y+radius)
     z_max = max(z_max, z+radius)
-    
+
     return x_min, y_min, z_min, x_max, y_max, z_max
 end
 
@@ -574,7 +619,7 @@ end
         center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
     # end
     delta = away_from_center!(center, system, bodies_index)
-    
+
     return center + delta
 end
 
@@ -654,13 +699,13 @@ end
 function shrink_leaf!(branch, system)
     # unpack
     bodies_index = branch[].bodies_index
-    
+
     # recenter # turn this off for now- only shrink/expand radius
     # new_center = center_nonzero_radius(system, bodies_index)
     new_center = branch[].center
     # length(bodies_index) == 1 && (new_center += SVector{3}(sqrt(eps()),sqrt(eps()),sqrt(eps())))
-    
-    # shrink radius 
+
+    # shrink radius
     new_radius = zero(branch[].radius)
     new_radius = shrink_radius(new_radius, new_center, system, bodies_index)
 
@@ -684,10 +729,10 @@ end
     y_max = y_min
     z_max = z_min
     x_min, y_min, z_min, x_max, y_max, z_max = max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, branch, child_branches)
-    
+
     # find center
     center = SVector{3}((x_min+x_max)/2.0, (y_min+y_max)/2.0, (z_min+z_max)/2.0)
-    
+
     return center
 end
 

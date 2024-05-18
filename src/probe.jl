@@ -129,7 +129,6 @@ Adds `n_probes` probes in a line between `x1` and `x2`. Specifically, they are a
     dx = (x2 - x1) / n_probes
     x = x1 + dx/2
     for i in 1:n_probes
-        i_start += 1
         probes.position[i_last + i] = x
         x += dx
     end
