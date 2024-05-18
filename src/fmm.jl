@@ -458,14 +458,14 @@ end
 #####
 ##### create interaction lists
 #####
-function build_interaction_lists(target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
+function build_interaction_lists(target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
@@ -473,17 +473,17 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
     summed_radii_squared = target_branch.radius + source_branch.radius
     summed_radii_squared *= summed_radii_squared
-    if center_spacing_squared * multipole_acceptance_criterion * multipole_acceptance_criterion >= summed_radii_squared && farfield # meet M2L criteria
+    if center_spacing_squared * multipole_threshold * multipole_threshold >= summed_radii_squared && farfield # meet M2L criteria
         push!(m2l_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && (i_target!=j_source || self_induced) # both leaves
         push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
         end
     else # source is not a leaf AND target is a leaf or is smaller
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
         end
     end
 end
@@ -512,9 +512,9 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 # Optional Arguments
 
 - `expansion_order::Int`: the expansion order to be used
-- `n_per_branch_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
-- `n_per_branch_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
-- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `leaf_size_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
+- `leaf_size_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
+- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
@@ -532,7 +532,7 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 """
 function fmm!(target_systems, source_systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4,
+    expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
@@ -542,13 +542,13 @@ function fmm!(target_systems, source_systems;
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order, n_per_branch=n_per_branch_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order, n_per_branch=n_per_branch_target, shrink_recenter=target_shrink_recenter)
+    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
     fmm!(target_tree, target_systems, source_tree, source_systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
-        multipole_acceptance_criterion,
+        multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
         nearfield, farfield, self_induced,
         unsort_source_bodies, unsort_target_bodies
@@ -575,8 +575,8 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 # Optional Arguments
 
 - `expansion_order::Int`: the expansion order to be used
-- `n_per_branch::Int`: maximum number of bodies from `systems` allowed in a leaf-level branch
-- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `leaf_size::Int`: maximum number of bodies from `systems` allowed in a leaf-level branch
+- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
@@ -592,18 +592,18 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 """
 function fmm!(systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4,
+    expansion_order=5, leaf_size=50, multipole_threshold=0.4,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true, shrink_recenter=true,
     save_tree=false, save_name="tree"
 )
     # create tree
-    tree = Tree(systems; expansion_order, n_per_branch, shrink_recenter)
+    tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
 
     # perform fmm
     fmm!(tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
-        multipole_acceptance_criterion, reset_tree=false,
+        multipole_threshold, reset_tree=false,
         nearfield, farfield, self_induced,
         unsort_bodies
     )
@@ -629,7 +629,7 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 # Optional Arguments
 
-- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
@@ -642,13 +642,13 @@ Dispatches `fmm!` using an existing `::Tree`.
 """
 function fmm!(tree::Tree, systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    multipole_acceptance_criterion=0.4, reset_tree=true,
+    multipole_threshold=0.4, reset_tree=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true
 )
     fmm!(tree, systems, tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
-        multipole_acceptance_criterion, reset_source_tree=reset_tree, reset_target_tree=false,
+        multipole_threshold, reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, farfield, self_induced,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false
     )
@@ -676,7 +676,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 # Optional Arguments
 
-- `multipole_acceptance_criterion::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
@@ -690,7 +690,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    multipole_acceptance_criterion=0.4,
+    multipole_threshold=0.4,
     reset_source_tree=true, reset_target_tree=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true
@@ -706,7 +706,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         reset_source_tree && (reset_expansions!(source_tree))
 
         # create interaction lists
-        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_acceptance_criterion, farfield, nearfield, self_induced)
+        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_threshold, farfield, nearfield, self_induced)
 
         # assemble derivatives switch
         derivatives_switch = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)

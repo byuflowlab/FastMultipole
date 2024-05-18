@@ -7,7 +7,7 @@ WARNING_FLAG_N_PER_BRANCH[] = true
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
+function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
     # ensure `system` isn't empty; otherwise return an empty tree
     if get_n_bodies(system) > 0
         # initialize variables
@@ -21,9 +21,9 @@ function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale
         sort_index_buffer = get_sort_index_buffer(system)
 
         # grow root branch
-        root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, n_per_branch, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+        root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
         branches = [root_branch] # this first branch will already have its child branches encoded
-        # estimated_n_branches = estimate_n_branches(system, n_per_branch, allocation_safety_factor)
+        # estimated_n_branches = estimate_n_branches(system, leaf_size, allocation_safety_factor)
         # sizehint!(branches, estimated_n_branches)
         parents_index = 1:1
 
@@ -31,7 +31,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale
         levels_index = [parents_index] # store branches at each level
         for i_divide in 1:n_divisions
             if n_children > 0
-                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
                 push!(levels_index, parents_index)
             end
         end
@@ -40,18 +40,18 @@ function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale
         if n_children > 0
             n_children_prewhile = n_children
             while n_children > 0
-                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
                 push!(levels_index, parents_index)
             end
             if WARNING_FLAG_N_PER_BRANCH[]
-                @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
+                @warn "leaf_size not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
                 WARNING_FLAG_N_PER_BRANCH[] = false
             end
         end
 
         # # check depth
         # if n_children > 0
-        #     error("n_per_branch not reached; n_children = $n_children")
+        #     error("leaf_size not reached; n_children = $n_children")
         # end
 
         # invert index
@@ -79,10 +79,10 @@ function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale
         # else
         #     cost_parameters = CostParameters(system)
         # end
-        # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, n_per_branch) : dummy_direct_cost_estimate(system, n_per_branch)
+        # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, leaf_size) : dummy_direct_cost_estimate(system, leaf_size)
 
         # assemble tree
-        tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), n_per_branch)#, cost_parameters)
+        tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), leaf_size)#, cost_parameters)
 
     else
         tree = EmptyTree(system)
@@ -91,11 +91,11 @@ function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale
     return tree
 end
 
-Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) =
-    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
+Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size) =
+    SingleTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)#, cost_parameters)
 
-Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) =
-    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
+Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size) =
+    MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)#, cost_parameters)
 
 """
     EmptyTree(system)
@@ -119,8 +119,8 @@ function EmptyTree(system)
     inverse_sort_index = Int[]
     buffer = nothing
     expansion_order = Val(-1)
-    n_per_branch = -1
-    return Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)
+    leaf_size = -1
+    return Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)
 end
 
 function EmptyTree(system::Tuple)
@@ -132,8 +132,8 @@ function EmptyTree(system::Tuple)
     inverse_sort_index = Tuple(Int[] for _ in 1:N)
     buffer = nothing
     expansion_order = Val(-1)
-    n_per_branch = -1
-    return Tree(branches, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, expansion_order, n_per_branch)
+    leaf_size = -1
+    return Tree(branches, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, expansion_order, leaf_size)
 end
 
 @inline function get_n_bodies(systems::Tuple)
@@ -144,14 +144,14 @@ end
     return n_bodies
 end
 
-function estimate_n_branches(system, n_per_branch, allocation_safety_factor)
+function estimate_n_branches(system, leaf_size, allocation_safety_factor)
     n_bodies = get_n_bodies(system)
-    estimated_n_divisions = Int(ceil(log(8,n_bodies/n_per_branch)))
+    estimated_n_divisions = Int(ceil(log(8,n_bodies/leaf_size)))
     estimated_n_branches = div(8^(estimated_n_divisions+1) - 1,7)
     return Int(ceil(estimated_n_branches * allocation_safety_factor))
 end
 
-function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
     i_first_branch = parents_index[end] + n_children + 1
     for i_parent in parents_index
         parent_branch = branches[i_parent]
@@ -164,12 +164,12 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
             update_octant_accumulator!(cumulative_octant_census)
 
             # number of child branches
-            if get_population(cumulative_octant_census) > n_per_branch
+            if get_population(cumulative_octant_census) > leaf_size
                 for i_octant in 1:8
                     if get_population(cumulative_octant_census, i_octant) > 0
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
                         child_center = get_child_center(parent_branch.center, parent_branch.radius, i_octant)
-                        child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, i_parent, n_per_branch, expansion_order)
+                        child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, i_parent, leaf_size, expansion_order)
                         i_first_branch += n_grandchildren
                         push!(branches, child_branch)
                     end
@@ -182,14 +182,14 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
     return parents_index, n_children
 end
 
-function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, i_parent, n_per_branch, expansion_order)
+function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, i_parent, leaf_size, expansion_order)
     # count bodies in each octant
     census!(octant_container, system, bodies_index, center)
 
     # cumsum
     update_octant_accumulator!(octant_container)
     # number of child branches
-    n_children = get_n_children(octant_container, n_per_branch)
+    n_children = get_n_children(octant_container, leaf_size)
 
     if n_children > 0
         # get beginning index of sorted bodies
@@ -360,9 +360,9 @@ end
 #####
 ##### determine the number of descendants
 #####
-@inline function get_n_children(cumulative_octant_census, n_per_branch)
+@inline function get_n_children(cumulative_octant_census, leaf_size)
     n_children = 0
-    if get_population(cumulative_octant_census) > n_per_branch
+    if get_population(cumulative_octant_census) > leaf_size
         for i_octant in 1:8
             get_population(cumulative_octant_census,i_octant) > 0 && (n_children += 1)
         end
