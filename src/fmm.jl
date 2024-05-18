@@ -654,6 +654,10 @@ function fmm!(tree::Tree, systems;
     )
 end
 
+const WARNING_FLAG_EMPTY_SOURCE = Array{Bool,0}(undef)
+WARNING_FLAG_EMPTY_SOURCE[] = false
+const WARNING_FLAG_EMPTY_TARGET = Array{Bool,0}(undef)
+WARNING_FLAG_EMPTY_TARGET[] = false
 
 """
     fmm!(target_tree, target_systems, source_tree, source_systems; kwargs...)
@@ -729,11 +733,17 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         end
 
     else
-        n_sources == 0 && (@warn "fmm! called but the source system is empty; foregoing calculation")
-        n_targets == 0 && (@warn "fmm! called but the target system is empty; foregoing calculation")
+        if n_sources == 0 && !WARNING_FLAG_EMPTY_SOURCE[]
+            @warn "fmm! called but the source system is empty; foregoing calculation"
+            WARNING_FLAG_EMPTY_SOURCE[] = true
+        end
+        if n_targets == 0 && !WARNING_FLAG_EMPTY_TARGET[]
+            @warn "fmm! called but the target system is empty; foregoing calculation"
+            WARNING_FLAG_EMPTY_TARGET[] = true
+        end
     end
 
-    # unsort bodies
+   # unsort bodies
     n_sources > 0 && unsort_source_bodies && unsort!(source_systems, source_tree)
     n_targets > 0 && unsort_target_bodies && unsort!(target_systems, target_tree)
 
