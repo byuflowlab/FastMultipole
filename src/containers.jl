@@ -39,16 +39,89 @@ const VECTOR_STRENGTH = VectorStrength()
 ##### 
 ##### dispatch convenience functions for multipole creation definition 
 #####
-abstract type AbstractKernel end
+abstract type AbstractKernel{sign} end
 
-struct VortexPoint <: AbstractKernel end
-struct VortexLine <: AbstractKernel end # not yet derived
-struct VortexPanel <: AbstractKernel end # not yet derived
-struct SourcePoint <: AbstractKernel end
-struct UniformSourcePanel <: AbstractKernel end
-struct UniformNormalDipolePanel <: AbstractKernel end
-struct UniformSourceNormalDipolePanel <: AbstractKernel end
+struct VortexPoint{sign} <: AbstractKernel{sign} end
+VortexPoint(sign=1) = VortexPoint{sign}()
+struct VortexLine{sign} <: AbstractKernel{sign} end # not yet derived
+VortexLine(sign=1) = VortexLine{sign}()
+struct VortexPanel{sign} <: AbstractKernel{sign} end # not yet derived
+VortexPanel(sign=1) = VortexPanel{sign}()
+struct SourcePoint{sign} <: AbstractKernel{sign} end
+SourcePoint(sign=1) = SourcePoint{sign}()
+struct UniformSourcePanel{sign} <: AbstractKernel{sign} end
+UniformSourcePanel(sign=1) = UniformSourcePanel{sign}()
+struct UniformNormalDipolePanel{sign} <: AbstractKernel{sign} end
+UniformNormalDipolePanel(sign=1) = UniformNormalDipolePanel{sign}()
+struct UniformSourceNormalDipolePanel{sign} <: AbstractKernel{sign} end
+UniformSourceNormalDipolePanel(sign=1) = UniformSourceNormalDipolePanel{sign}()
 
+#####
+##### dispatch convenience functions to determine which derivatives are desired
+#####
+"""
+    DerivativesSwitch
+
+Switch indicating whether the scalar potential, vector potential, velocity, and/or velocity gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
+"""
+struct DerivativesSwitch{PS,VPS,VS,GS} end
+
+"""
+    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+
+Constructs a tuple of [`DerivativesSwitch`](@ref) objects.
+
+# Arguments
+
+- `scalar_potential::Vector{Bool}`: a vector of `::Bool` indicating whether the scalar potential should be computed for each target system
+- `vector_potential::Vector{Bool}`: a vector of `::Bool` indicating whether the vector potential should be computed for each target system
+- `velocity::Vector{Bool}`: a vector of `::Bool` indicating whether the velocity should be computed for each target system
+- `velocity_gradient::Vector{Bool}`: a vector of `::Bool` indicating whether the velocity gradient should be computed for each target system
+
+"""
+function DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+    return Tuple(DerivativesSwitch(ps,vps,vs,gs) for (ps,vps,vs,gs) in zip(scalar_potential, vector_potential, velocity, velocity_gradient))
+end
+
+"""
+    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+
+Constructs a single [`DerivativesSwitch`](@ref) object.
+
+# Arguments
+
+- `scalar_potential::Bool`: a `::Bool` indicating whether the scalar potential should be computed for the target system
+- `vector_potential::Bool`: a `::Bool` indicating whether the vector potential should be computed for the target system
+- `velocity::Bool`: a `::Bool` indicating whether the velocity should be computed for the target system
+- `velocity_gradient::Bool`: a `::Bool` indicating whether the velocity gradient should be computed for the target system
+
+"""
+function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool)
+    return DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}()
+end
+
+"""
+    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
+
+Constructs a `::Tuple` of indentical [`DerivativesSwitch`](@ref) objects of the same length as `target_systems` (if it is a `::Tuple`), or a single [`DerivativesSwitch`](@ref) (if `target_system` is not a `::Tuple`)
+
+# Arguments
+
+- `scalar_potential::Bool`: a `::Bool` indicating whether the scalar potential should be computed for each target system
+- `vector_potential::Bool`: a `::Bool` indicating whether the vector potential should be computed for each target system
+- `velocity::Bool`: a `::Bool` indicating whether the velocity should be computed for each target system
+- `velocity_gradient::Bool`: a `::Bool` indicating whether the velocity gradient should be computed for each target system
+
+"""
+function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_systems::Tuple)
+    return Tuple(DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}() for _ in target_systems)
+end
+
+function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_system)
+    return DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}()
+end
+
+DerivativesSwitch() = DerivativesSwitch{true, true, true, true}()
 
 #####
 ##### cost parameters
@@ -146,13 +219,18 @@ end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
 
-abstract type Tree{P} end
+"""
+    abstract type Tree{TF,P} end
+
+Supertype of all octree structures with `TF` the floating point type and `P` the expansion order.
+"""
+abstract type Tree{TF,P} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB,P} <: Tree{P}
+struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
@@ -165,7 +243,7 @@ struct MultiTree{TF,N,TB,P} <: Tree{P}
     # cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB,P} <: Tree{P}
+struct SingleTree{TF,TB,P} <: Tree{TF,P}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
@@ -186,6 +264,36 @@ struct SortWrapper{TS}
     index::Vector{Int}
 end
 
+"""
+    SortWrapper(system)
+
+Convenience wrapper for systems whose elements cannot be sorted in-place (e.g. structured grids). The resulting object is treated like any other `system`.
+"""
 function SortWrapper(system)
-    return SortWrapper(system,collect(1:length(system)))
+    return SortWrapper(system,collect(1:get_n_bodies(system)))
+end
+
+@inline wrap_duplicates(target_systems::Tuple, source_systems::Tuple) = Tuple(target_system in source_systems ? SortWrapper(target_system) : target_system for target_system in target_systems)
+
+@inline wrap_duplicates(target_system, source_system) = target_system == source_system ? SortWrapper(target_system) : target_system
+
+@inline wrap_duplicates(target_system, source_systems::Tuple) = target_system in source_systems ? SortWrapper(target_system) : target_system
+
+@inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
+
+#####
+##### when we desire to evaluate the potential at locations not coincident with source centers
+#####
+
+"""
+    ProbeSystem
+
+Convenience system for defining locations at which the potential, velocity, or velocity gradient may be desired.
+"""
+struct ProbeSystem{TF,TSP,TVP,TV,TVG}
+    position::Vector{SVector{3,TF}}
+    scalar_potential::TSP
+    vector_potential::TVP
+    velocity::TV
+    velocity_gradient::TVG
 end

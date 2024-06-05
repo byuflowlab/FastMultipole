@@ -1,6 +1,6 @@
 # module VPM
 
-import FLOWFMM as fmm
+import FastMultipole as fmm
 import WriteVTK
 using SpecialFunctions:erf
 
@@ -47,8 +47,8 @@ Base.getindex(vp::VortexParticles, i, ::fmm.ScalarPotential) = vp.potential[1,i]
 Base.getindex(vp::VortexParticles, i, ::fmm.Velocity) = view(vp.velocity_stretching,i_VELOCITY_vortex,i)
 Base.getindex(vp::VortexParticles, i, ::fmm.VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
 Base.getindex(vp::VortexParticles, i, ::fmm.VectorStrength) = vp.bodies[i].strength
-Base.getindex(vp::VortexParticles, i) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
-function Base.setindex!(vp::VortexParticles, val, i)
+Base.getindex(vp::VortexParticles, i, ::fmm.Body) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
+function Base.setindex!(vp::VortexParticles, val, i, ::fmm.Body)
     body, potential = val
     vp.bodies[i] = body
     vp.potential[:,i] .= potential
@@ -67,13 +67,35 @@ end
 function Base.setindex!(vp::VortexParticles, val, i, ::fmm.VelocityGradient)
     vp.potential[i_VELOCITY_GRADIENT_vortex,i] .= reshape(val,9)
 end
-Base.length(vp::VortexParticles) = length(vp.bodies)
+FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
 Base.eltype(::VortexParticles{TF}) where TF = TF
+
+function flatten_derivatives!(jacobian, hessian, derivatives_switch::fmm.DerivativesSwitch{PS,VPS,VS,GS}) where {PS,VPS,VS,GS}
+    if VS
+        # velocity
+        jacobian[1,1] = -jacobian[1,1] + jacobian[2,4] - jacobian[3,3]
+        jacobian[2,1] = -jacobian[2,1] + jacobian[3,2] - jacobian[1,4]
+        jacobian[3,1] = -jacobian[3,1] + jacobian[1,3] - jacobian[2,2]
+    end
+
+    if GS
+        # velocity gradient
+        hessian[1,1,1] = -hessian[1,1,1] + hessian[2,1,4] - hessian[3,1,3]
+        hessian[2,1,1] = -hessian[2,1,1] + hessian[3,1,2] - hessian[1,1,4]
+        hessian[3,1,1] = -hessian[3,1,1] + hessian[1,1,3] - hessian[2,1,2]
+        hessian[1,2,1] = -hessian[1,2,1] + hessian[2,2,4] - hessian[3,2,3]
+        hessian[2,2,1] = -hessian[2,2,1] + hessian[3,2,2] - hessian[1,2,4]
+        hessian[3,2,1] = -hessian[3,2,1] + hessian[1,2,3] - hessian[2,2,2]
+        hessian[1,3,1] = -hessian[1,3,1] + hessian[2,3,4] - hessian[3,3,3]
+        hessian[2,3,1] = -hessian[2,3,1] + hessian[3,3,2] - hessian[1,3,4]
+        hessian[3,3,1] = -hessian[3,3,1] + hessian[1,3,3] - hessian[2,3,2]
+    end
+end
 
 """
 Classical formulation so far.
 """
-function fmm.direct!(target_system, target_index, source_system::VortexParticles, source_index)
+function fmm.direct!(target_system, target_index, derivatives_switch, source_system::VortexParticles, source_index)
     jacobian = zeros(eltype(target_system),3,4)
     hessian = zeros(eltype(target_system),3,3,4)
     for j_source in source_index
@@ -110,7 +132,7 @@ function fmm.direct!(target_system, target_index, source_system::VortexParticles
                 hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
                 hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
             end
-            fmm.flatten_derivatives!(jacobian, hessian)
+            flatten_derivatives!(jacobian, hessian, derivatives_switch)
 
             target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
             target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)
@@ -159,7 +181,7 @@ end
 end
 
 function update_velocity_stretching!(vortex_particles::VortexParticles)
-    for i_body in 1:length(vortex_particles)
+    for i_body in 1:fmm.get_n_bodies(vortex_particles)
         update_velocity_stretching!(vortex_particles, i_body)
     end
 end
@@ -183,7 +205,7 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     potential = vortex_particles.potential
     velocity_stretching = vortex_particles.velocity_stretching
     update_velocity_stretching!(vortex_particles)
-    for i_body in 1:length(vortex_particles)
+    for i_body in 1:fmm.get_n_bodies(vortex_particles)
         vortex_particles[i_body, fmm.POSITION] .+= vortex_particles.velocity_stretching[1:3,i_body] * euler.dt
         vortex_particles.bodies[i_body] .+= vortex_particles.velocity_stretching[4:6] * euler.dt
     end
@@ -193,12 +215,12 @@ function convect!(vortex_particles::VortexParticles, nsteps;
         # integration options
         integrate!::IntegrationScheme=Euler(1.0),
         # fmm options
-        fmm_p=4, fmm_ncrit=50, fmm_theta=0.5, fmm_targets=fmm.SVector{1}(Int8(1)),
+        fmm_p=4, fmm_ncrit=50, fmm_multipole_acceptance_criterion=0.5, fmm_targets=fmm.SVector{1}(Int8(1)),
         direct::Bool=false,
         # save options
         save::Bool=true, filename::String="default", compress::Bool=false,
     )
-    fmm_options = fmm.Options(fmm_p, fmm_ncrit, fmm_theta, fmm_targets)
+    fmm_options = fmm.Options(fmm_p, fmm_ncrit, fmm_multipole_acceptance_criterion, fmm_targets)
     save && save_vtk(filename, vortex_particles; compress)
     for istep in 1:nsteps
         integrate!(vortex_particles, fmm_options, direct)

@@ -1,11 +1,13 @@
 # const BRANCH_TYPE = Float64
 # global SHRINKING_OFFSET = .000001
-# away_from_center! is a bandaid fix
+
+const WARNING_FLAG_N_PER_BRANCH = Array{Bool,0}(undef)
+WARNING_FLAG_N_PER_BRANCH[] = true
 
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
+function Tree(system; expansion_order=7, n_per_branch=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
     # initialize variables
     octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
     cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
@@ -25,7 +27,7 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
 
     # grow branches
     levels_index = [parents_index] # store branches at each level
-    for i_divide in 1:ndivisions
+    for i_divide in 1:n_divisions
         if n_children > 0
             parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
             push!(levels_index, parents_index)
@@ -39,7 +41,10 @@ function Tree(system; expansion_order=7, n_per_branch=100, ndivisions=7, scale_r
             parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, n_per_branch, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
             push!(levels_index, parents_index)
         end
-        @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `ndivisions` > $(length(levels_index))"
+        if WARNING_FLAG_N_PER_BRANCH[]
+            @warn "n_per_branch not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
+            WARNING_FLAG_N_PER_BRANCH[] = false
+        end
     end
 
     # # check depth
@@ -86,18 +91,16 @@ Tree(branches::Vector{<:SingleBranch}, levels_index, leaf_index, sort_index, inv
 Tree(branches::Vector{<:MultiBranch}, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch) = 
     MultiTree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, n_per_branch)#, cost_parameters)
 
-@inline total_n_bodies(system) = length(system)
-
-@inline function total_n_bodies(systems::Tuple)
+@inline function get_n_bodies(systems::Tuple)
     n_bodies = 0
     for system in systems
-        n_bodies += total_n_bodies(system)
+        n_bodies += get_n_bodies(system)
     end
     return n_bodies
 end
 
 function estimate_n_branches(system, n_per_branch, allocation_safety_factor)
-    n_bodies = total_n_bodies(system)
+    n_bodies = get_n_bodies(system)
     estimated_n_divisions = Int(ceil(log(8,n_bodies/n_per_branch)))
     estimated_n_branches = div(8^(estimated_n_divisions+1) - 1,7)
     return Int(ceil(estimated_n_branches * allocation_safety_factor))
@@ -114,8 +117,6 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
             # count bodies per octant
             census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
             update_octant_accumulator!(cumulative_octant_census)
-
-            # @show cumulative_octant_census parents_index get_population(cumulative_octant_census)
             
             # number of child branches
             if get_population(cumulative_octant_census) > n_per_branch
@@ -200,14 +201,14 @@ end
 function get_octant_container(systems::Tuple)
     census = MMatrix{length(systems),8,Int64}(undef)
     for (i,system) in enumerate(systems)
-        census[i,1] = length(system)
+        census[i,1] = get_n_bodies(system)
     end
     return census
 end
 
 function get_octant_container(system)
     census = MVector{8,Int64}(undef)
-    census[1] = length(system)
+    census[1] = get_n_bodies(system)
     return census
 end
 
@@ -264,7 +265,7 @@ end
     return bodies_index
 end
 
-@inline get_bodies_index(system) = 1:length(system)
+@inline get_bodies_index(system) = 1:get_n_bodies(system)
 
 @inline function get_bodies_index(systems::Tuple)
     n_systems = length(systems)
@@ -283,7 +284,7 @@ end
     # return Vector{Int64}(undef,length(system))
     # [buffer_element(system) for _ in 1:length(system)]
     buffer = [buffer_element(system)]
-    resize!(buffer,length(system))
+    resize!(buffer,get_n_bodies(system))
     return buffer
 end
 
@@ -296,7 +297,7 @@ end
 end
 
 @inline function get_sort_index(system)
-    return collect(1:length(system))
+    return collect(1:get_n_bodies(system))
 end
 
 @inline function get_sort_index(systems::Tuple)
@@ -304,7 +305,7 @@ end
 end
 
 @inline function get_sort_index_buffer(system) # need not be overloaded for SortWrapper as it will be the same
-    return Vector{Int64}(undef,length(system))
+    return Vector{Int64}(undef,get_n_bodies(system))
 end
 
 @inline function get_sort_index_buffer(systems::Tuple)
@@ -341,14 +342,14 @@ end
 function sort_bodies!(system, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
     # sort indices
     for i_body in bodies_index
-        i_octant = get_octant(system[i_body,POSITION], center)
-        buffer[octant_indices[i_octant]] = system[i_body]
+        i_octant = get_octant(system[i_body, POSITION], center)
+        buffer[octant_indices[i_octant]] = system[i_body, BODY]
         sort_index_buffer[octant_indices[i_octant]] = sort_index[i_body]
         octant_indices[i_octant] += 1
     end
     # place buffers
     for i_body in bodies_index
-        system[i_body] = buffer[i_body]
+        system[i_body, BODY] = buffer[i_body]
     end
     sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
 end
@@ -391,11 +392,11 @@ function unsort!(system, tree::SingleTree)
 end
 
 @inline function unsort!(system, buffer, inverse_sort_index)
-    for i_body in 1:length(system)
-        buffer[i_body] = system[inverse_sort_index[i_body]]
+    for i_body in 1:get_n_bodies(system)
+        buffer[i_body] = system[inverse_sort_index[i_body], BODY]
     end
-    for i_body in 1:length(system)
-        system[i_body] = buffer[i_body]
+    for i_body in 1:get_n_bodies(system)
+        system[i_body, BODY] = buffer[i_body]
     end
 end
 
@@ -470,7 +471,7 @@ end
 end
 
 @inline function max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, system)
-    for i in 1:length(system)
+    for i in 1:get_n_bodies(system)
         x, y, z = system[i,POSITION]
         x_min, y_min, z_min, x_max, y_max, z_max = max_xyz(x_min, y_min, z_min, x_max, y_max, z_max, x, y, z)
     end
@@ -661,6 +662,7 @@ function shrink_leaf!(branch, system)
     # recenter # turn this off for now- only shrink/expand radius
     # new_center = center_nonzero_radius(system, bodies_index)
     new_center = branch[].center
+    # length(bodies_index) == 1 && (new_center += SVector{3}(sqrt(eps()),sqrt(eps()),sqrt(eps())))
     
     # shrink radius 
     new_radius = zero(branch[].radius)

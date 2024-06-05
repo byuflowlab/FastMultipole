@@ -1,7 +1,8 @@
-import FLOWFMM as fmm
+import FastMultipole 
+using FastMultipole
 using WriteVTK
 import Base: getindex, setindex!
-using FLOWFMM.StaticArrays
+using FastMultipole.StaticArrays
 const i_POSITION = 1:3
 const i_RADIUS = 4
 const i_STRENGTH = 5:8
@@ -30,46 +31,46 @@ function Gravitational(bodies::Matrix)
     return Gravitational(bodies2,potential)
 end
 
-Base.getindex(g::Gravitational, i, ::fmm.Position) = g.bodies[i].position
-Base.getindex(g::Gravitational, i, ::fmm.Radius) = g.bodies[i].radius
-Base.getindex(g::Gravitational, i, ::fmm.VectorPotential) = view(g.potential,2:4,i)
-Base.getindex(g::Gravitational, i, ::fmm.ScalarPotential) = g.potential[1,i]
-Base.getindex(g::Gravitational, i, ::fmm.Velocity) = view(g.potential,i_VELOCITY,i)
-Base.getindex(g::Gravitational, i, ::fmm.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
-Base.getindex(g::Gravitational, i, ::fmm.ScalarStrength) = g.bodies[i].strength[1]
-Base.getindex(g::Gravitational, i) = g.bodies[i], view(g.potential,:,i)
-function Base.setindex!(g::Gravitational, val, i)
+Base.getindex(g::Gravitational, i, ::FastMultipole.Position) = g.bodies[i].position
+Base.getindex(g::Gravitational, i, ::FastMultipole.Radius) = g.bodies[i].radius
+Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.potential,2:4,i)
+Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarPotential) = g.potential[1,i]
+Base.getindex(g::Gravitational, i, ::FastMultipole.Velocity) = view(g.potential,i_VELOCITY,i)
+Base.getindex(g::Gravitational, i, ::FastMultipole.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
+Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarStrength) = g.bodies[i].strength[1]
+Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = g.bodies[i], view(g.potential,:,i)
+function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Body)
     body, potential = val
     g.bodies[i] = body
     g.potential[:,i] .= potential
     return nothing
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.ScalarPotential)
+function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.ScalarPotential)
     g.potential[i_POTENTIAL[1],i] = val
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.VectorPotential)
+function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.VectorPotential)
     g.potential[i_POTENTIAL[2:4],i] .= val
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.Velocity)
+function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Velocity)
     g.potential[i_VELOCITY,i] .= val
 end
-function Base.setindex!(g::Gravitational, val, i, ::fmm.VelocityGradient)
+function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.VelocityGradient)
     reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
 end
-Base.length(g::Gravitational) = length(g.bodies)
+FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF
 
-fmm.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
+FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
 
-fmm.B2M!(system::Gravitational, args...) = fmm.B2M!_sourcepoint(system, args...)
+FastMultipole.B2M!(system::Gravitational, args...) = FastMultipole.B2M!_sourcepoint(system, args...)
 
-function fmm.direct!(target_system, target_index, source_system::Gravitational, source_index)
+function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_index)
     # nbad = 0
     for i_source in source_index
-        source_x, source_y, source_z = source_system[i_source,fmm.POSITION]
+        source_x, source_y, source_z = source_system[i_source,FastMultipole.POSITION]
         source_strength = source_system.bodies[i_source].strength[1]
         for j_target in target_index
-            target_x, target_y, target_z = target_system[j_target,fmm.POSITION]
+            target_x, target_y, target_z = target_system[j_target,FastMultipole.POSITION]
             dx = target_x - source_x
             dy = target_y - source_y
             dz = target_z - source_z

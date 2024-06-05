@@ -1,5 +1,5 @@
 function visualize_bodies(name, system, probe_indices=())
-    n_bodies = length(system)
+    n_bodies = get_n_bodies(system)
     body_locations = zeros(3,n_bodies,1,1)
     body_radii = zeros(n_bodies,1,1)
     scalar_strength = zeros(n_bodies,1,1)
@@ -49,14 +49,14 @@ function visualize_bodies(name, system, probe_indices=())
     end
 end
 
-function visualize_bodies(name, systems::Tuple, probe_indices_list)
-    for (system, probe_indices) in zip(systems, probe_indices_list)
+function visualize_bodies(name_list, systems::Tuple, probe_indices_list)
+    for (name, system, probe_indices) in zip(name_list, systems, probe_indices_list)
         visualize_bodies(name, system, probe_indices)
     end
 end
 
-function visualize_bodies(name, systems::Tuple, probe_indices_list::Nothing)
-    for system in systems
+function visualize_bodies(name_list, systems::Tuple, probe_indices_list::Nothing)
+    for (name, system) in zip(name_list, systems)
         visualize_bodies(name, system)
     end
 end
