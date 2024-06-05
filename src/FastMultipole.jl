@@ -19,7 +19,7 @@ const MIN_NPT_L2L = 100
 const MIN_NPT_L2B = 100
 const MIN_NPT_NF = 100
 
-for file in ["containers", "complex", "derivatives", "element", "tree", "direct", "spherical", "fmm", "sortwrapper", "compatibility", "b2m", "probe", "visualize", "rrules_definitions"]#, "estimate_cost"]
+for file in ["containers", "complex", "derivatives", "element", "tree", "direct", "spherical", "fmm", "sortwrapper", "compatibility", "b2m", "probe", "visualize","grad_from_chainrules_extended","rrules_definitions"]#, "estimate_cost"]
     include(file*".jl")
 end
 

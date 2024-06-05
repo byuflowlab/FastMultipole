@@ -368,15 +368,24 @@ end
 
 function downward_pass_singlethread!(branches, systems, derivatives_switches, expansion_order::Val{P}) where P
     regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
+    #println("starting downward pass")
+    #l = length(ReverseDiff.tape(branches[1].radius))
+    #@show l
     for branch in branches
         if branch.n_branches == 0 # leaf level
+            #l = length(ReverseDiff.tape(branches[1].radius))
 			L2B!(systems, branch, derivatives_switches, expansion_order)
+            #println("$(length(ReverseDiff.tape(branches[1].radius)) - l) entries in L2B!")
         else
             for child_branch in view(branches,branch.branch_index)
+                #l = length(ReverseDiff.tape(branches[1].radius))
                 L2L!(branch, child_branch, regular_harmonics, branch.ML, expansion_order)
+                #println("$(length(ReverseDiff.tape(branches[1].radius)) - l) entries in L2L!")
             end
         end
     end
+    #println("finished downward pass")
+    #@show length(ReverseDiff.tape(branches[1].radius))
 end
 
 function translate_locals_multithread!(branches, expansion_order::Val{P}, levels_index) where P
@@ -708,11 +717,20 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
     # run FMM
     if Threads.nthreads() == 1
-        nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
+        #@show length(ReverseDiff.tape(source_tree.branches[1].radius))
+        println("starting nearfield")
+        upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order) # 24792/322185 = 7.7%
+        #@show length(ReverseDiff.tape(source_tree.branches[1].radius))
+        nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list)) # 1160/322185 = 0.36%
         if farfield
-            upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
-            horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-            downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order)
+            #@show length(ReverseDiff.tape(source_tree.branches[1].radius))
+            println("starting farfield")
+            upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order) # 24792/322185 = 7.7% - same function call as before
+            #@show length(ReverseDiff.tape(source_tree.branches[1].radius))
+            horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order) # 0% - no extra tape entries here
+            #@show length(ReverseDiff.tape(source_tree.branches[1].radius))
+            downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order) # 270322/322185 = 83.9%
+            #@show length(ReverseDiff.tape(source_tree.branches[1].radius))
         end
     else # multithread
         # println("nearfield")

@@ -376,8 +376,16 @@ function L2B!(system, branch::SingleBranch, derivatives_switch, expansion_order)
 end
 
 function L2B!(system, bodies_index, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order, expansion_center) where {PS,VPS,VS,GS}
+    #l = length(ReverseDiff.tape(system[1][1].radius))
+    #println("initial tape entries: $l")
     for i_body in bodies_index
-		scalar_potential, vector_potential, velocity, gradient = L2B(system[i_body,POSITION], expansion_center, local_expansion, derivatives_switch, expansion_order)
+        #l = length(ReverseDiff.tape(system[1][1].radius))
+		scalar_potential, vector_potential, velocity, gradient = L2B(system[i_body,POSITION], expansion_center[1:3], local_expansion, derivatives_switch, expansion_order)
+        #if length(ReverseDiff.tape(system[1][1].radius)) > 1
+        #    @show ReverseDiff.tape(system[1][1].radius)[end]
+        #end
+        #println("$(length(ReverseDiff.tape(system[1][1].radius)) - l) entries from L2B")
+        #l = length(ReverseDiff.tape(system[1][1].radius))
         if PS
             system[i_body,SCALAR_POTENTIAL] += scalar_potential
         end
@@ -404,6 +412,7 @@ function L2B!(system, bodies_index, local_expansion, derivatives_switch::Derivat
                 gradient[9] + v9
             )
         end
+        #println("$(length(ReverseDiff.tape(system[1][1].radius)) - l) other entries")
     end
 end
 
@@ -565,7 +574,7 @@ end
 	return dudr, dudt_r, dudp_r_st
 end
 
-function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
     #=
     R_n^m(\rho, \theta, \phi) &= (-1)^n \frac{\rho^n}{(n+\|m\|)!} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
     I_n^m(\rho, \theta, \phi) &= (-1)^n \frac{(n-\|m\|)!}{\rho^{n+1}} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
@@ -589,7 +598,7 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
     sp, cp = sincos(phi)
 
 	if VS || GS
-		R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0) 
+		R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
 	end
 
     # note that by definition beta_n^m=0 for m<1 and alpha_n^m=0 for m<2
