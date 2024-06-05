@@ -438,32 +438,32 @@ function DummySystem(n_bodies, TF)
     return DummySystem(bodies, potential, vector_potential, velocity, gradient)
 end
 
-function direct_cost_estimate(system, n_per_branch; n_iter=10)
+function direct_cost_estimate(system, leaf_size; n_iter=10)
     # create dummy system
-    # target_system = DummySystem(n_per_branch, eltype(system[1,POSITION]))
+    # target_system = DummySystem(leaf_size, eltype(system[1,POSITION]))
 
     # # benchmark
     # t = 0.0
     # for i in 1:n_iter+1 # one for precompilation
-    #     i > 1 && (t += @elapsed direct!(target_system, 1:n_per_branch, system, 1:n_per_branch))
+    #     i > 1 && (t += @elapsed direct!(target_system, 1:leaf_size, system, 1:leaf_size))
     # end
     # t /= n_iter # mean time per iteration
-    # t /= n_per_branch^2 # mean time per interaction
+    # t /= leaf_size^2 # mean time per interaction
 
     # return t
-    return dummy_direct_cost_estimate(system, n_per_branch)
+    return dummy_direct_cost_estimate(system, leaf_size)
 end
 
-function dummy_direct_cost_estimate(system, n_per_branch)
+function dummy_direct_cost_estimate(system, leaf_size)
     return NaN
 end
 
-function direct_cost_estimate(systems::Tuple, n_per_branch; n_iter=10)
-    # return SVector{length(systems),Float64}(direct_cost_estimate(system, n_per_branch; n_iter=n_iter) for system in systems)
-    return dummy_direct_cost_estimate(systems, n_per_branch)
+function direct_cost_estimate(systems::Tuple, leaf_size; n_iter=10)
+    # return SVector{length(systems),Float64}(direct_cost_estimate(system, leaf_size; n_iter=n_iter) for system in systems)
+    return dummy_direct_cost_estimate(systems, leaf_size)
 end
 
-function dummy_direct_cost_estimate(systems::Tuple, n_per_branch)
-    return SVector{length(systems),Float64}(dummy_direct_cost_estimate(system, n_per_branch) for system in systems)
+function dummy_direct_cost_estimate(systems::Tuple, leaf_size)
+    return SVector{length(systems),Float64}(dummy_direct_cost_estimate(system, leaf_size) for system in systems)
 end
 

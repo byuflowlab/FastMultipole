@@ -138,8 +138,8 @@ end
     @test isapprox(radius, test_radius; atol=1e-4)
 
     # test branch! function
-    expansion_order, n_per_branch, multipole_acceptance_criterion = 2, 1, 0.5
-    tree = FastMultipole.Tree((elements,); expansion_order, n_per_branch, shrink_recenter=false)
+    expansion_order, leaf_size, multipole_threshold = 2, 1, 0.5
+    tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=false)
 
     test_branches = [
         5 0.65 0.65 0.55 0.5500055;
@@ -211,9 +211,9 @@ end
 system = Gravitational(bodies)
 
 expansion_order = 2
-n_per_branch = 1
-multipole_acceptance_criterion = 0.25
-tree = FastMultipole.Tree((system,); expansion_order, n_per_branch, shrink_recenter=false)
+leaf_size = 1
+multipole_threshold = 0.25
+tree = FastMultipole.Tree((system,); expansion_order, leaf_size, shrink_recenter=false)
 
 i_mass = 1
 i_branch = 5 # use the first mass
@@ -283,7 +283,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 3
-tree = FastMultipole.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=false)
+tree = FastMultipole.Tree((elements,); expansion_order, leaf_size=1, shrink_recenter=false)
 
 i_branch = 2 # contains 4th and 5th elements
 i_branch_4 = 6 # use the fourth mass
@@ -339,7 +339,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-tree = FastMultipole.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=false)
+tree = FastMultipole.Tree((elements,); expansion_order, leaf_size=1, shrink_recenter=false)
 
 branch_i = 2 # contains two elements; 4 and 5
 target_i = new_order_index[4]
@@ -398,7 +398,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 20
-tree = FastMultipole.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=false)
+tree = FastMultipole.Tree((elements,); expansion_order, leaf_size=1, shrink_recenter=false)
 
 # local coefficient at branch 2 due to mass 1
 FastMultipole.B2L!(tree, 2, elements[new_order_index[1],FastMultipole.POSITION], elements.bodies[new_order_index[1]].strength)
@@ -467,7 +467,7 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 30
-tree = FastMultipole.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=false)
+tree = FastMultipole.Tree((elements,); expansion_order, leaf_size=1, shrink_recenter=false)
 
 i_branch_multipole = 7 # mass 5
 i_branch_local = 5 # mass 1
@@ -540,8 +540,8 @@ end
 elements = Gravitational(bodies)
 
 expansion_order = 24
-multipole_acceptance_criterion = 0.5
-tree = FastMultipole.Tree((elements,); expansion_order, n_per_branch=1, shrink_recenter=false)
+multipole_threshold = 0.5
+tree = FastMultipole.Tree((elements,); expansion_order, leaf_size=1, shrink_recenter=false)
 
 # perform upward pass
 FastMultipole.upward_pass_singlethread!(tree.branches, (elements,), expansion_order)
@@ -568,7 +568,7 @@ FastMultipole.M2B!(mass_target_potential, mass_target, 2, tree)
 u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
-m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, multipole_acceptance_criterion, true, true, true)
+m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, multipole_threshold, true, true, true)
 FastMultipole.nearfield_singlethread!((elements,), tree.branches, (FastMultipole.DerivativesSwitch(),), (elements,), tree.branches, direct_list)
 FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
 
@@ -615,7 +615,7 @@ u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
 elements.potential .*= 0
 
 # run FastMultipole.(reset potentials with reset_tree flag)
-FastMultipole.fmm!(tree, (elements,); multipole_acceptance_criterion=multipole_acceptance_criterion, reset_tree=true)
+FastMultipole.fmm!(tree, (elements,); multipole_threshold=multipole_threshold, reset_tree=true)
 u_fmm = deepcopy(elements.potential[1,:])
 
 elements.potential .= 0.0
@@ -807,7 +807,7 @@ vortexparticles.velocity_stretching .*= 0
 # manually build tree for testing
 # Branch(n_branches, n_bodies, first_branch, first_body, center, radius, multipole_expansion, local_expansion, lock, child_lock)
 expansion_order = 9
-n_per_branch = 1
+leaf_size = 1
 x_branch_1 = FastMultipole.SVector{3}([0.0,0,0])
 branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, x_branch_1, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 x_branch_2 = FastMultipole.SVector{3}(xs[:,1] .+ [0.01, 0.02, -0.03])
@@ -816,11 +816,11 @@ x_branch_3 = FastMultipole.SVector{3}(xs[:,2] .+ [0.02, -0.04, 0.01])
 branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_3, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 
 # using FMM
-# tree = FastMultipole.Tree(branches, [expansion_order], n_per_branch, B2M!, P2P!)
+# tree = FastMultipole.Tree(branches, [expansion_order], leaf_size, B2M!, P2P!)
 dummy_index = (zeros(Int64,FastMultipole.get_n_bodies(vortexparticles)),)
 dummy_leaf_index = collect(1:3)
-# dummy_cost_parameter = FastMultipole.dummy_direct_cost_estimate((vortexparticles,), n_per_branch)
-tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), Val(expansion_order), n_per_branch)#, dummy_cost_parameter)
+# dummy_cost_parameter = FastMultipole.dummy_direct_cost_estimate((vortexparticles,), leaf_size)
+tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), Val(expansion_order), leaf_size)#, dummy_cost_parameter)
 harmonics = zeros(Complex{Float64},2,(expansion_order+1)^2)
 FastMultipole.B2M!(branch_2, (vortexparticles,), harmonics, Val(expansion_order))
 FastMultipole.B2M!(branch_3, (vortexparticles,), harmonics, Val(expansion_order))
@@ -983,7 +983,7 @@ vortex_particles.velocity_stretching .*= 0
 
 # branch = Branch(n_branches, n_bodies, i_child, i_start, center, radius, multipole_expansion, local_expansion)
 expansion_order = 9
-n_per_branch = 1
+leaf_size = 1
 x_branch_1 = SVector{3}((bodies[1:3,1] + bodies[1:3,2])/2)
 branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, x_branch_1, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 x_branch_2 = SVector{3}(bodies[1:3,1] .+ [0.01, 0.02, -0.03])
@@ -993,8 +993,8 @@ branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_2, 1
 
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)
-# dummy_cost_parameter = FastMultipole.dummy_direct_cost_estimate((vortex_particles,), n_per_branch)
-tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), Val(expansion_order), n_per_branch)#, dummy_cost_parameter)
+# dummy_cost_parameter = FastMultipole.dummy_direct_cost_estimate((vortex_particles,), leaf_size)
+tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), Val(expansion_order), leaf_size)#, dummy_cost_parameter)
 # FastMultipole.B2M!(tree, vortex_particles, 2)
 # FastMultipole.B2M!(tree, vortex_particles, 3)
 
@@ -1002,7 +1002,7 @@ tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_
 # FastMultipole.M2L!(tree, 3, 2)
 # FastMultipole.L2B!(tree, vortex_particles, 2)
 # FastMultipole.L2B!(tree, vortex_particles, 3)
-FastMultipole.fmm!(tree, (vortex_particles,); multipole_acceptance_criterion=0.5, unsort_bodies=false)
+FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.5, unsort_bodies=false)
 update_velocity_stretching!(vortex_particles)
 
 psis_fmm = deepcopy(vortex_particles.potential[2:4,:])
@@ -1096,11 +1096,11 @@ vortex_particles.potential .*= 0
 vortex_particles.velocity_stretching .*= 0
 
 expansion_order = 32
-n_per_branch = 1
+leaf_size = 1
 
-tree = FastMultipole.Tree((vortex_particles,); expansion_order, n_per_branch, shrink_recenter=false)
+tree = FastMultipole.Tree((vortex_particles,); expansion_order, leaf_size, shrink_recenter=false)
 
-FastMultipole.fmm!(tree, (vortex_particles,); multipole_acceptance_criterion=0.5)
+FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.5)
 
 update_velocity_stretching!(vortex_particles)
 
@@ -1133,7 +1133,7 @@ end
 
 @testset "single/dual tree, single/multi branch" begin
 
-expansion_order, n_per_branch, multipole_acceptance_criterion = 14, 100, 0.31
+expansion_order, leaf_size, multipole_threshold = 14, 100, 0.31
 n_bodies = 5000
 shrink_recenter = true
 seed = 123
@@ -1142,27 +1142,27 @@ FastMultipole.direct!(validation_system)
 validation_potential = validation_system.potential[1,:]
 
 system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!(system3; expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
+FastMultipole.fmm!(system3; expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
 potential3 = system3.potential[1,:]
 @test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-9)
 
 system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system4,); expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
+FastMultipole.fmm!((system4,); expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
 potential4 = system4.potential[1,:]
 @test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-9)
 
 system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential5 = system5.potential[1,:]
 @test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-9)
 
 system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential6 = system6.potential[1,:]
 @test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-9)
 
 system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential7 = system7.potential[1,:]
 @test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-9)
 
@@ -1170,7 +1170,7 @@ end
 
 @testset "sortwrapper" begin
 
-expansion_order, n_per_branch, multipole_acceptance_criterion = 14, 100, 0.31
+expansion_order, leaf_size, multipole_threshold = 14, 100, 0.31
 n_bodies = 5000
 shrink_recenter = true
 seed = 123
@@ -1179,27 +1179,27 @@ FastMultipole.direct!(validation_system)
 validation_potential = validation_system.potential[1,:]
 
 system8 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!(system8; expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
+FastMultipole.fmm!(system8; expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
 potential8 = system8.system.potential[1,:]
 @test isapprox(maximum(abs.(potential8 - validation_potential)), 0.0; atol=1e-9)
 
 system9 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!((system9,); expansion_order=expansion_order, n_per_branch=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_bodies=true)
+FastMultipole.fmm!((system9,); expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
 potential9 = system9.system.potential[1,:]
 @test isapprox(maximum(abs.(potential9 - validation_potential)), 0.0; atol=1e-9)
 
 system10 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!(system10, system10; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!(system10, system10; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential10 = system10.system.potential[1,:]
 @test isapprox(maximum(abs.(potential10 - validation_potential)), 0.0; atol=1e-9)
 
 system11 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!((system11,), system11; expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system11,), system11; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential11 = system11.system.potential[1,:]
 @test isapprox(maximum(abs.(potential11 - validation_potential)), 0.0; atol=1e-9)
 
 system12 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!((system12,), (system12,); expansion_order=expansion_order, n_per_branch_source=n_per_branch, n_per_branch_target=n_per_branch, multipole_acceptance_criterion=multipole_acceptance_criterion, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system12,), (system12,); expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
 potential12 = system12.system.potential[1,:]
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -1370,8 +1370,8 @@ bodies = rand(8,n_bodies)
 bodies[5:8,2:n_bodies] .= 0.0
 probes = FastMultipole.ProbeSystem(bodies[1:3,2:end]; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true)
 mass = Gravitational(bodies)
-FastMultipole.fmm!(probes, mass; expansion_order=5, n_per_branch_source=50, n_per_branch_target=50, multipole_acceptance_criterion=0.4)
-FastMultipole.fmm!(mass; expansion_order=5, n_per_branch=50, multipole_acceptance_criterion=0.4)
+FastMultipole.fmm!(probes, mass; expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4)
+FastMultipole.fmm!(mass; expansion_order=5, leaf_size=50, multipole_threshold=0.4)
 
 for i_mass in 2:n_bodies
     @test isapprox(mass.potential[1,i_mass], probes.scalar_potential[i_mass-1]; atol=1e-12)

@@ -36,8 +36,8 @@ const SCALAR_STRENGTH = ScalarStrength()
 struct VectorStrength <: Indexable end
 const VECTOR_STRENGTH = VectorStrength()
 
-##### 
-##### dispatch convenience functions for multipole creation definition 
+#####
+##### dispatch convenience functions for multipole creation definition
 #####
 abstract type AbstractKernel{sign} end
 
@@ -117,6 +117,11 @@ function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, veloc
     return Tuple(DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}() for _ in target_systems)
 end
 
+function DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems::Tuple)
+    @assert length(scalar_potential) == length(vector_potential) == length(velocity) == length(velocity_gradient) == length(target_systems) "length of inputs to DerivativesSwitch inconsistent"
+    return Tuple(DerivativesSwitch{scalar_potential[i], vector_potential[i], velocity[i], velocity_gradient[i]}() for i in eachindex(target_systems))
+end
+
 function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_system)
     return DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}()
 end
@@ -140,13 +145,13 @@ DerivativesSwitch() = DerivativesSwitch{true, true, true, true}()
 # end
 
 # SingleCostParameters(;
-#     alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT, 
-#     tau_M2M_L2L = TAU_M2M_DEFAULT, 
-#     alloc_M2L = ALLOC_M2L_DEFAULT, 
-#     tau_M2L = TAU_M2L_DEFAULT, 
-#     tau_L2L = TAU_L2L_DEFAULT, 
-#     alloc_L2B = ALLOC_L2B_DEFAULT, 
-#     tau_L2B = TAU_L2B_DEFAULT, 
+#     alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT,
+#     tau_M2M_L2L = TAU_M2M_DEFAULT,
+#     alloc_M2L = ALLOC_M2L_DEFAULT,
+#     tau_M2L = TAU_M2L_DEFAULT,
+#     tau_L2L = TAU_L2L_DEFAULT,
+#     alloc_L2B = ALLOC_L2B_DEFAULT,
+#     tau_L2B = TAU_L2B_DEFAULT,
 #     C_nearfield = C_NEARFIELD_DEFAULT,
 #     tau_B2M = TAU_B2M_DEFAULT
 # ) = SingleCostParameters(alloc_M2M_L2L, tau_M2M_L2L, alloc_M2L, tau_M2L, alloc_L2B, tau_L2B, C_nearfield, tau_B2M)
@@ -176,10 +181,10 @@ DerivativesSwitch() = DerivativesSwitch{true, true, true, true}()
 # CostParameters(systems::Tuple) = MultiCostParameters()
 # CostParameters(system) = SingleCostParameters()
 
-# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::Float64, tau_M2M_L2L) = 
+# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::Float64, tau_M2M_L2L) =
 #     SingleCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
 
-# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) = 
+# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) =
 #     MultiCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
 
 #####
@@ -238,7 +243,7 @@ struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
     expansion_order::Val{P}
-    n_per_branch::Int64    # max number of bodies in a leaf
+    leaf_size::Int64    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     # cost_parameters::SVector{N,Float64}
 end
@@ -251,7 +256,7 @@ struct SingleTree{TF,TB,P} <: Tree{TF,P}
     inverse_sort_index::Vector{Int64}
     buffer::TB
     expansion_order::Val{P}
-    n_per_branch::Int64    # max number of bodies in a leaf
+    leaf_size::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
     # cost_parameters::Float64
 end
