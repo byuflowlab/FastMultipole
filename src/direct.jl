@@ -15,13 +15,14 @@ Applies all interactions of `systems` acting on itself without multipole acceler
 
 # Optional Arguments
 
-- `derivatives_switches::DerivativesSwitch`: determines whether to include the scalar potential, vector potential, velocity, and/or velocity gradient when solving the n-body problem; either
-
-    - (if `systems` is not a `::Tuple` of systems) an instance of [`DerivativesSwitch`](@ref)
-    - (if `systems` is a `::Tuple` of systems) a `::Tuple` of [`DerivativesSwitch`](@ref) of length `length(systems)`
+- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
+- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
+- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
+- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 
 """
-function direct!(systems::Tuple; derivatives_switches=DerivativesSwitch(true,true,true,true,systems))
+function direct!(systems::Tuple; scalar_potential=fill(true, length(systems)), vector_potential=fill(true, length(systems)), velocity=fill(true, length(systems)), velocity_gradient=fill(true, length(systems)))
+    derivatives_switches = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
     for source_system in systems
         for (target_system, derivatives_switch) in zip(systems, derivatives_switches)
             _direct!(target_system, 1:get_n_bodies(target_system), derivatives_switch, source_system, 1:get_n_bodies(source_system))
@@ -29,8 +30,8 @@ function direct!(systems::Tuple; derivatives_switches=DerivativesSwitch(true,tru
     end
 end
 
-function direct!(system; derivatives_switch=DerivativesSwitch{true,true,true,true}())
-    direct!(system, system; derivatives_switch)
+function direct!(system; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true)
+    direct!(system, system; scalar_potential, vector_potential, velocity, velocity_gradient)
 end
 
 """
@@ -52,33 +53,34 @@ Applies all interactions of `source_system` acting on `target_system` without mu
 
 # Optional Arguments
 
-- `derivatives_switches::DerivativesSwitch`: determines whether to include the scalar potential, vector potential, velocity, and/or velocity gradient for the `target_system`; either
-
-    - (if `target_system` is not a `::Tuple` of systems) an instance of [`DerivativesSwitch`](@ref)
-    - (if `target_system` is a `::Tuple` of systems) a `::Tuple` of [`DerivativesSwitch`](@ref) of length `length(target_systems)`
+- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
+- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
+- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
+- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 
 """
-@inline function direct!(target_system, source_system; derivatives_switch=DerivativesSwitch{true,true,true,true}())
+@inline function direct!(target_system, source_system; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true)
+    derivatives_switch = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
     _direct!(target_system, 1:get_n_bodies(target_system), derivatives_switch, source_system, 1:get_n_bodies(source_system))
 end
 
-function direct!(target_systems::Tuple, source_systems::Tuple; derivatives_switches=Tuple(DerivativesSwitch{true,true,true,true}() for _ in target_systems))
+function direct!(target_systems::Tuple, source_systems::Tuple; scalar_potential=fill(true, length(target_systems)), vector_potential=fill(true, length(target_systems)), velocity=fill(true, length(target_systems)), velocity_gradient=fill(true, length(target_systems)))
     for source_system in source_systems
-        for (target_system, derivatives_switch) in zip(target_systems, derivatives_switches)
-            direct!(target_system, source_system; derivatives_switch)
+        for (target_system, sp, vp, v, vg) in zip(target_systems, scalar_potential, vector_potential, velocity, velocity_gradient)
+            direct!(target_system, source_system; scalar_potential=sp, vector_potential=vp, velocity=v, velocity_gradient=vg)
         end
     end
 end
 
-function direct!(target_systems::Tuple, source_system; derivatives_switches=Tuple(DerivativesSwitch{true,true,true,true}() for _ in target_systems))
-    for (target_system, derivatives_switch) in zip(target_systems, derivatives_switches)
-        direct!(target_system, source_system; derivatives_switch)
+function direct!(target_systems::Tuple, source_system; scalar_potential=fill(true,length(target_systems)), vector_potential=fill(true,length(target_systems)), velocity=fill(true,length(target_systems)), velocity_gradient=fill(true,length(target_systems)))
+    for (target_system, sp, vp, v, vg) in zip(target_systems, scalar_potential, vector_potential, velocity, velocity_gradient)
+        direct!(target_system, source_system; scalar_potential=sp, vector_potential=vp, velocity=v, velocity_gradient=vg)
     end
 end
 
-function direct!(target_systems, source_system::Tuple; derivatives_switch=DerivativesSwitch{true,true,true,true}())
+function direct!(target_system, source_systems::Tuple; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true)
     for source_system in source_systems
-        direct!(target_system, source_system; derivatives_switch)
+        direct!(target_system, source_system; scalar_potential, vector_potential, velocity, velocity_gradient)
     end
 end
 

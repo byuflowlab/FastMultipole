@@ -1,5 +1,8 @@
 function ProbeSystem(n_probes::Int, TF=Float64; scalar_potential=false, vector_potential=false, velocity=false, velocity_gradient=false)
     positions = Vector{SVector{3,TF}}(undef,n_probes)
+    for i in eachindex(positions)
+        positions[i] = zero(SVector{3,TF})
+    end
     return ProbeSystem(positions; scalar_potential, vector_potential, velocity, velocity_gradient)
 end
 
@@ -135,6 +138,11 @@ Adds `n_probes` probes in a line between `x1` and `x2`. Specifically, they are a
     return i_last + n_probes
 end
 
+function add_probe!(probes::FastMultipole.ProbeSystem, x, i_last)
+    probes.position[i_last + 1] = x
+    return i_last + 1
+end
+
 """
     reset!(probes)
 
@@ -151,3 +159,25 @@ function reset!(probes::ProbeSystem)
     reset!(probes.velocity_gradient)
 end
 
+function Base.isnan(probes::ProbeSystem)
+    for field in (:position,:vector_potential,:velocity,:velocity_gradient)
+        container = getfield(probes,field)
+        if !isnothing(container)
+            for c in container
+                for v in c
+                    if isnan(v)
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    if !isnothing(probes.scalar_potential)
+        for v in probes.scalar_potential
+            if isnan(v)
+                return true
+            end
+        end
+    end
+    return false
+end

@@ -519,6 +519,9 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
+- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
+- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
 - `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
 - `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
@@ -533,6 +536,7 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 function fmm!(target_systems, source_systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
+    upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
@@ -550,6 +554,7 @@ function fmm!(target_systems, source_systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
+        upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
         unsort_source_bodies, unsort_target_bodies
     )
@@ -581,6 +586,9 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
+- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
+- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
 - `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
 - `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
@@ -593,6 +601,7 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 function fmm!(systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
+    upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true, shrink_recenter=true,
     save_tree=false, save_name="tree"
@@ -604,6 +613,7 @@ function fmm!(systems;
     fmm!(tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
+        upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
         unsort_bodies
     )
@@ -634,6 +644,9 @@ Dispatches `fmm!` using an existing `::Tree`.
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
+- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
+- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
 - `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
 - `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
@@ -643,12 +656,14 @@ Dispatches `fmm!` using an existing `::Tree`.
 function fmm!(tree::Tree, systems;
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     multipole_threshold=0.4, reset_tree=true,
+    upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true
 )
     fmm!(tree, systems, tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold, reset_source_tree=reset_tree, reset_target_tree=false,
+        upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false
     )
@@ -685,6 +700,9 @@ Dispatches `fmm!` using existing `::Tree` objects.
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
+- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
+- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
 - `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
 - `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
@@ -696,6 +714,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     multipole_threshold=0.4,
     reset_source_tree=true, reset_target_tree=true,
+    upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true
 )
@@ -719,16 +738,16 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         if Threads.nthreads() == 1
             nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
             if farfield
-                upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
-                horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-                downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order)
+                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
+                horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+                downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order)
             end
         else # multithread
             nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
             if farfield
-                upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-                length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
-                downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+                upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
+                horizontal_pass && length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
+                downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
             end
         end
 

@@ -1,13 +1,13 @@
 # const BRANCH_TYPE = Float64
 # global SHRINKING_OFFSET = .000001
 
-const WARNING_FLAG_N_PER_BRANCH = Array{Bool,0}(undef)
-WARNING_FLAG_N_PER_BRANCH[] = true
+const WARNING_FLAG_LEAF_SIZE = Array{Bool,0}(undef)
+WARNING_FLAG_LEAF_SIZE[] = true
 
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=true, write_cost_file=false)
+function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_radius=1.00001, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false)
     # ensure `system` isn't empty; otherwise return an empty tree
     if get_n_bodies(system) > 0
         # initialize variables
@@ -43,9 +43,9 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_ra
                 parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
                 push!(levels_index, parents_index)
             end
-            if WARNING_FLAG_N_PER_BRANCH[]
+            if WARNING_FLAG_LEAF_SIZE[]
                 @warn "leaf_size not reached in for loop, so while loop used to build octree; to improve performance, increase `n_divisions` > $(length(levels_index))"
-                WARNING_FLAG_N_PER_BRANCH[] = false
+                WARNING_FLAG_LEAF_SIZE[] = false
             end
         end
 
