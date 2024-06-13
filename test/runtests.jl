@@ -29,22 +29,22 @@ FastMultipole.M2L!(target_branch, source_branch, expansion_order::Int) = FastMul
     z1 = rand(Complex{Float64})
     z2 = rand(Complex{Float64})
     z3 = rand(Complex{Float64})
-    
+
     # addition
     @test real(z1+z2) ≈ FastMultipole.complex_add(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1+z2) ≈ FastMultipole.complex_add(real(z1), imag(z1), real(z2), imag(z2))[2]
-    
+
     # subtraction
     @test real(z1-z2) ≈ FastMultipole.complex_subtract(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1-z2) ≈ FastMultipole.complex_subtract(real(z1), imag(z1), real(z2), imag(z2))[2]
-    
+
     # multiplication
     @test real(z1*z2) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1*z2) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2))[2]
-    
+
     @test real(z1*z2*z3) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2), real(z3), imag(z3))[1]
     @test imag(z1*z2*z3) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2), real(z3), imag(z3))[2]
-    
+
     # division
     @test real(z1/z2) ≈ FastMultipole.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1/z2) ≈ FastMultipole.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[2]
@@ -54,7 +54,7 @@ FastMultipole.M2L!(target_branch, source_branch, expansion_order::Int) = FastMul
 	# cross product
 	z1_vec = SVector{3}(rand(Complex{Float64}) for _ in 1:3)
 	z2_vec = SVector{3}(rand(Complex{Float64}) for _ in 1:3)
-	@test real.(cross(z1_vec,z2_vec)) ≈ FastMultipole.complex_cross_real(real(z1_vec[1]), imag(z1_vec[1]), real(z1_vec[2]), imag(z1_vec[2]), real(z1_vec[3]), imag(z1_vec[3]), real(z2_vec[1]), imag(z2_vec[1]), real(z2_vec[2]), imag(z2_vec[2]), real(z2_vec[3]), imag(z2_vec[3])) 
+	@test real.(cross(z1_vec,z2_vec)) ≈ FastMultipole.complex_cross_real(real(z1_vec[1]), imag(z1_vec[1]), real(z1_vec[2]), imag(z1_vec[2]), real(z1_vec[3]), imag(z1_vec[3]), real(z2_vec[1]), imag(z2_vec[1]), real(z2_vec[2]), imag(z2_vec[2]), real(z2_vec[3]), imag(z2_vec[3]))
 end
 
 @testset "direct" begin
@@ -62,7 +62,7 @@ end
     function V(xi, xj, mj; G=1)
         Rho_ij = xi - xj
         rho_ij = sqrt(Rho_ij' * Rho_ij)
-        vij = G * mj / rho_ij
+        vij = G * mj / rho_ij / 4 / pi
         if isinf(vij); vij = 0.0; end
         return Rho_ij, rho_ij, vij
     end
@@ -185,7 +185,8 @@ const new_order_index = [5,3,4,1,2]
 
 # get the new index of mass_i as new_order_index[mass_i]
 
-@testset "spherical P2M" begin
+@testset "spherical B2M" begin
+
 xs = [
     1.2 1.1 0.8;
     0.8 0.9 0.2;
@@ -219,6 +220,7 @@ i_mass = 1
 i_branch = 5 # use the first mass
 
 harmonics = zeros(Float64,2,(expansion_order+1)^2)
+
 FastMultipole.B2M!(system, tree.branches[i_branch], new_order_index[i_mass]:new_order_index[i_mass], harmonics, tree.expansion_order)
 
 center = tree.branches[i_branch].center
@@ -230,7 +232,7 @@ FastMultipole.M2B!(target_potential, x_target, i_branch, tree)
 u_fmm = target_potential[1]
 
 dx = x_target - xs[1,:]
-u_check = ms[1] / sqrt(dx' * dx)
+u_check = ms[1] / sqrt(dx' * dx) * ONE_OVER_4PI
 
 function Ylm(theta, phi, l, m)
     ylm = sqrt(factorial(big(l-abs(m)))/ factorial(big(l+abs(m)))) * Plm(cos(theta), l, abs(m)) * exp(im * m * phi)
@@ -243,7 +245,7 @@ function evaluate_biot_savart(x_source, x_target, q_source, P)
     for l in 0:P
         for m in -l:l
 
-            v += q_source * x_source[1]^l / x_target[1]^(l+1) * real(Ylm(x_target[2], x_target[3], l, m) * conj(Ylm(x_source[2], x_source[3], l, m)))
+            v += q_source * x_source[1]^l / x_target[1]^(l+1) * real(Ylm(x_target[2], x_target[3], l, m) * conj(Ylm(x_source[2], x_source[3], l, m))) * ONE_OVER_4PI
             i += 1
         end
     end
@@ -307,7 +309,7 @@ FastMultipole.M2B!(target_potential, target, i_branch_4, tree)
 u_fmm_no_x = target_potential[1]
 
 dx = x_target - xs[4,:]
-u_check = ms[4] / sqrt(dx'*dx)
+u_check = ms[4] / sqrt(dx'*dx) * ONE_OVER_4PI
 
 @test isapprox(u_fmm, u_fmm_no_x; atol=1e-5)
 @test isapprox(u_fmm, u_check; atol=1e-5)
@@ -359,13 +361,13 @@ FastMultipole.regular_harmonic!(regular_harmonics_expanded, dx_target..., expans
 FastMultipole.B2L!(tree, branch_i, elements[source_i,FastMultipole.POSITION], elements.bodies[source_i].strength)
 
 FastMultipole.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order), tree.branches[branch_i].center)
-u_fmm = elements.potential[1,target_i]
+u_fmm = elements.potential[1,target_i] * ONE_OVER_4PI
 
 dx_direct = xs[4,:] - xs[1,:]
-u_check = 1 / sqrt(dx_direct' * dx_direct)
+u_check = 1 / sqrt(dx_direct' * dx_direct) * ONE_OVER_4PI
 u_check *= ms[1]
 
-u_man = sum(regular_harmonics_expanded[1,:].*local_coefficients_expanded[1,:] .+ regular_harmonics_expanded[2,:].*local_coefficients_expanded[2,:])
+u_man = sum(regular_harmonics_expanded[1,:].*local_coefficients_expanded[1,:] .+ regular_harmonics_expanded[2,:].*local_coefficients_expanded[2,:]) * ONE_OVER_4PI
 #u_man = real(sum(regular_harmonics_expanded' * local_coefficients_expanded)) # appears to work
 
 @test isapprox(u_check, u_fmm; atol=1e-12)
@@ -411,7 +413,7 @@ harmonics_theta_2 = zeros(Float64,2,(expansion_order+1)^2)
 workspace = zeros(3,4)
 spherical_potential = zeros(52)
 FastMultipole.L2B!(elements, new_order_index[5]:new_order_index[5], tree.branches[2].local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order), tree.branches[2].center)
-u_fmm_no_x = elements.potential[1,new_order_index[5]]
+u_fmm_no_x = elements.potential[1,new_order_index[5]] * ONE_OVER_4PI
 elements.potential[1,new_order_index[5]] *= 0
 
 # translate local expansion to branch 7 (mass 5)
@@ -424,16 +426,16 @@ local_coefficients_check .*= ms[1]
 
 # evaluate local expansion at mass 5
 FastMultipole.L2B!((elements,), tree.branches[7], (FastMultipole.DerivativesSwitch(),), Val(expansion_order))
-u_fmm = elements.potential[1,new_order_index[5]]
+u_fmm = elements.potential[1,new_order_index[5]] * ONE_OVER_4PI
 
 dx_direct = elements[new_order_index[5],FastMultipole.POSITION] - elements[new_order_index[1],FastMultipole.POSITION]
-u_check = ms[1] / sqrt(dx_direct' * dx_direct)
+u_check = ms[1] / sqrt(dx_direct' * dx_direct) * ONE_OVER_4PI
 
 regular_harmonics = zeros(Float64,2, (expansion_order+1)^2)
 dx_target = FastMultipole.cartesian_2_spherical(elements[new_order_index[5],FastMultipole.POSITION] - tree.branches[7].center)
 FastMultipole.regular_harmonic!(regular_harmonics, dx_target..., expansion_order)
 #u_man = real(sum(regular_harmonics' * local_coefficients_check))
-u_man = sum(regular_harmonics[1,:].*local_coefficients_check[1,:] .+ regular_harmonics[2,:].*local_coefficients_check[2,:])
+u_man = sum(regular_harmonics[1,:].*local_coefficients_check[1,:] .+ regular_harmonics[2,:].*local_coefficients_check[2,:]) * ONE_OVER_4PI
 
 @test isapprox(u_check, u_man; atol=1e-12)
 @test isapprox(u_check, u_fmm_no_x; atol=1e-12)
@@ -483,7 +485,7 @@ dx_mp = FastMultipole.cartesian_2_spherical(dx_mp)
 FastMultipole.regular_harmonic!(harmonics, dx_mp..., expansion_order)
 
 these_harmonics = harmonics[1,:] + im .* harmonics[2,:]
-multipole_check =  these_harmonics * ms[5]
+multipole_check =  these_harmonics * ms[5] * ONE_OVER_4PI
 dx_mp = xs[1,:] - tree.branches[i_branch_multipole].center
 dx_mp = FastMultipole.cartesian_2_spherical(dx_mp)
 FastMultipole.irregular_harmonic!(harmonics, dx_mp..., expansion_order)
@@ -505,7 +507,7 @@ u_fmm = elements.potential[1,new_order_index[1]]
 local_exp = tree.branches[i_branch_local].local_expansion[1]
 
 dx_direct = elements[new_order_index[1],FastMultipole.POSITION] - elements[new_order_index[5], FastMultipole.POSITION]
-u_direct = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_direct' * dx_direct)
+u_direct = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_direct' * dx_direct) * ONE_OVER_4PI
 
 @test isapprox(u_direct, u_check_mp; atol=1e-12)
 @test isapprox(u_fmm, u_direct; atol=1e-12)
@@ -547,7 +549,7 @@ FastMultipole.upward_pass_singlethread!(tree.branches, (elements,), expansion_or
 # m6 = tree.branches[6].multipole_expansion
 target = [4.1,2.2,3.4]
 dx_direct_6 = target - elements[new_order_index[4],FastMultipole.POSITION]
-u_direct_6 = ms[4] / sqrt(dx_direct_6' * dx_direct_6)
+u_direct_6 = ms[4] / sqrt(dx_direct_6' * dx_direct_6) * ONE_OVER_4PI
 
 mass_target_potential = zeros(4)
 mass_target = target
@@ -556,7 +558,7 @@ u_fmm_6 = mass_target_potential[1]
 
 # add branches 6 and 7
 dx_direct_7 = target - elements[new_order_index[5],FastMultipole.POSITION]
-u_direct_67 = u_direct_6 + ms[5] / sqrt(dx_direct_7' * dx_direct_7)
+u_direct_67 = u_direct_6 + ms[5] / sqrt(dx_direct_7' * dx_direct_7) * ONE_OVER_4PI
 
 # reset target potential
 mass_target_potential *= 0
@@ -582,10 +584,10 @@ FastMultipole.P2P!((elements,), tree.branches[3], (FastMultipole.DerivativesSwit
 u_fmm_123 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_12 = elements[new_order_index[2],FastMultipole.POSITION] - elements[new_order_index[1],FastMultipole.POSITION]
-u_direct_12 = elements.bodies[new_order_index[1]].strength[1] / sqrt(dx_12' * dx_12)
+u_direct_12 = elements.bodies[new_order_index[1]].strength[1] / sqrt(dx_12' * dx_12) * ONE_OVER_4PI
 u_direct_22 = 0.0
 dx_32 = elements[new_order_index[2],FastMultipole.POSITION] - elements[new_order_index[3],FastMultipole.POSITION]
-u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx_32)
+u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx_32) * ONE_OVER_4PI
 
 u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
@@ -598,9 +600,9 @@ FastMultipole.L2B!((elements,), tree.branches[3], (FastMultipole.DerivativesSwit
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_42 = elements[new_order_index[4],FastMultipole.POSITION] - elements[new_order_index[2],FastMultipole.POSITION]
-u_direct_42 = elements.bodies[new_order_index[4]].strength[1] / sqrt(dx_42' * dx_42)
+u_direct_42 = elements.bodies[new_order_index[4]].strength[1] / sqrt(dx_42' * dx_42) * ONE_OVER_4PI
 dx_52 = elements[new_order_index[5],FastMultipole.POSITION] - elements[new_order_index[2],FastMultipole.POSITION]
-u_direct_52 = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_52' * dx_52)
+u_direct_52 = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_52' * dx_52) * ONE_OVER_4PI
 
 u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
 
@@ -733,7 +735,7 @@ center = SVector{3}([0.01, 0.52, -0.03])
 phi_fd(x) = FastMultipole.L2B(x, center, local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order))[1]
 psi_fd(x) = FastMultipole.L2B(x, center, local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order))[2]
 
-function vector_velocity_fd(x) 
+function vector_velocity_fd(x)
 	j_psi = ForwardDiff.jacobian(psi_fd, x)
 	v_psi = SVector{3}(j_psi[3,2] - j_psi[2,3],
 		j_psi[1,3] - j_psi[3,1],
@@ -741,7 +743,7 @@ function vector_velocity_fd(x)
 	return v_psi
 end
 
-function scalar_velocity_fd(x) 
+function scalar_velocity_fd(x)
 	v_phi = -ForwardDiff.gradient(phi_fd, x)
 	return v_phi
 end
@@ -1204,7 +1206,7 @@ end
 @testset "b2m source and dipole panels" begin
 
 # source panel expansion
-strength = 0.1428909901797533
+strength = 0.1428909901797533 / 4 / pi
 R0_global = [-0.11530793537122011, 0.1997192025788218, -0.9730448705798238]
 R0 = [-0.48862125790260025, -0.1735941199525583, -1.8441092898197107]
 Ru = [0.04707023255275322, -0.10579806212499904, -0.020193487162119217]
@@ -1226,7 +1228,8 @@ for i in 1:n_coefficients
 end
 
 expansion_order = Val{14}()
-FastMultipole._B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, FastMultipole.UniformSourcePanel())
+coefficients = view(multipole_expansion, :, 1, :)
+FastMultipole._B2M!_panel(coefficients, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, FastMultipole.Panel{3,FastMultipole.ConstantSource{1}})
 for i in eachindex(multipole_expansion)
     @test isapprox(multipole_expansion[i], multipole_expansion_test2[i]; atol=1e-12)
 end
@@ -1243,7 +1246,7 @@ centroid = (vertices[1] + vertices[2] + vertices[3])/3
 normal = cross(vertices[2]-vertices[1],vertices[3]-vertices[1])
 area = norm(normal)/2
 normal /= area*2
-strength = 1.0
+strength = 1.0 / 4 / pi
 P = 20
 expansion_order = Val(P)
 branch = FastMultipole.SingleBranch(
@@ -1268,8 +1271,9 @@ R0_global = vertices[1]
 R0 = R0_global - branch.center
 Ru = vertices[2] - R0_global
 Rv = vertices[3] - R0_global
-panel_type = FastMultipole.UniformNormalDipolePanel()
-FastMultipole._B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
+panel_type = FastMultipole.Panel{3, FastMultipole.ConstantNormalDipole{1}}
+coefficients = view(branch.multipole_expansion, :, 1, :)
+FastMultipole._B2M!_panel(coefficients, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
 
 # evaluate
 target_potential_dipole = zeros(4)
@@ -1284,8 +1288,9 @@ this_potential = 0.0015577438029241901
 # reset and repeat for source panel
 branch.multipole_expansion .= 0.0
 
-panel_type = FastMultipole.UniformSourcePanel()
-FastMultipole._B2M!_panel(branch.multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
+panel_type = FastMultipole.Panel{3, FastMultipole.ConstantSource{1}}
+coefficients = view(branch.multipole_expansion, :, 1, :)
+FastMultipole._B2M!_panel(coefficients, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order, panel_type)
 
 target_potential = zeros(4)
 irregular_harmonics = FastMultipole.initialize_harmonics(P,Float64)

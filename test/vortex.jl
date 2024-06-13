@@ -142,7 +142,7 @@ end
 
 fmm.buffer_element(system::VortexParticles) = (deepcopy(system.bodies[1]),zeros(eltype(system),52),zeros(eltype(system),6))
 
-fmm.B2M!(system::VortexParticles, args...) = fmm.B2M!_vortexpoint(system, args...)
+fmm.B2M!(system::VortexParticles, args...) = fmm.B2M!(fmm.Point{fmm.Vortex{1/4/pi}}, system, args...)
 
 function VortexParticles(position, strength;
     N = size(position)[2],
