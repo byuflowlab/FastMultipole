@@ -540,7 +540,8 @@ function fmm!(target_systems, source_systems;
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
-    save_tree=false, save_name="tree"
+    save_tree_target=false, save_name_target="target_tree",
+    save_tree_source=false, save_name_source="source_tree"
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -560,9 +561,10 @@ function fmm!(target_systems, source_systems;
     )
 
     # visualize
-    save_tree && (visualize(save_name, systems, tree))
+    save_tree_target && (visualize(save_name_target, target_systems, target_tree))
+    save_tree_source && (visualize(save_name_source, source_systems, source_tree))
 
-    return source_tree, target_tree
+    return target_tree, source_tree
 end
 
 """
