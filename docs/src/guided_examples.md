@@ -1,40 +1,37 @@
-# Guided Examples 
+# Guided Examples
 
-This section a work in progress.
+`FastMultipole` is designed to be compatible with nearly any Julia code for a wide range of scalar and/or vector potential problem satisfying Laplace's equation, with minimal effort to get things working. We'll go through the process of adding `FastMultipole` to your code in the following guided examples.
+
 ## Compatibility
 
-Prior to using `FastMultipole`, the user must create a system(s) to be evaluated that is compatible with the following format. In this example, we will walk through the process of defining a point-mass struct called `Gravitational`. This code can also be found under `test/gravitational.jl` along with a second example of a `VortexPoint` struct under `test/vortex.jl`.
+Prior to using `FastMultipole`, the user must set up some interface functions. In this example, we will walk through the process of defining the point mass model used in [Quick Start](@ref). This code can also be found under `test/gravitational.jl`. Note that an additional (minimalistic) vortex particle example is included in `test/vortex.jl`.
 
 ### System Struct
 
-The user is free to create their own struct, but we define our `Gravitational` struct as follows.
+To better understand how the `FastMultipole` interface functions, let's take a look at the data structures we'll use to define our point masses:
 
 ```@example guidedex
-import FastMultipole 
 using FastMultipole
-import Base: getindex, setindex!
 using FastMultipole.StaticArrays
-const i_POSITION = 1:3
-const i_RADIUS = 4
-const i_STRENGTH = 5:8
-const i_POTENTIAL = 1:4
-const i_VELOCITY = 5:7
-const i_VELOCITY_GRADIENT = 8:16
 
-#####
-##### gravitational kernel and mass elements
-#####
+const i_POTENTIAL = 1:4             # index of the gravitational potential
+const i_VELOCITY = 5:7              # index of the velocity
+const i_VELOCITY_GRADIENT = 8:16    # index of the velocity gradient
+
+# a single point mass
 struct Body{TF}
     position::SVector{3,TF}
     radius::TF
     strength::SVector{4,TF}
 end
 
+# container for a system of `Body`'s
 struct Gravitational{TF}
     bodies::Vector{Body{TF}}
     potential::Matrix{TF}
 end
 
+# constructor
 function Gravitational(bodies::Matrix)
     nbodies = size(bodies)[2]
     bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],SVector{4}(bodies[5:8,i])) for i in 1:nbodies]
@@ -43,17 +40,21 @@ function Gravitational(bodies::Matrix)
 end
 ```
 
+Note that while the particular choice of data structures is completely arbitrary, `FastMultipole` does not create any new storage containers for values of interest such as potential, velocity, velocity gradient. If these are desired, they must exist in the user-defined system, and will be updated in-place by `FastMultipole`.
+
 ### Overloading the `B2M!` Function
 
+The first interface function is used to create multipole expansions for our particular system, be that point masses, source panels, vortex filaments, etc. We can tell `FastMultipole` how to construct the expansions by overloading `FastMultipole.B2M!` for our `Gravitational` type.
+
 ```@example guidedex
-FastMultipole.B2M!(system::Gravitational, args...) = 
+FastMultipole.B2M!(system::Gravitational, args...) =
     FastMultipole.B2M!_sourcepoint(system, args...)
 ```
 
-The `B2M!` function overloaded in the previous block of code is provided as a convenience function for 9 different types of systems and is implemented with the following syntax.
+In general, this is at best mathematically complex, and at worst computationally expensive; it is often one of the most difficult steps for integrating a fast multipole method into any code. However, convenience functions are provided in `FastMultipole` for 9 different element types, making this a one-line solution. They are implemented with the following syntax:
 
 ```
-FastMultipole.B2M!(system::<usersystem>, args...) = 
+FastMultipole.B2M!(system::<usersystem>, args...) =
     FastMultipole.B2M!(<systemtype>, system, args...)
 ```
 
@@ -70,6 +71,8 @@ FastMultipole.B2M!(system::<usersystem>, args...) =
 The `Gravitational` struct needs the following getters to be overloaded to support the indexing format used by `FastMultipole`.
 
 ```@example guidedex
+import Base: getindex
+
 Base.getindex(g::Gravitational, i, ::FastMultipole.Position) = g.bodies[i].position
 Base.getindex(g::Gravitational, i, ::FastMultipole.Radius) = g.bodies[i].radius
 Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.potential,2:4,i)
@@ -85,6 +88,8 @@ Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = g.bodies[i], view(g.p
 `Gravitational` also needs the following setters to be overloaded as well.
 
 ```@example guidedex
+import Base: setindex!
+
 function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Body)
     body, potential = val
     g.bodies[i] = body
@@ -107,7 +112,7 @@ end
 
 ### Additional Requirements
 
-In addition to the getters and setters listed above, each system struct must be overloaded with three additional methods. In `gravitational.jl`, these are they are overloaded as follows. 
+In addition to the getters and setters listed above, each system struct must be overloaded with three additional methods. In `gravitational.jl`, these are they are overloaded as follows.
 
 ```@example guidedex
 FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
@@ -195,7 +200,7 @@ function measure_error(;multipole_threshold=0.4, leaf_size=50, expansion_order=5
 
     fmm.fmm!(fmm_system; multipole_threshold, leaf_size, expansion_order)
     fmm.direct!(direct_system)
-    
+
     percent_error = abs.((fmm_system.potential[1,:] .- direct_system.potential[1,:]) ./ direct_system.potential[1,:])
     return maximum(percent_error)
 end
@@ -251,7 +256,7 @@ fmm.fmm!((target_one, target_two), (source_one, source_two))
 
 ## Non-Potential Flow Applications
 
-As a default, target systems will be evaluated and returned with `scalar_potential`, `vector_potential`, `velocity`, and `velocity_gradient` fields populated. In some situations, only some of these values may be required. By inputting a boolean vector of the same length as target systems, the user is able to speed up the calculation by not storing unecessary values. 
+As a default, target systems will be evaluated and returned with `scalar_potential`, `vector_potential`, `velocity`, and `velocity_gradient` fields populated. In some situations, only some of these values may be required. By inputting a boolean vector of the same length as target systems, the user is able to speed up the calculation by not storing unecessary values.
 
 $\overline{V} = -\nabla \phi + \nabla \times \overline{\psi}$
 
@@ -270,7 +275,7 @@ target_two = generate_vortex(124, 100)
 
 source_one = generate_gravitational(125, 100)
 
-fmm.fmm!((target_one, target_two), source_one, scalar_potential=[true, false], 
+fmm.fmm!((target_one, target_two), source_one, scalar_potential=[true, false],
     vector_potential=[false, true], velocity=[true, true], velocity_gradient=[false, false])
 ```
 
