@@ -449,32 +449,27 @@ end
     system.index .= view(system.index,inverse_sort_index)
 end
 
-# """
-# Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
-# """
-# function resort!(system, tree::SingleTree)
-#     buffer = deepcopy(system)
-#     index = tree.index
-#     for i in 1:length(system)
-#         buffer[i] = system[index[i]]
-#     end
-#     for i in 1:length(system)
-#         system[i] = buffer[i]
-#     end
-# end
+"""
+Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
+"""
+function resort!(systems::Tuple, tree::MultiTree)
+    for (system, buffer, inverse_sort_index) in zip(systems, tree.buffers, tree.inverse_sort_index_list)
+        resort!(system, buffer, inverse_sort_index)
+    end
+end
 
-# function resort!(systems::Tuple, tree::MultiTree)
-#     for (i_system, system) in enumerate(systems)
-#         buffer = deepcopy(system)
-#         index = tree.index_list[i_system]
-#         for i in 1:length(system)
-#             buffer[i] = system[index[i]]
-#         end
-#         for i in 1:length(system)
-#             system[i] = buffer[i]
-#         end
-#     end
-# end
+function resort!(system, tree::SingleTree)
+    resort!(system, tree.buffer, tree.sort_index)
+end
+
+function resort!(system, buffer, sort_index)
+    for i_body in 1:get_n_bodies(system)
+        buffer[i_body] = system[sort_index[i_body], BODY]
+    end
+    for i_body in 1:get_n_bodies(system)
+        system[i_body, BODY] = buffer[i_body]
+    end
+end
 
 function unsorted_index_2_sorted_index(i_unsorted, tree::SingleTree)
     return tree.inverse_sort_index[i_unsorted]
