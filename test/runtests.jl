@@ -29,22 +29,22 @@ FastMultipole.M2L!(target_branch, source_branch, expansion_order::Int) = FastMul
     z1 = rand(Complex{Float64})
     z2 = rand(Complex{Float64})
     z3 = rand(Complex{Float64})
-    
+
     # addition
     @test real(z1+z2) ≈ FastMultipole.complex_add(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1+z2) ≈ FastMultipole.complex_add(real(z1), imag(z1), real(z2), imag(z2))[2]
-    
+
     # subtraction
     @test real(z1-z2) ≈ FastMultipole.complex_subtract(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1-z2) ≈ FastMultipole.complex_subtract(real(z1), imag(z1), real(z2), imag(z2))[2]
-    
+
     # multiplication
     @test real(z1*z2) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1*z2) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2))[2]
-    
+
     @test real(z1*z2*z3) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2), real(z3), imag(z3))[1]
     @test imag(z1*z2*z3) ≈ FastMultipole.complex_multiply(real(z1), imag(z1), real(z2), imag(z2), real(z3), imag(z3))[2]
-    
+
     # division
     @test real(z1/z2) ≈ FastMultipole.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[1]
     @test imag(z1/z2) ≈ FastMultipole.complex_divide(real(z1), imag(z1), real(z2), imag(z2))[2]
@@ -54,7 +54,7 @@ FastMultipole.M2L!(target_branch, source_branch, expansion_order::Int) = FastMul
 	# cross product
 	z1_vec = SVector{3}(rand(Complex{Float64}) for _ in 1:3)
 	z2_vec = SVector{3}(rand(Complex{Float64}) for _ in 1:3)
-	@test real.(cross(z1_vec,z2_vec)) ≈ FastMultipole.complex_cross_real(real(z1_vec[1]), imag(z1_vec[1]), real(z1_vec[2]), imag(z1_vec[2]), real(z1_vec[3]), imag(z1_vec[3]), real(z2_vec[1]), imag(z2_vec[1]), real(z2_vec[2]), imag(z2_vec[2]), real(z2_vec[3]), imag(z2_vec[3])) 
+	@test real.(cross(z1_vec,z2_vec)) ≈ FastMultipole.complex_cross_real(real(z1_vec[1]), imag(z1_vec[1]), real(z1_vec[2]), imag(z1_vec[2]), real(z1_vec[3]), imag(z1_vec[3]), real(z2_vec[1]), imag(z2_vec[1]), real(z2_vec[2]), imag(z2_vec[2]), real(z2_vec[3]), imag(z2_vec[3]))
 end
 
 @testset "direct" begin
@@ -733,7 +733,7 @@ center = SVector{3}([0.01, 0.52, -0.03])
 phi_fd(x) = FastMultipole.L2B(x, center, local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order))[1]
 psi_fd(x) = FastMultipole.L2B(x, center, local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order))[2]
 
-function vector_velocity_fd(x) 
+function vector_velocity_fd(x)
 	j_psi = ForwardDiff.jacobian(psi_fd, x)
 	v_psi = SVector{3}(j_psi[3,2] - j_psi[2,3],
 		j_psi[1,3] - j_psi[3,1],
@@ -741,7 +741,7 @@ function vector_velocity_fd(x)
 	return v_psi
 end
 
-function scalar_velocity_fd(x) 
+function scalar_velocity_fd(x)
 	v_phi = -ForwardDiff.gradient(phi_fd, x)
 	return v_phi
 end
@@ -1312,3 +1312,21 @@ end
 
 end
 
+@testset "unsort/resort" begin
+
+n_bodies = 101
+bodies = rand(8,n_bodies)
+x_presorted = deepcopy(bodies[1:3,:])
+bodies[5:8,2:n_bodies] .= 0.0
+system = Gravitational(bodies)
+tree = FastMultipole.fmm!(system; unsort_bodies=false)
+x_sorted = deepcopy(bodies[1:3,:])
+FastMultipole.unsort!(system, tree)
+x_unsorted = deepcopy(bodies[1:3,:])
+FastMultipole.resort!(system, tree)
+x_resorted = deepcopy(bodies[1:3,:])
+
+@test isapprox(x_presorted, x_unsorted)
+@test isapprox(x_sorted, x_resorted)
+
+end
