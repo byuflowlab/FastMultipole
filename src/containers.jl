@@ -1,5 +1,6 @@
-#------- dispatch for common interface for external packages -------#
-
+#####
+##### dispatch for common interface for external packages
+#####
 abstract type Indexable end
 
 struct Body <: Indexable end
@@ -35,28 +36,29 @@ const SCALAR_STRENGTH = ScalarStrength()
 struct VectorStrength <: Indexable end
 const VECTOR_STRENGTH = VectorStrength()
 
-#------- dispatch convenience functions for multipole creation definition -------#
-
+#####
+##### dispatch convenience functions for multipole creation definition
+#####
 abstract type AbstractKernel{sign} end
 
-abstract type Vortex{sign} <: AbstractKernel{sign} end
+struct VortexPoint{sign} <: AbstractKernel{sign} end
+VortexPoint(sign=1) = VortexPoint{sign}()
+struct VortexLine{sign} <: AbstractKernel{sign} end # not yet derived
+VortexLine(sign=1) = VortexLine{sign}()
+struct VortexPanel{sign} <: AbstractKernel{sign} end # not yet derived
+VortexPanel(sign=1) = VortexPanel{sign}()
+struct SourcePoint{sign} <: AbstractKernel{sign} end
+SourcePoint(sign=1) = SourcePoint{sign}()
+struct UniformSourcePanel{sign} <: AbstractKernel{sign} end
+UniformSourcePanel(sign=1) = UniformSourcePanel{sign}()
+struct UniformNormalDipolePanel{sign} <: AbstractKernel{sign} end
+UniformNormalDipolePanel(sign=1) = UniformNormalDipolePanel{sign}()
+struct UniformSourceNormalDipolePanel{sign} <: AbstractKernel{sign} end
+UniformSourceNormalDipolePanel(sign=1) = UniformSourceNormalDipolePanel{sign}()
 
-abstract type ConstantSource{sign} <: AbstractKernel{sign} end
-
-abstract type ConstantNormalDipole{sign} <: AbstractKernel{sign} end
-
-abstract type ConstantSourceNormalDipole{sign} <: AbstractKernel{sign} end
-
-abstract type AbstractElement{TK<:AbstractKernel} end
-
-abstract type Point{TK} <: AbstractElement{TK} end
-
-abstract type Filament{TK} <: AbstractElement{TK} end
-
-abstract type Panel{NS,TK} <: AbstractElement{TK} end
-
-#------- dispatch convenience functions to determine which derivatives are desired -------#
-
+#####
+##### dispatch convenience functions to determine which derivatives are desired
+#####
 """
     DerivativesSwitch
 

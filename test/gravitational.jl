@@ -1,4 +1,4 @@
-import FastMultipole
+import FastMultipole 
 using FastMultipole
 using WriteVTK
 import Base: getindex, setindex!
@@ -62,7 +62,7 @@ Base.eltype(::Gravitational{TF}) where TF = TF
 
 FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
 
-@inline FastMultipole.B2M!(system::Gravitational, args...) = FastMultipole.B2M!(FastMultipole.Point{FastMultipole.ConstantSource{1/4/pi}}, system, args...)
+FastMultipole.B2M!(system::Gravitational, args...) = FastMultipole.B2M!_sourcepoint(system, args...)
 
 function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_index)
     # nbad = 0
@@ -78,7 +78,7 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
             # te = @elapsed begin
             if r > 0
                 dV = source_strength / r
-                target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dV / 4 / pi
+                target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dV
             end
         # end
         # if te > 0.00001; nbad += 1; end
