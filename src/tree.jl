@@ -436,6 +436,10 @@ function unsort!(system, tree::SingleTree)
     unsort!(system, tree.buffer, tree.inverse_sort_index)
 end
 
+function unsort!(system, buffer, tree::Tree)
+    unsort!(system, buffer, tree.inverse_sort_index)
+end
+
 @inline function unsort!(system, buffer, inverse_sort_index)
     for i_body in 1:get_n_bodies(system)
         buffer[i_body] = system[inverse_sort_index[i_body], BODY]
@@ -462,6 +466,10 @@ function resort!(system, tree::SingleTree)
     resort!(system, tree.buffer, tree.sort_index)
 end
 
+function resort!(system, buffer, tree::Tree)
+    resort!(system, buffer, tree.sort_index)
+end
+
 function resort!(system, buffer, sort_index)
     for i_body in 1:get_n_bodies(system)
         buffer[i_body] = system[sort_index[i_body], BODY]
@@ -471,19 +479,19 @@ function resort!(system, buffer, sort_index)
     end
 end
 
-function unsorted_index_2_sorted_index(i_unsorted, tree::SingleTree)
+@inline function unsorted_index_2_sorted_index(i_unsorted, tree::SingleTree)
     return tree.inverse_sort_index[i_unsorted]
 end
 
-function unsorted_index_2_sorted_index(i_unsorted, i_system, tree::MultiTree)
+@inline function unsorted_index_2_sorted_index(i_unsorted, i_system, tree::MultiTree)
     return tree.inverse_sort_index_list[i_system][i_unsorted]
 end
 
-function sorted_index_2_unsorted_index(i_sorted, tree::SingleTree)
+@inline function sorted_index_2_unsorted_index(i_sorted, tree::SingleTree)
     return tree.sort_index[i_sorted]
 end
 
-function sorted_index_2_unsorted_index(i_unsorted, i_system, tree::MultiTree)
+@inline function sorted_index_2_unsorted_index(i_unsorted, i_system, tree::MultiTree)
     return tree.sort_index_list[i_system][i_unsorted]
 end
 
