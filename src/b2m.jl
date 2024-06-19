@@ -9,7 +9,7 @@
         x = b_x - c_x
         z = b_z - c_z
         y = b_y - c_y
-        qx, qy, qz = system[i_body,VECTOR_STRENGTH]
+        qx, qy, qz = system[i_body,STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
         regular_harmonic!(harmonics, r ,theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
@@ -38,7 +38,7 @@ end
         x = b_x - c_x
         z = b_z - c_z
         y = b_y - c_y
-        q = system[i_body,SCALAR_STRENGTH]
+        q = system[i_body,STRENGTH]
         r, theta, phi = cartesian_2_spherical(x,y,z)
         regular_harmonic!(harmonics, r, theta, -phi, P) # Ylm^* -> -dx[3]
         # update values
@@ -92,7 +92,7 @@ end
     update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi[2], inm_real, inm_imag, UniformNormalDipolePanel(sign))
 end
 
-@inline function _B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order::Val{P}, panel_type::AbstractKernel) where P  
+@inline function _B2M!_panel(multipole_expansion, qnm_prev, jnm_prev, inm_prev, R0, Ru, Rv, strength, normal, expansion_order::Val{P}, panel_type::AbstractKernel) where P
     J = norm(cross(Ru,Rv))
 
     # transform into xi, eta, z
@@ -160,7 +160,7 @@ end
         x3_imag = (z0+zu)*qnm_prev[2,1]
         qnm_real = (x1_real + x2_real - x3_real) / n
         qnm_imag = (x1_imag + x2_imag - x3_imag) / n
-        
+
         # jnm = (im*(xi0+xiv)*-conj(jnm_prev[2]) + im*(eta0+etav)*jnm_prev[2] - (z0+zv)*jnm_prev[1] + qnm)/(n+1)
         x1_real, x1_imag = complex_multiply(xi0_real+xiv_real, xi0_imag+xiv_imag, -jnm_prev[1,2], jnm_prev[2,2], 0, 1)
         x2_real, x2_imag = complex_multiply(eta0_real+etav_real, eta0_imag+etav_imag, jnm_prev[1,2], jnm_prev[2,2], 0, 1)
@@ -168,7 +168,7 @@ end
         x3_imag = (z0+zv) * jnm_prev[2,1]
         jnm_real = (x1_real + x2_real - x3_real + qnm_real) / (n+1)
         jnm_imag = (x1_imag + x2_imag - x3_imag + qnm_imag) / (n+1)
-        
+
         # inm = (im*xi0*-conj(inm_prev[2]) + im*eta0*inm_prev[2] - z0*inm_prev[1] + jnm)/(n+2)
         x1_real, x1_imag = complex_multiply(xi0_real, xi0_imag, -inm_prev[1,2], inm_prev[2,2], 0, 1)
         x2_real, x2_imag = complex_multiply(eta0_real, eta0_imag, inm_prev[1,2], inm_prev[2,2], 0, 1)
@@ -197,21 +197,21 @@ end
 
         for m in 1:n
             iam_real, iam_imag = complex_multiply(iam_real,iam_imag,one_over_i_real,one_over_i_imag)
-            
+
             # qnm = (im*(xi0+xiu)*qnm_prev[m] + im*(eta0+etau)*qnm_prev[m+2] - (z0+zu)*qnm_prev[m+1])/n
             x1_real, x1_imag = complex_multiply(xi0_real+xiu_real, xi0_imag+xiu_imag, qnm_prev[1,m], qnm_prev[2,m], 0, 1)
             x2_real, x2_imag = complex_multiply(eta0_real+etau_real, eta0_imag+etau_imag, qnm_prev[1,m+2], qnm_prev[2,m+2], 0, 1)
             x3_real, x3_imag = (z0+zu)*qnm_prev[1,m+1], (z0+zu)*qnm_prev[2,m+1]
             qnm_real = (x1_real + x2_real - x3_real) / n
             qnm_imag = (x1_imag + x2_imag - x3_imag) / n
-            
+
             # jnm = (im*(xi0+xiv)*jnm_prev[m] + im*(eta0+etav)*jnm_prev[m+2] - (z0+zv)*jnm_prev[m+1] + qnm)/(n+1)
             x1_real, x1_imag = complex_multiply(xi0_real+xiv_real, xi0_imag+xiv_imag, jnm_prev[1,m], jnm_prev[2,m], 0, 1)
             x2_real, x2_imag = complex_multiply(eta0_real+etav_real, eta0_imag+etav_imag, jnm_prev[1,m+2], jnm_prev[2,m+2], 0, 1)
             x3_real, x3_imag = (z0+zv)*jnm_prev[1,m+1], (z0+zv)*jnm_prev[2,m+1]
             jnm_real = (x1_real + x2_real - x3_real + qnm_real) / (n+1)
             jnm_imag = (x1_imag + x2_imag - x3_imag + qnm_imag) / (n+1)
-            
+
             # inm = (im*xi0*inm_prev[m] + im*eta0*inm_prev[m+2] - z0*inm_prev[m+1] + jnm)/(n+2)
             x1_real, x1_imag = complex_multiply(xi0_real, xi0_imag, inm_prev[1,m], inm_prev[2,m], 0, 1)
             x2_real, x2_imag = complex_multiply(eta0_real, eta0_imag, inm_prev[1,m+2], inm_prev[2,m+2], 0, 1)
@@ -222,7 +222,7 @@ end
             i_compressed += 1
             # multipole_expansion[1,1,i_compressed] += real(conj(inm * strength_J_over_4pi * iam))
             # multipole_expansion[2,1,i_compressed] += imag(conj(inm * strength_J_over_4pi * iam))
-            
+
             # multipole_expansion[1,1,i_compressed] += strength_J_over_4pi * complex_multiply_real(inm_real, inm_imag, iam_real, iam_imag)
             # multipole_expansion[2,1,i_compressed] += -strength_J_over_4pi * complex_multiply_imag(inm_real, inm_imag, iam_real, iam_imag)
             update_multipole_expansion_panel!(multipole_expansion, i_compressed, strength_J_over_4pi, inm_real, inm_imag, iam_real, iam_imag, inm_prev[1,m], inm_prev[2,m], inm_prev[1,m+1], inm_prev[2,m+1], inm_prev[1,m+2], inm_prev[2,m+2], normal, panel_type, negative_1_m)
@@ -239,7 +239,7 @@ end
             jnm_m1_imag = jnm_imag
             inm_m1_real = inm_real
             inm_m1_imag = inm_imag
-            
+
             # update (-1)^m
             negative_1_m *= -1
         end
@@ -264,7 +264,7 @@ function B2M!_quadpanel(system, branch, bodies_index, harmonics::AbstractArray{T
         inm_prev = zeros(TF, 2, P+2)
     end
     for i_body in bodies_index
-        strength = system[i_body, SCALAR_STRENGTH]
+        strength = system[i_body, STRENGTH]
         R0_global = system[i_body, VERTEX, 1]
         R0 = R0_global - branch.center
         for i_side in 2:3
@@ -272,7 +272,7 @@ function B2M!_quadpanel(system, branch, bodies_index, harmonics::AbstractArray{T
             Rv = system[i_body,VERTEX,i_side + 1] - R0_global
             if compute_normal
                 normal = cross(Rv, Ru)
-                normal /= norm(normal) * (-1)^invert_normal 
+                normal /= norm(normal) * (-1)^invert_normal
             else
                 normal = system[i_body,NORMAL]
             end
@@ -293,7 +293,7 @@ function B2M!_tripanel(system, branch, bodies_index, harmonics::AbstractArray{TF
         inm_prev = zeros(TF, 2, P+2)
     end
     for i_body in bodies_index
-        strength = system[i_body, SCALAR_STRENGTH]
+        strength = system[i_body, STRENGTH]
         R0_global = system[i_body, VERTEX, 1]
         R0 = R0_global - branch.center
         Ru = system[i_body,VERTEX,2] - R0_global

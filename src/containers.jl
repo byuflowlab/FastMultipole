@@ -30,11 +30,8 @@ const VERTEX = Vertex()
 struct Normal <: Indexable end
 const NORMAL = Normal()
 
-struct ScalarStrength <: Indexable end
-const SCALAR_STRENGTH = ScalarStrength()
-
-struct VectorStrength <: Indexable end
-const VECTOR_STRENGTH = VectorStrength()
+struct Strength <: Indexable end
+const STRENGTH = Strength()
 
 #####
 ##### dispatch convenience functions for multipole creation definition
@@ -259,6 +256,12 @@ struct SingleTree{TF,TB,P} <: Tree{TF,P}
     leaf_size::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
     # cost_parameters::Float64
+end
+
+struct InteractionList{TF,N}
+    influence_matrices::NTuple{N,Vector{Matrix{TF}}}
+    strengths::Vector{TF}
+    influence::Vector{TF}
 end
 
 #####

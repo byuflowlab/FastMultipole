@@ -63,26 +63,22 @@ function Base.getindex(sys, i, ::VelocityGradient)
     return zero(SMatrix{3,3,Float64,9})
 end
 
-const WARNING_FLAG_SCALAR_STRENGTH = Array{Bool,0}(undef)
-WARNING_FLAG_SCALAR_STRENGTH[] = true
+const WARNING_FLAG_STRENGTH = Array{Bool,0}(undef)
+WARNING_FLAG_STRENGTH[] = true
 
-function Base.getindex(sys, i, ::ScalarStrength)
-    if WARNING_FLAG_SCALAR_STRENGTH[]
-        @warn "getindex! not overloaded for `FastMultipole.ScalarStrength` for type $(typeof(sys)); zero assumed"
-        WARNING_FLAG_SCALAR_STRENGTH[] = false
+function Base.getindex(sys, i, ::Strength)
+    if WARNING_FLAG_STRENGTH[]
+        @warn "getindex! not overloaded for `FastMultipole.Strength` for type $(typeof(sys)); zero assumed"
+        WARNING_FLAG_STRENGTH[] = false
     end
     return 0.0
 end
 
-const WARNING_FLAG_VECTOR_STRENGTH = Array{Bool,0}(undef)
-WARNING_FLAG_VECTOR_STRENGTH[] = true
-
-function Base.getindex(sys, i, ::VectorStrength)
-    if WARNING_FLAG_VECTOR_STRENGTH[]
-        @warn "getindex! not overloaded for `FastMultipole.VectorStrength` for type $(typeof(sys)); zero assumed"
-        WARNING_FLAG_VECTOR_STRENGTH[] = false
+function Base.setindex(sys, i, val, ::Strength)
+    if WARNING_FLAG_STRENGTH[]
+        @warn "setindex! not overloaded for `FastMultipole.Strength` for type $(typeof(sys)); zero assumed"
+        WARNING_FLAG_STRENGTH[] = false
     end
-    return zero(SVector{3,Float64})
 end
 
 function Base.getindex(sys, i, ::Normal)

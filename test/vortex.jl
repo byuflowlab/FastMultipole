@@ -46,7 +46,7 @@ Base.getindex(vp::VortexParticles, i, ::fmm.VectorPotential) = view(vp.potential
 Base.getindex(vp::VortexParticles, i, ::fmm.ScalarPotential) = vp.potential[1,i]
 Base.getindex(vp::VortexParticles, i, ::fmm.Velocity) = view(vp.velocity_stretching,i_VELOCITY_vortex,i)
 Base.getindex(vp::VortexParticles, i, ::fmm.VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
-Base.getindex(vp::VortexParticles, i, ::fmm.VectorStrength) = vp.bodies[i].strength
+Base.getindex(vp::VortexParticles, i, ::fmm.Strength) = vp.bodies[i].strength
 Base.getindex(vp::VortexParticles, i, ::fmm.Body) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
 function Base.setindex!(vp::VortexParticles, val, i, ::fmm.Body)
     body, potential = val

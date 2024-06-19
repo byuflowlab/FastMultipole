@@ -68,7 +68,7 @@ Base.getindex(probe_system::ProbeSystem, i, ::ScalarPotential) = get_scalar_pote
 Base.getindex(probe_system::ProbeSystem, i, ::VectorPotential) = get_vector_potential(probe_system, i)
 Base.getindex(probe_system::ProbeSystem, i, ::Velocity) = get_velocity(probe_system, i)
 Base.getindex(probe_system::ProbeSystem, i, ::VelocityGradient) = get_velocity_gradient(probe_system, i)
-Base.getindex(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}, i, ::ScalarStrength) where TF = zero(TF)
+# Base.getindex(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}, i, ::Strength) where TF = zero(TF)
 Base.getindex(probe_system::ProbeSystem, i, ::Body) = probe_system.position[i], get_scalar_potential(probe_system, i), get_vector_potential(probe_system, i), get_velocity(probe_system, i), get_velocity_gradient(probe_system, i)
 
 function Base.setindex!(probe_system::ProbeSystem, val, i, ::Body)
