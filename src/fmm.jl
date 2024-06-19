@@ -461,11 +461,11 @@ end
 function build_interaction_lists(target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
+    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
@@ -473,10 +473,10 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
     summed_radii_squared = target_branch.radius + source_branch.radius
     summed_radii_squared *= summed_radii_squared
-    if center_spacing_squared * multipole_threshold * multipole_threshold >= summed_radii_squared && farfield # meet M2L criteria
-        push!(m2l_list, SVector{2}(i_target, j_source))
-    elseif source_branch.n_branches == target_branch.n_branches == 0 && nearfield && (i_target!=j_source || self_induced) # both leaves
-        push!(direct_list, SVector{2}(i_target, j_source))
+    if center_spacing_squared * multipole_threshold * multipole_threshold >= summed_radii_squared # meet M2L criteria
+        ff && push!(m2l_list, SVector{2}(i_target, j_source))
+    elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
+        nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
