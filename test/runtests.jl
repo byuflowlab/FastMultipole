@@ -633,7 +633,7 @@ end
 
 include("vortex.jl")
 
-@testset "derivatives" begin
+@testset "spatial derivatives" begin
 """
 dr_k/dx_idx_j
 """
