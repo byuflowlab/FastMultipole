@@ -37,3 +37,6 @@ Manifest.toml
 *.vts
 *.vtk
 *.vtu
+
+# vim
+*.swp

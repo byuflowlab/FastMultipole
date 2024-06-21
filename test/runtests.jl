@@ -356,7 +356,7 @@ local_coefficients_expanded .*= ms[1]
 regular_harmonics_expanded = zeros(Float64, 2, (expansion_order+1)^2)
 FastMultipole.regular_harmonic!(regular_harmonics_expanded, dx_target..., expansion_order)
 
-FastMultipole.B2L!(tree, branch_i, elements[source_i,FastMultipole.POSITION], elements.bodies[source_i].strength)
+FastMultipole.B2L!(tree, branch_i, elements[source_i,FastMultipole.POSITION], SVector{4}(elements.bodies[source_i].strength,0,0,0))
 
 FastMultipole.L2B!(elements, target_i:target_i, tree.branches[branch_i].local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order), tree.branches[branch_i].center)
 u_fmm = elements.potential[1,target_i]
@@ -401,7 +401,7 @@ expansion_order = 20
 tree = FastMultipole.Tree((elements,); expansion_order, leaf_size=1, shrink_recenter=false)
 
 # local coefficient at branch 2 due to mass 1
-FastMultipole.B2L!(tree, 2, elements[new_order_index[1],FastMultipole.POSITION], elements.bodies[new_order_index[1]].strength)
+FastMultipole.B2L!(tree, 2, elements[new_order_index[1],FastMultipole.POSITION], SVector{4}(elements.bodies[new_order_index[1]].strength,0,0,0))
 # local_2 = deepcopy(tree.branches[2].local_expansion)
 
 # check L2P now:
@@ -505,7 +505,7 @@ u_fmm = elements.potential[1,new_order_index[1]]
 local_exp = tree.branches[i_branch_local].local_expansion[1]
 
 dx_direct = elements[new_order_index[1],FastMultipole.POSITION] - elements[new_order_index[5], FastMultipole.POSITION]
-u_direct = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_direct' * dx_direct)
+u_direct = elements.bodies[new_order_index[5]].strength / sqrt(dx_direct' * dx_direct)
 
 @test isapprox(u_direct, u_check_mp; atol=1e-12)
 @test isapprox(u_fmm, u_direct; atol=1e-12)
@@ -567,7 +567,7 @@ u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
 m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, multipole_threshold, true, true, true)
-FastMultipole.nearfield_singlethread!((elements,), tree.branches, (FastMultipole.DerivativesSwitch(),), (elements,), tree.branches, direct_list)
+FastMultipole.nearfield_singlethread!((elements,), tree, (FastMultipole.DerivativesSwitch(),), (elements,), tree, direct_list)
 FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
 
 # consider the effect on branch 3 (mass 2)
@@ -582,10 +582,10 @@ FastMultipole.P2P!((elements,), tree.branches[3], (FastMultipole.DerivativesSwit
 u_fmm_123 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_12 = elements[new_order_index[2],FastMultipole.POSITION] - elements[new_order_index[1],FastMultipole.POSITION]
-u_direct_12 = elements.bodies[new_order_index[1]].strength[1] / sqrt(dx_12' * dx_12)
+u_direct_12 = elements.bodies[new_order_index[1]].strength / sqrt(dx_12' * dx_12)
 u_direct_22 = 0.0
 dx_32 = elements[new_order_index[2],FastMultipole.POSITION] - elements[new_order_index[3],FastMultipole.POSITION]
-u_direct_32 = elements.bodies[new_order_index[3]].strength[1] / sqrt(dx_32' * dx_32)
+u_direct_32 = elements.bodies[new_order_index[3]].strength / sqrt(dx_32' * dx_32)
 
 u_direct_123 = u_direct_12 + u_direct_22 + u_direct_32
 
@@ -598,9 +598,9 @@ FastMultipole.L2B!((elements,), tree.branches[3], (FastMultipole.DerivativesSwit
 u_fmm_12345 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
 dx_42 = elements[new_order_index[4],FastMultipole.POSITION] - elements[new_order_index[2],FastMultipole.POSITION]
-u_direct_42 = elements.bodies[new_order_index[4]].strength[1] / sqrt(dx_42' * dx_42)
+u_direct_42 = elements.bodies[new_order_index[4]].strength / sqrt(dx_42' * dx_42)
 dx_52 = elements[new_order_index[5],FastMultipole.POSITION] - elements[new_order_index[2],FastMultipole.POSITION]
-u_direct_52 = elements.bodies[new_order_index[5]].strength[1] / sqrt(dx_52' * dx_52)
+u_direct_52 = elements.bodies[new_order_index[5]].strength / sqrt(dx_52' * dx_52)
 
 u_direct_12345 = u_direct_123 + u_direct_42 + u_direct_52
 
@@ -1328,5 +1328,39 @@ x_resorted = deepcopy(bodies[1:3,:])
 
 @test isapprox(x_presorted, x_unsorted)
 @test isapprox(x_sorted, x_resorted)
+
+end
+
+@testset "influence matrices" begin
+
+n_bodies = 101
+bodies = rand(8,n_bodies)
+system_direct = Gravitational(bodies)
+system_fmm = deepcopy(system_direct)
+
+FastMultipole.direct!(system_direct)
+FastMultipole.fmm!(system_fmm; multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct.potential[1,:], system_fmm.potential[1,:])
+
+end
+
+@testset "influence matrices: multiple systems" begin
+
+n_bodies = 101
+bodies = rand(8,n_bodies)
+system_direct = Gravitational(bodies)
+system_fmm = deepcopy(system_direct)
+
+bodies_2 = rand(8,n_bodies)
+bodies_2[5:8,:] .= 0.0
+system_direct_2 = Gravitational(bodies_2)
+system_fmm_2 = deepcopy(system_direct_2)
+
+FastMultipole.direct!((system_direct,system_direct_2))
+FastMultipole.fmm!((system_fmm,system_fmm_2); multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct.potential[1,:], system_fmm.potential[1,:])
+@test isapprox(system_direct_2.potential[1,:], system_fmm_2.potential[1,:])
 
 end

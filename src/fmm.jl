@@ -187,9 +187,104 @@ end
 #####
 ##### horizontal pass
 #####
-function nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, source_branches, direct_list)
+function nearfield_singlethread!(target_system, target_tree::Tree, derivatives_switch, source_system, source_tree::Tree, direct_list)
     for (i_target, j_source) in direct_list
-        P2P!(target_system, target_branches[i_target], derivatives_switch, source_system, source_branches[j_source])
+        P2P!(target_system, target_tree.branches[i_target], derivatives_switch, source_system, source_tree.branches[j_source])
+    end
+end
+
+function update_strengths!(strengths, source_branch::MultiBranch, source_systems::Tuple)
+    i_strength = 0
+    for (source_system, bodies_index) in zip(source_systems, source_branch.bodies_index)
+        i_strength = update_strengths!(strengths, i_strength, bodies_index, source_system)
+    end
+    return i_strength
+end
+
+function update_strengths!(strengths, source_branch, source_system)
+    update_strengths!(strengths, 0, source_branch.bodies_index, source_system)
+end
+
+function update_strengths!(strengths, i_strength, bodies_index, source_system)
+    strength_dims = get_strength_dims(source_system)
+    for i_source_body in bodies_index
+        σ = source_system[i_source_body, STRENGTH]
+        for σi in σ
+            i_strength += 1
+            strengths[i_strength] = σi
+        end
+    end
+    return i_strength
+end
+
+function update_influence!(target_systems::Tuple, this_influence::AbstractVector{TF}, i_row_prev, bodies_indices, derivatives_switches::Tuple) where TF
+    for (target_system, bodies_index, switch) in zip(target_systems, bodies_indices, derivatives_switches)
+        i_row_prev = update_influence!(target_system, this_influence, i_row_prev, bodies_index, switch)
+    end
+    return i_row_prev
+end
+
+function update_influence!(target_system, this_influence::AbstractVector{TF}, i_row_prev, bodies_index::UnitRange, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}) where {TF,PS,VPS,VS,GS}
+
+    for i_body in bodies_index
+        if PS
+            i_row_prev += 1
+            ϕ = target_system[i_body,SCALAR_POTENTIAL]
+            target_system[i_body,SCALAR_POTENTIAL] = ϕ + this_influence[i_row_prev]
+        end
+
+        if VPS
+            i_row_prev += 3
+            ψ = target_system[i_body,VECTOR_POTENTIAL]
+            target_system[i_body,VECTOR_POTENTIAL] = ψ + SVector{3,TF}(this_influence[i_row_prev-2], this_influence[i_row_prev-1], this_influence[i_row_prev])
+        end
+
+        if VS
+            i_row_prev += 3
+            v = target_system[i_body,VELOCITY]
+            target_system[i_body,VELOCITY] = v + SVector{3,TF}(this_influence[i_row_prev-2], this_influence[i_row_prev-1], this_influence[i_row_prev])
+        end
+
+        if GS
+            i_row_prev += 9
+            ∇v = target_system[i_body,VELOCITY_GRADIENT]
+            target_system[i_body,VELOCITY_GRADIENT] = ∇v + SMatrix{3,3,TF,9}(this_influence[i_row_prev-8], this_influence[i_row_prev-7], this_influence[i_row_prev-6], this_influence[i_row_prev-5], this_influence[i_row_prev-4], this_influence[i_row_prev-3], this_influence[i_row_prev-2], this_influence[i_row_prev-1], this_influence[i_row_prev])
+        end
+    end
+
+    return i_row_prev
+end
+
+function nearfield_singlethread!(target_system, target_tree::Tree, derivatives_switch, source_system, source_tree::Tree, interaction_list::InteractionList)
+    @assert length(source_tree.leaf_index) == length(interaction_list.influence_matrices)
+
+    # unpack
+    strengths = interaction_list.strengths
+    influence = interaction_list.influence
+
+    # loop over source leaves
+    for (i_source_branch, matrix) in zip(source_tree.leaf_index, interaction_list.influence_matrices)
+
+        # update strengths
+        source_branch = source_tree.branches[i_source_branch]
+        i_strength = update_strengths!(strengths, source_branch, source_system)
+
+        # obtain influence
+        n_rows, n_cols = size(matrix)
+        this_influence = view(influence, 1:n_rows)
+        @assert i_strength == n_cols
+        this_strength = view(strengths, 1:n_cols)
+        mul!(this_influence, matrix, this_strength)
+
+        # apply influence to targets
+        i_row_prev = 0
+        for (i_target, j_source) in interaction_list.direct_list
+            if j_source == i_source_branch # found a target
+                i_row_prev = update_influence!(target_system, this_influence, i_row_prev, target_tree.branches[i_target].bodies_index, derivatives_switch)
+            end
+        end
+        @assert i_row_prev == n_rows
+
     end
 end
 
@@ -488,6 +583,227 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     end
 end
 
+@inline function get_strength_dims(systems::Tuple)
+    return SVector{length(systems),Int}(get_strength_dims(system) for system in systems)
+end
+
+@inline function get_strength_dims(system)
+    return length(system[1,STRENGTH])
+end
+
+@inline function get_one(TF,::Val{n},i) where {n}
+    return SVector{n,TF}(0.0^(i!=j) for j in 1:n)
+end
+
+@inline function get_one(TF,::Val{1},i)
+    return one(TF)
+end
+
+@inline function get_n_rows(bodies_index::UnitRange, ::DerivativesSwitch{PS,VPS,VS,GS}) where {PS,VPS,VS,GS}
+    return length(bodies_index) * (0^!PS + 3*0^!VPS + 3*0^!VS + 9*0^!GS)
+end
+
+@inline function get_n_rows(bodies_indices, derivatives_switches::Tuple)
+    return sum(get_n_rows(bodies_index, switch) for (bodies_index, switch) in zip(bodies_indices, derivatives_switches))
+end
+
+"multiple source systems"
+function populate_influence_matrix!(matrix, target_systems, direct_list, target_branches, derivatives_switches, source_systems, i_source_branch, source_bodies_indices, strength_dims)
+    i_col_prev = 0
+    for (source_system, source_bodies_index, strength_dim) in zip(source_systems, source_bodies_indices, strength_dims)
+        i_col_prev = populate_influence_matrix!(matrix, i_col_prev, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index, strength_dim)
+    end
+end
+
+"single source system (without specifying i_col_prev)"
+function populate_influence_matrix!(matrix::Matrix{TF}, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index::UnitRange, strength_dims::Int) where TF
+    populate_influence_matrix!(matrix, 0, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index, strength_dims)
+end
+
+"single source system"
+function populate_influence_matrix!(matrix::Matrix{TF}, i_col_prev, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index::UnitRange, strength_dims::Int) where TF
+    strength_dims_val = Val(strength_dims)
+    for i_source_body in source_bodies_index
+        strength = source_system[i_source_body,STRENGTH]
+        for i_strength_component in 1:strength_dims
+            i_col_prev += 1
+            source_system[i_source_body,STRENGTH] = get_one(TF,strength_dims_val,i_strength_component)
+            i_row_prev = 0
+
+            # search for targets
+            for (i_target, j_source) in direct_list
+                if j_source == i_source_branch # found a target
+                    target_bodies_index = target_branches[i_target].bodies_index
+                    i_row_prev = populate_influence_matrix!(matrix, i_row_prev, i_col_prev, target_systems, target_bodies_index, derivatives_switches, source_system, i_source_body)
+                end
+            end
+
+        end
+        source_system[i_source_body,STRENGTH] = strength
+    end
+    return i_col_prev
+end
+
+"single source body, multiple target systems"
+function populate_influence_matrix!(matrix, i_row_prev, i_col, target_systems::Tuple, target_bodies_indices, derivatives_switches::Tuple, source_system, i_source_body)
+    for (target_system, target_bodies_index, switch) in zip(target_systems, target_bodies_indices, derivatives_switches)
+        i_row_prev = populate_influence_matrix!(matrix, i_row_prev, i_col, target_system, target_bodies_index, switch, source_system, i_source_body)
+    end
+    return i_row_prev
+end
+
+"single source body, single target system"
+function populate_influence_matrix!(matrix::Matrix{TF}, i_row_prev, i_col, target_system, target_bodies_index::UnitRange, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, source_system, i_source_body) where {TF,PS,VPS,VS,GS}
+
+    # loop over targets
+    for i_target_body in target_bodies_index
+
+        # save old influence and reset
+        if PS
+            ϕ_old = target_system[i_target_body, SCALAR_POTENTIAL]
+            target_system[i_target_body, SCALAR_POTENTIAL] = zero(TF)
+        end
+        if VPS
+            ψ_old = target_system[i_target_body, VECTOR_POTENTIAL]
+            target_system[i_target_body, VECTOR_POTENTIAL] = zero(SVector{3,TF})
+        end
+        if VS
+            v_old = target_system[i_target_body, VELOCITY]
+            target_system[i_target_body, VELOCITY] = zero(SVector{3,TF})
+        end
+        if GS
+            ∇v_old = target_system[i_target_body, VELOCITY_GRADIENT]
+            target_system[i_target_body, VELOCITY_GRADIENT] = zero(SMatrix{3,3,TF,9})
+        end
+
+        # compute unit influence of source
+        direct!(target_system, i_target_body, derivatives_switch, source_system, i_source_body)
+
+        # update influence matrix
+        if PS
+            i_row_prev += 1
+            matrix[i_row_prev, i_col] = target_system[i_target_body, SCALAR_POTENTIAL]
+        end
+
+        if VPS
+            ψ = target_system[i_target_body, VECTOR_POTENTIAL]
+            for i in eachindex(ψ)
+                i_row_prev += 1
+                matrix[i_row_prev, i_col] = ψ[i]
+            end
+        end
+
+        if VS
+            v = target_system[i_target_body, VELOCITY]
+            for i in eachindex(v)
+                i_row_prev += 1
+                matrix[i_row_prev, i_col] = v[i]
+            end
+        end
+
+        if GS
+            ∇v = target_system[i_target_body, VELOCITY_GRADIENT]
+            for i in eachindex(∇v)
+                i_row_prev += 1
+                matrix[i_row_prev, i_col] = ∇v[i]
+            end
+        end
+
+        # restore old influence
+        if PS
+            target_system[i_target_body, SCALAR_POTENTIAL] = ϕ_old
+        end
+        if VPS
+            target_system[i_target_body, VECTOR_POTENTIAL] = ψ_old
+        end
+        if VS
+            target_system[i_target_body, VELOCITY] = v_old
+        end
+        if GS
+            target_system[i_target_body, VELOCITY_GRADIENT] = ∇v_old
+        end
+
+    end
+
+    return i_row_prev
+end
+
+@inline function get_n_strengths(bodies_index::UnitRange, strength_dim::Int)
+    return length(bodies_index) * strength_dim
+end
+
+@inline function get_n_strengths(bodies_indices, strength_dims)
+    n = 0
+    for (bodies_index, strength_dim) in zip(bodies_indices, strength_dims)
+        n += get_n_strengths(bodies_index, strength_dim)
+    end
+    return n
+end
+
+function add_influence_matrix!(influence_matrices::Vector{Matrix{TF}}, i_matrix, target_systems, target_branches, source_systems, source_branches, i_source_branch, strength_dims, direct_list, derivatives_switches) where TF
+
+    # unpack
+    source_branch = source_branches[i_source_branch]
+
+    # number of source strength values
+    n_cols = get_n_strengths(source_branch.bodies_index, strength_dims)
+
+    # number of target locations
+    n_rows = 0
+    for (i_target, j_source) in direct_list
+        j_source == i_source_branch && (n_rows += get_n_rows(target_branches[i_target].bodies_index, derivatives_switches))
+    end
+
+    # preallocate influence matrix
+    matrix = Matrix{TF}(undef, n_rows, n_cols)
+
+    # populate influence matrix
+    populate_influence_matrix!(matrix, target_systems, direct_list, target_branches, derivatives_switches, source_systems, i_source_branch, source_branch.bodies_index, strength_dims)
+
+    # update matrices
+    influence_matrices[i_matrix] = matrix
+
+end
+
+@inline function get_influence_storage(::DerivativesSwitch{PS,VPS,VS,GS}, tree::Tree{TF,<:Any}) where {PS,VPS,VS,GS,TF}
+    n_rows = 1^PS + 3^VPS + 3^VS + 9^GS
+    n_cols = tree.leaf_size
+    return Matrix{TF}(undef, n_rows, n_cols)
+end
+
+@inline function get_influence_storage(derivatives_switches::Tuple, tree::Tree)
+    return Tuple(get_influence_storage(switch,tree) for switch in derivatives_switches)
+end
+
+function InteractionList(direct_list, target_systems, target_tree::Tree, source_systems, source_tree::Tree{TF,<:Any}, derivatives_switches) where TF
+    # unpack tree
+    leaf_index = source_tree.leaf_index
+
+    # preallocate containers
+    influence_matrices = Vector{Matrix{TF}}(undef, length(leaf_index))
+
+    # determine strength dimensions
+    strength_dims = get_strength_dims(source_systems)
+
+    # add influence matrices
+    for (i_matrix,i_source_branch) in enumerate(leaf_index)
+        add_influence_matrix!(influence_matrices, i_matrix, target_systems, target_tree.branches, source_systems, source_tree.branches, i_source_branch, strength_dims, direct_list, derivatives_switches)
+    end
+
+    # create largest needed storage strength and influence vectors
+    n_cols_max = 0
+    n_rows_max = 0
+    for influence_matrix in influence_matrices
+        n_rows, n_cols = size(influence_matrix)
+        n_cols_max = max(n_cols_max, n_cols)
+        n_rows_max = max(n_rows_max, n_rows)
+    end
+    strengths = zeros(TF,n_cols_max)
+    influence = zeros(TF,n_rows_max)
+
+    return InteractionList{TF}(influence_matrices, strengths, influence, direct_list)
+end
+
 #####
 ##### running FMM
 #####
@@ -538,6 +854,7 @@ function fmm!(target_systems, source_systems;
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
+    influence_matrices=false,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
     save_tree=false, save_name="tree"
@@ -555,6 +872,7 @@ function fmm!(target_systems, source_systems;
         multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
+        influence_matrices,
         nearfield, farfield, self_induced,
         unsort_source_bodies, unsort_target_bodies
     )
@@ -603,6 +921,7 @@ function fmm!(systems;
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
+    influence_matrices=false,
     unsort_bodies=true, shrink_recenter=true,
     save_tree=false, save_name="tree"
 )
@@ -615,6 +934,7 @@ function fmm!(systems;
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
+        influence_matrices,
         unsort_bodies
     )
 
@@ -658,6 +978,7 @@ function fmm!(tree::Tree, systems;
     multipole_threshold=0.4, reset_tree=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
+    influence_matrices=false,
     unsort_bodies=true
 )
     fmm!(tree, systems, tree, systems;
@@ -665,6 +986,7 @@ function fmm!(tree::Tree, systems;
         multipole_threshold, reset_source_tree=reset_tree, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
+        influence_matrices,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false
     )
 end
@@ -716,6 +1038,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     reset_source_tree=true, reset_target_tree=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
+    influence_matrices=false,
     unsort_source_bodies=true, unsort_target_bodies=true
 )
     # check if systems are empty
@@ -728,15 +1051,16 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         reset_target_tree && (reset_expansions!(source_tree))
         reset_source_tree && (reset_expansions!(source_tree))
 
-        # create interaction lists
-        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_threshold, farfield, nearfield, self_induced)
-
         # assemble derivatives switch
         derivatives_switch = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
 
+        # create interaction lists
+        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_threshold, farfield, nearfield, self_induced)
+        influence_matrices && ( direct_list = InteractionList(direct_list, target_systems, target_tree, source_systems, source_tree, derivatives_switch) )
+
         # run FMM
         if Threads.nthreads() == 1
-            nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
+            nearfield && (nearfield_singlethread!(target_systems, target_tree, derivatives_switch, source_systems, source_tree, direct_list))
             if farfield
                 upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
                 horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)

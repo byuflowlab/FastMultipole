@@ -16,7 +16,7 @@ const i_VELOCITY_GRADIENT = 8:16
 struct Body{TF}
     position::SVector{3,TF}
     radius::TF
-    strength::SVector{4,TF}
+    strength::TF
 end
 
 struct Gravitational{TF}
@@ -26,7 +26,7 @@ end
 
 function Gravitational(bodies::Matrix)
     nbodies = size(bodies)[2]
-    bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],SVector{4}(bodies[5:8,i])) for i in 1:nbodies]
+    bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],bodies[5,i]) for i in 1:nbodies]
     potential = zeros(52,nbodies)
     return Gravitational(bodies2,potential)
 end
@@ -37,7 +37,7 @@ Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.pot
 Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarPotential) = g.potential[1,i]
 Base.getindex(g::Gravitational, i, ::FastMultipole.Velocity) = view(g.potential,i_VELOCITY,i)
 Base.getindex(g::Gravitational, i, ::FastMultipole.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
-Base.getindex(g::Gravitational, i, ::FastMultipole.Strength) = g.bodies[i].strength[1]
+Base.getindex(g::Gravitational, i, ::FastMultipole.Strength) = g.bodies[i].strength
 Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = g.bodies[i], view(g.potential,:,i)
 function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Body)
     body, potential = val
@@ -57,6 +57,11 @@ end
 function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.VelocityGradient)
     reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
 end
+function Base.setindex!(g::Gravitational{TF}, val, i, ::FastMultipole.Strength) where TF
+    body = g.bodies[i]
+    new_body = Body{TF}(body.position, body.radius, val)
+    g.bodies[i] = new_body
+end
 FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
 Base.eltype(::Gravitational{TF}) where TF = TF
 
@@ -68,7 +73,7 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
     # nbad = 0
     for i_source in source_index
         source_x, source_y, source_z = source_system[i_source,FastMultipole.POSITION]
-        source_strength = source_system.bodies[i_source].strength[1]
+        source_strength = source_system.bodies[i_source].strength
         for j_target in target_index
             target_x, target_y, target_z = target_system[j_target,FastMultipole.POSITION]
             dx = target_x - source_x

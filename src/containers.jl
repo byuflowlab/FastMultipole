@@ -258,10 +258,11 @@ struct SingleTree{TF,TB,P} <: Tree{TF,P}
     # cost_parameters::Float64
 end
 
-struct InteractionList{TF,N}
-    influence_matrices::NTuple{N,Vector{Matrix{TF}}}
+struct InteractionList{TF}
+    influence_matrices::Vector{Matrix{TF}}
     strengths::Vector{TF}
     influence::Vector{TF}
+    direct_list::Vector{SVector{2,Int}}
 end
 
 #####
