@@ -1346,6 +1346,21 @@ tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fm
 
 end
 
+@testset "influence matrices: source with expansions" begin
+
+n_bodies = 101
+Random.seed!(123)
+bodies = rand(8,n_bodies)
+system_direct = Gravitational(bodies)
+system_fmm = deepcopy(system_direct)
+
+FastMultipole.direct!(system_direct)
+tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, expansion_order=30, multipole_threshold=0.4, leaf_size=5, influence_matrices=true)
+
+@test isapprox(system_direct.potential, system_fmm.potential)
+
+end
+
 @testset "influence matrices: vortex" begin
 
 n_bodies = 101
@@ -1356,6 +1371,21 @@ system_fmm = deepcopy(system_direct)
 
 FastMultipole.direct!(system_direct)
 tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct.potential, system_fmm.potential)
+
+end
+
+@testset "influence matrices: vortex with expansions" begin
+
+n_bodies = 101
+Random.seed!(123)
+bodies = rand(7,n_bodies)
+system_direct = VortexParticles(bodies)
+system_fmm = deepcopy(system_direct)
+
+FastMultipole.direct!(system_direct)
+tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, expansion_order=30, multipole_threshold=0.4, leaf_size=5, influence_matrices=true)
 
 @test isapprox(system_direct.potential, system_fmm.potential)
 
@@ -1403,3 +1433,4 @@ FastMultipole.fmm!((system_fmm_2, system_fmm_4), (system_fmm_1,system_fmm_3); mu
 @test isapprox(system_direct_4.potential[1,:], system_fmm_4.potential[1,:])
 
 end
+
