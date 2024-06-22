@@ -1319,7 +1319,7 @@ bodies = rand(8,n_bodies)
 x_presorted = deepcopy(bodies[1:3,:])
 bodies[5:8,2:n_bodies] .= 0.0
 system = Gravitational(bodies)
-tree = FastMultipole.fmm!(system; unsort_bodies=false)
+tree, m2l_list, direct_list, switch = FastMultipole.fmm!(system; unsort_bodies=false)
 x_sorted = deepcopy(bodies[1:3,:])
 FastMultipole.unsort!(system, tree)
 x_unsorted = deepcopy(bodies[1:3,:])
@@ -1331,17 +1331,33 @@ x_resorted = deepcopy(bodies[1:3,:])
 
 end
 
-@testset "influence matrices" begin
+@testset "influence matrices: source" begin
 
 n_bodies = 101
+Random.seed!(123)
 bodies = rand(8,n_bodies)
 system_direct = Gravitational(bodies)
 system_fmm = deepcopy(system_direct)
 
 FastMultipole.direct!(system_direct)
-FastMultipole.fmm!(system_fmm; multipole_threshold=0.0, influence_matrices=true)
+tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, multipole_threshold=0.0, influence_matrices=true)
 
-@test isapprox(system_direct.potential[1,:], system_fmm.potential[1,:])
+@test isapprox(system_direct.potential, system_fmm.potential)
+
+end
+
+@testset "influence matrices: vortex" begin
+
+n_bodies = 101
+Random.seed!(123)
+bodies = rand(7,n_bodies)
+system_direct = VortexParticles(bodies)
+system_fmm = deepcopy(system_direct)
+
+FastMultipole.direct!(system_direct)
+tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct.potential, system_fmm.potential)
 
 end
 
@@ -1349,18 +1365,41 @@ end
 
 n_bodies = 101
 bodies = rand(8,n_bodies)
-system_direct = Gravitational(bodies)
-system_fmm = deepcopy(system_direct)
+system_direct_1 = Gravitational(bodies)
+system_fmm_1 = deepcopy(system_direct_1)
 
 bodies_2 = rand(8,n_bodies)
 bodies_2[5:8,:] .= 0.0
 system_direct_2 = Gravitational(bodies_2)
 system_fmm_2 = deepcopy(system_direct_2)
 
-FastMultipole.direct!((system_direct,system_direct_2))
-FastMultipole.fmm!((system_fmm,system_fmm_2); multipole_threshold=0.0, influence_matrices=true)
+bodies_3 = rand(7,n_bodies)
+system_direct_3 = VortexParticles(bodies)
+system_fmm_3 = deepcopy(system_direct_3)
 
-@test isapprox(system_direct.potential[1,:], system_fmm.potential[1,:])
+bodies_4 = rand(7,n_bodies)
+system_direct_4 = VortexParticles(bodies)
+system_fmm_4 = deepcopy(system_direct_4)
+
+# tuple on itself
+FastMultipole.direct!((system_direct_1,system_direct_2))
+FastMultipole.fmm!((system_fmm_1,system_fmm_2); multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct_1.potential[1,:], system_fmm_1.potential[1,:])
 @test isapprox(system_direct_2.potential[1,:], system_fmm_2.potential[1,:])
+
+# vortex and sources
+FastMultipole.direct!((system_direct_1, system_direct_3))
+FastMultipole.fmm!((system_fmm_1,system_fmm_3); multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct_1.potential[1,:], system_fmm_1.potential[1,:])
+@test isapprox(system_direct_3.potential[1,:], system_fmm_3.potential[1,:])
+
+# different vortex and sources
+FastMultipole.direct!((system_direct_2, system_direct_4), (system_direct_1, system_direct_3))
+FastMultipole.fmm!((system_fmm_2, system_fmm_4), (system_fmm_1,system_fmm_3); multipole_threshold=0.0, influence_matrices=true)
+
+@test isapprox(system_direct_2.potential[1,:], system_fmm_2.potential[1,:])
+@test isapprox(system_direct_4.potential[1,:], system_fmm_4.potential[1,:])
 
 end

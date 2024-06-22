@@ -664,15 +664,15 @@ function populate_influence_matrix!(matrix::Matrix{TF}, i_row_prev, i_col, targe
             target_system[i_target_body, SCALAR_POTENTIAL] = zero(TF)
         end
         if VPS
-            ψ_old = target_system[i_target_body, VECTOR_POTENTIAL]
+            ψ_old = SVector{3,TF}(target_system[i_target_body, VECTOR_POTENTIAL])
             target_system[i_target_body, VECTOR_POTENTIAL] = zero(SVector{3,TF})
         end
         if VS
-            v_old = target_system[i_target_body, VELOCITY]
+            v_old = SVector{3,TF}(target_system[i_target_body, VELOCITY])
             target_system[i_target_body, VELOCITY] = zero(SVector{3,TF})
         end
         if GS
-            ∇v_old = target_system[i_target_body, VELOCITY_GRADIENT]
+            ∇v_old = SMatrix{3,3,TF,9}(target_system[i_target_body, VELOCITY_GRADIENT])
             target_system[i_target_body, VELOCITY_GRADIENT] = zero(SMatrix{3,3,TF,9})
         end
 
@@ -867,7 +867,7 @@ function fmm!(target_systems, source_systems;
     target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems;
+    m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
@@ -880,7 +880,7 @@ function fmm!(target_systems, source_systems;
     # visualize
     save_tree && (visualize(save_name, systems, tree))
 
-    return source_tree, target_tree
+    return source_tree, target_tree, m2l_list, direct_list, derivatives_switches
 end
 
 """
@@ -929,7 +929,7 @@ function fmm!(systems;
     tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
 
     # perform fmm
-    fmm!(tree, systems;
+    m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
@@ -941,7 +941,7 @@ function fmm!(systems;
     # visualize
     save_tree && (visualize(save_name, systems, tree))
 
-    return tree
+    return tree, m2l_list, direct_list, derivatives_switches
 end
 
 """
@@ -992,9 +992,11 @@ function fmm!(tree::Tree, systems;
     # run fmm
     fmm!(tree, systems, m2l_list, direct_list, derivatives_switches;
         reset_tree,
-        upward_pass, horizontal_pass, downward_pass,
+        nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_bodies
     )
+
+    return m2l_list, direct_list, derivatives_switches
 end
 
 """
@@ -1053,10 +1055,11 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # run fmm
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches;
         reset_source_tree, reset_target_tree,
-        upward_pass, horizontal_pass, downward_pass,
+        nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies, unsort_target_bodies
     )
 
+    return m2l_list, direct_list, derivatives_switches
 end
 
 """
@@ -1086,13 +1089,13 @@ Dispatches `fmm!` using an existing `::Tree`.
 """
 function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches;
     reset_tree=true,
-    upward_pass=true, horizontal_pass=true, downward_pass=true,
+    nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
     unsort_bodies=true
 )
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches;
         reset_source_tree=reset_tree, reset_target_tree=false,
-        upward_pass, horizontal_pass, downward_pass,
+        nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false
     )
 
@@ -1145,7 +1148,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_list, derivatives_switches;
     reset_source_tree=true, reset_target_tree=true,
-    upward_pass=true, horizontal_pass=true, downward_pass=true,
+    nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
     unsort_source_bodies=true, unsort_target_bodies=true
 )
     # check if systems are empty
@@ -1160,15 +1163,15 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
         # run FMM
         if Threads.nthreads() == 1
-            nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
+            nearfield && nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
             upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
             horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order)
         else # multithread
             @assert !(typeof(direct_list) <: InteractionList) "`InteractionList` objects do not yet support multithreading"
-            length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list))
+            nearfield && length(direct_list) > 0 && nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
             upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-            horizontal_pass && length(m2l_list) > 0 && (horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order))
+            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
 

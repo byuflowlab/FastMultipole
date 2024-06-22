@@ -82,8 +82,10 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
             r = sqrt(dx*dx + dy*dy + dz*dz)
             # te = @elapsed begin
             if r > 0
-                dV = source_strength / r
-                target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dV
+                dϕ = source_strength / r
+                target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dϕ
+                dF = SVector{3}(dx,dy,dz) * source_strength / r^3
+                target_system[j_target,FastMultipole.VELOCITY] += dF
             end
         # end
         # if te > 0.00001; nbad += 1; end

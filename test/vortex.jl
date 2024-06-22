@@ -40,6 +40,7 @@ end
 #####
 ##### overload compatibility functions
 #####
+
 Base.getindex(vp::VortexParticles, i, ::fmm.Position) = vp.bodies[i].position
 Base.getindex(vp::VortexParticles, i, ::fmm.Radius) = vp.bodies[i].sigma
 Base.getindex(vp::VortexParticles, i, ::fmm.VectorPotential) = view(vp.potential,2:4,i)
@@ -48,6 +49,7 @@ Base.getindex(vp::VortexParticles, i, ::fmm.Velocity) = view(vp.velocity_stretch
 Base.getindex(vp::VortexParticles, i, ::fmm.VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
 Base.getindex(vp::VortexParticles, i, ::fmm.Strength) = vp.bodies[i].strength
 Base.getindex(vp::VortexParticles, i, ::fmm.Body) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
+
 function Base.setindex!(vp::VortexParticles, val, i, ::fmm.Body)
     body, potential = val
     vp.bodies[i] = body
@@ -66,6 +68,12 @@ function Base.setindex!(vp::VortexParticles, val, i, ::fmm.Velocity)
 end
 function Base.setindex!(vp::VortexParticles, val, i, ::fmm.VelocityGradient)
     vp.potential[i_VELOCITY_GRADIENT_vortex,i] .= reshape(val,9)
+end
+function Base.setindex!(vp::VortexParticles, val, i, ::fmm.Strength)
+    p = vp.bodies[i]
+    position = p.position
+    sigma = p.sigma
+    vp.bodies[i] = Vorton(position, val, sigma)
 end
 FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
 Base.eltype(::VortexParticles{TF}) where TF = TF
