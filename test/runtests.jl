@@ -1355,7 +1355,7 @@ system_direct = Gravitational(bodies)
 system_fmm = deepcopy(system_direct)
 
 FastMultipole.direct!(system_direct)
-tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, expansion_order=30, multipole_threshold=0.4, leaf_size=5, influence_matrices=true)
+tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system_fmm; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true, expansion_order=30, multipole_threshold=0.4, leaf_size=3, influence_matrices=true)
 
 @test isapprox(system_direct.potential, system_fmm.potential)
 
