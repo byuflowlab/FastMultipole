@@ -262,7 +262,7 @@ struct InteractionList{TF}
     influence_matrices::Vector{Matrix{TF}}
     strengths::Vector{TF}
     influence::Vector{TF}
-    direct_list::Vector{SVector{2,Int}}
+    direct_list::Vector{SVector{2,Int32}}
 end
 
 #####
