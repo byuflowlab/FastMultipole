@@ -403,25 +403,22 @@ end
 	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)
 
     # velocity due to scalar potential
-    if PS
-        Lnm_eimp_real, Lnm_eimp_imag = complex_multiply(eimp_real, eimp_imag, Lnm_real, Lnm_imag)
 
-        velocity -= SVector{3}(
-			complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_eimp_real, Lnm_eimp_imag),
-			complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_eimp_real, Lnm_eimp_imag),
-			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_eimp_real, Lnm_eimp_imag)
-        ) * rnm1 * C_n_m
-    end
+    Lnm_eimp_real, Lnm_eimp_imag = complex_multiply(eimp_real, eimp_imag, Lnm_real, Lnm_imag)
+
+    velocity -= SVector{3}(
+		complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_eimp_real, Lnm_eimp_imag),
+		complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_eimp_real, Lnm_eimp_imag),
+		complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_eimp_real, Lnm_eimp_imag)
+    ) * rnm1 * C_n_m
 
     # velocity due to vector potential
-    if VPS
 
-		Lnm_x_eimp_real, Lnm_x_eimp_imag = complex_multiply(Lnm_x_real, Lnm_x_imag, eimp_real, eimp_imag)
-		Lnm_y_eimp_real, Lnm_y_eimp_imag = complex_multiply(Lnm_y_real, Lnm_y_imag, eimp_real, eimp_imag)
-		Lnm_z_eimp_real, Lnm_z_eimp_imag = complex_multiply(Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag)
+    Lnm_x_eimp_real, Lnm_x_eimp_imag = complex_multiply(Lnm_x_real, Lnm_x_imag, eimp_real, eimp_imag)
+	Lnm_y_eimp_real, Lnm_y_eimp_imag = complex_multiply(Lnm_y_real, Lnm_y_imag, eimp_real, eimp_imag)
+    Lnm_z_eimp_real, Lnm_z_eimp_imag = complex_multiply(Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag)
 
-		velocity += rnm1 * C_n_m * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_eimp_real, Lnm_x_eimp_imag, Lnm_y_eimp_real, Lnm_y_eimp_imag, Lnm_z_eimp_real, Lnm_z_eimp_imag)
-    end
+	velocity += rnm1 * C_n_m * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_eimp_real, Lnm_x_eimp_imag, Lnm_y_eimp_real, Lnm_y_eimp_imag, Lnm_z_eimp_real, Lnm_z_eimp_imag)
 
     return velocity
 end
@@ -456,18 +453,18 @@ end
 	u_real_cartesian, u_imag_cartesian = complex_multiply(R, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
 
     # due to scalar potential
-    if PS
+    # if PS
         dudr -= nm1 * rnm2Cnm * SVector{3}(
 			complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_real, Lnm_imag),
 			complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_real, Lnm_imag),
 			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
         )
-    end
+    # end
 
     # due to vector potential
-    if VPS
+    # if VPS
 		dudr += nm1 * rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
-    end
+    # end
 
     #####
     ##### du/dphi / r
@@ -485,18 +482,18 @@ end
 	u_real_cartesian, u_imag_cartesian = complex_multiply(R, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
 
     # due to scalar potential
-    if PS
+    # if PS
         dudt_r -= rnm2Cnm * SVector{3}(
 			complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_real, Lnm_imag),
 			complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_real, Lnm_imag),
 			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
         )
-    end
+    # end
 
     # due to vector potential
-    if VPS
+    # if VPS
 		dudt_r += rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
-    end
+    # end
 
     #####
     ##### du/dphi / r / sin(theta)
@@ -516,18 +513,18 @@ end
     vz_real, vz_imag = -eimp_imag * u3z_imag, eimp_real * u3z_imag
 
     # due to scalar potential
-    if PS
+    # if PS
         dudp_r_st -= SVector{3}(
             complex_multiply_real(vx_real, vx_imag, Lnm_real, Lnm_imag),
             complex_multiply_real(vy_real, vy_imag, Lnm_real, Lnm_imag),
 			complex_multiply_real(vz_real, vz_imag, Lnm_real, Lnm_imag)
         ) * rnm2Cnm
-    end
+    # end
 
     # due to vector potential
-    if VPS
+    # if VPS
         dudp_r_st += rnm2Cnm * complex_cross_real(vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
-    end
+    # end
 
 	return dudr, dudt_r, dudp_r_st
 end
