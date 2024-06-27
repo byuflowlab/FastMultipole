@@ -53,9 +53,9 @@ function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) w
     end
 end
 
-function body_2_multipole_multithread!(branches, systems::Tuple, expansion_order::Val{P}, leaf_index) where P
+function body_2_multipole_multithread!(branches, systems::Tuple, expansion_order::Val{P}, leaf_index, concurrent_direct) where P
     ## load balance
-    n_threads = Threads.nthreads()
+    n_threads = Threads.nthreads() - 0^!concurrent_direct
     leaf_assignments = fill(1:0, length(systems), n_threads)
     for (i_system,system) in enumerate(systems)
 
@@ -102,9 +102,9 @@ function body_2_multipole_multithread!(branches, systems::Tuple, expansion_order
     end
 end
 
-function body_2_multipole_multithread!(branches, system, expansion_order::Val{P}, leaf_index) where P
+function body_2_multipole_multithread!(branches, system, expansion_order::Val{P}, leaf_index, concurrent_direct) where P
     ## load balance
-    n_threads = Threads.nthreads()
+    n_threads = Threads.nthreads() - 0^!concurrent_direct
     leaf_assignments = fill(1:0, n_threads)
 
     # total number of bodies
@@ -144,9 +144,9 @@ function body_2_multipole_multithread!(branches, system, expansion_order::Val{P}
     end
 end
 
-function translate_multipoles_multithread!(branches, expansion_order::Val{P}, levels_index) where P
+function translate_multipoles_multithread!(branches, expansion_order::Val{P}, levels_index, concurrent_direct) where P
     # initialize memory
-    n_threads = Threads.nthreads()
+    n_threads = Threads.nthreads() - 0^!concurrent_direct
 
     # iterate over levels
     for level_index in view(levels_index,length(levels_index):-1:2)
@@ -176,12 +176,12 @@ function translate_multipoles_multithread!(branches, expansion_order::Val{P}, le
     end
 end
 
-function upward_pass_multithread!(branches, systems, expansion_order, levels_index, leaf_index)
+function upward_pass_multithread!(branches, systems, expansion_order, levels_index, leaf_index, concurrent_direct)
     # create multipole expansions
-    body_2_multipole_multithread!(branches, systems, expansion_order, leaf_index)
+    body_2_multipole_multithread!(branches, systems, expansion_order, leaf_index, concurrent_direct)
 
     # m2m translation
-    translate_multipoles_multithread!(branches, expansion_order, levels_index)
+    translate_multipoles_multithread!(branches, expansion_order, levels_index, concurrent_direct)
 end
 
 #####
@@ -420,9 +420,9 @@ end
 #     containers = [preallocate_horizontal_pass(expansion_type, expansion_order) for _ in 1:n]
 # end
 
-function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, expansion_order::Val{P}) where {TF,P}
+function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, expansion_order::Val{P}, concurrent_direct) where {TF,P}
     # number of translations per thread
-    n_threads = Threads.nthreads()
+    n_threads = Threads.nthreads() - 0^!concurrent_direct
     n_per_thread, rem = divrem(length(m2l_list),n_threads)
     rem > 0 && (n_per_thread += 1)
     assignments = 1:n_per_thread:length(m2l_list)
@@ -556,7 +556,7 @@ end
 function build_interaction_lists(target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, 1, 1, target_branches, source_branches, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
+    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
     return m2l_list, direct_list
 end
 
@@ -857,7 +857,8 @@ function fmm!(target_systems, source_systems;
     influence_matrices=false,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
-    save_tree=false, save_name="tree"
+    save_tree=false, save_name="tree",
+    concurrent_direct=false
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -874,7 +875,8 @@ function fmm!(target_systems, source_systems;
         upward_pass, horizontal_pass, downward_pass,
         influence_matrices,
         nearfield, farfield, self_induced,
-        unsort_source_bodies, unsort_target_bodies
+        unsort_source_bodies, unsort_target_bodies,
+        concurrent_direct
     )
 
     # visualize
@@ -923,7 +925,8 @@ function fmm!(systems;
     nearfield=true, farfield=true, self_induced=true,
     influence_matrices=false,
     unsort_bodies=true, shrink_recenter=true,
-    save_tree=false, save_name="tree"
+    save_tree=false, save_name="tree",
+    concurrent_direct=false
 )
     # create tree
     tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
@@ -935,7 +938,7 @@ function fmm!(systems;
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
         influence_matrices,
-        unsort_bodies
+        unsort_bodies, concurrent_direct
     )
 
     # visualize
@@ -979,7 +982,8 @@ function fmm!(tree::Tree, systems;
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     influence_matrices=false,
-    unsort_bodies=true
+    unsort_bodies=true,
+    concurrent_direct=false
 )
 
     # assemble derivatives switch
@@ -993,7 +997,7 @@ function fmm!(tree::Tree, systems;
     fmm!(tree, systems, m2l_list, direct_list, derivatives_switches;
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_bodies
+        unsort_bodies, concurrent_direct
     )
 
     return m2l_list, direct_list, derivatives_switches
@@ -1042,7 +1046,8 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     influence_matrices=false,
-    unsort_source_bodies=true, unsort_target_bodies=true
+    unsort_source_bodies=true, unsort_target_bodies=true,
+    concurrent_direct=false
 )
 
     # assemble derivatives switch
@@ -1056,7 +1061,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches;
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies, unsort_target_bodies
+        unsort_source_bodies, unsort_target_bodies, concurrent_direct
     )
 
     return m2l_list, direct_list, derivatives_switches
@@ -1090,13 +1095,14 @@ Dispatches `fmm!` using an existing `::Tree`.
 function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches;
     reset_tree=true,
     nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
-    unsort_bodies=true
+    unsort_bodies=true, concurrent_direct=false
 )
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches;
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies=unsort_bodies, unsort_target_bodies=false
+        unsort_source_bodies=unsort_bodies, unsort_target_bodies=false,
+        concurrent_direct
     )
 
 end
@@ -1149,7 +1155,8 @@ Dispatches `fmm!` using existing `::Tree` objects.
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_list, derivatives_switches;
     reset_source_tree=true, reset_target_tree=true,
     nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
-    unsort_source_bodies=true, unsort_target_bodies=true
+    unsort_source_bodies=true, unsort_target_bodies=true,
+    concurrent_direct=false
 )
     # check if systems are empty
     n_sources = get_n_bodies(source_systems)
@@ -1168,10 +1175,17 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order)
         else # multithread
-            @assert !(typeof(direct_list) <: InteractionList) "`InteractionList` objects do not yet support multithreading"
-            nearfield && length(direct_list) > 0 && nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
-            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index)
-            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+            # @assert !(typeof(direct_list) <: InteractionList) "`InteractionList` objects do not yet support multithreading"
+            if nearfield && length(direct_list) > 0
+                if concurrent_direct || typeof(direct_list) <: InteractionList
+                    Threads.@spawn nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
+                else
+                    nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
+                end
+            end
+            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, concurrent_direct)
+            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, concurrent_direct)
+            concurrent_direct && Threads.wait()
             downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
 

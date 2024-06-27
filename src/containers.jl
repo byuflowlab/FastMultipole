@@ -265,6 +265,8 @@ struct InteractionList{TF}
     direct_list::Vector{SVector{2,Int32}}
 end
 
+Base.length(list::InteractionList) = length(list.direct_list)
+
 #####
 ##### allow input systems to take any form when desired
 #####
