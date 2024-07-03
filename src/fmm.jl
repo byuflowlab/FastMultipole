@@ -583,6 +583,23 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     end
 end
 
+function sort_direct_list(direct_list, tree)
+    # initialize containers
+    counter = Vector{Int32}(undef,length(tree.leaf_index))
+    filler = similar(counter)
+
+    # invert leaf index
+    for (i,i_leaf) in enumerate(tree.leaf_index)
+        filler[i] = i_leaf
+    end
+
+    # count interactions
+    for (i_target, j_source) in direct_list
+
+    end
+
+end
+
 @inline function get_strength_dims(systems::Tuple)
     return SVector{length(systems),Int}(get_strength_dims(system) for system in systems)
 end
