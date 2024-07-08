@@ -1,21 +1,24 @@
-function cartesian_2_spherical!(dx; EPSILON=1e-10)
+function cartesian_2_spherical!(dx::AbstractVector{T}; EPSILON=1e-10) where T
     r = sqrt(dx' * dx)
-    theta = r < EPSILON ? 0.0 : acos(dx[3] / r)
+    theta = r < EPSILON ? 0.0 : (dx[3] / r == -1 ? pi*one(T) : acos(dx[3] / r))
     phi = r < EPSILON ? 0.0 : atan(dx[2], dx[1])
+    phi = r < EPSILON ? 0.0 : ((dx[2] == 0.0)&&(dx[1] == 0.0) ? zero(T) : atan(dx[2], dx[1]))
     dx .= r, theta, phi
 end
 
-function cartesian_2_spherical(dx; EPSILON=1e-10)
+function cartesian_2_spherical(dx::AbstractVector{T}; EPSILON=1e-10) where T
     r = sqrt(dx' * dx)
-    theta = r < EPSILON ? 0.0 : acos(dx[3] / r)
-    phi = r < EPSILON ? 0.0 : atan(dx[2], dx[1])
+    theta = r < EPSILON ? 0.0 : (dx[3] / r == -1 ? pi*one(T) : acos(dx[3] / r))
+    phi = r < EPSILON ? 0.0 : ((dx[2] == 0.0)&&(dx[1] == 0.0) ? zero(T) : atan(dx[2], dx[1]))
     dx = SVector{3}(r, theta, phi)
 end
 
 function cartesian_2_spherical(x, y, z; EPSILON=1e-10)
-    r = sqrt(x*x + y*y + z*z)
-    theta = r < EPSILON ? 0.0 : acos(z / r)
-    phi = r < EPSILON ? 0.0 : atan(y, x)
+    x2y2 = x^2 + y^2
+    r2 = x2y2 + z^2
+    r = iszero(r2) ? r2 : sqrt(r2)
+    theta = iszero(r) ? zero(r) : (abs(z / r) == 1 ? pi*one(eltype(z/r)) : acos(z / r))
+    phi = iszero(x2y2) ? zero(x2y2) : atan(y, x)
     return r, theta, phi
 end
 
