@@ -1176,16 +1176,17 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order)
         else # multithread
             # @assert !(typeof(direct_list) <: InteractionList) "`InteractionList` objects do not yet support multithreading"
-            if nearfield && length(direct_list) > 0
-                if concurrent_direct || typeof(direct_list) <: InteractionList
-                    Threads.@spawn nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
-                else
-                    nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
+            @sync begin
+                if nearfield && length(direct_list) > 0
+                    if concurrent_direct || typeof(direct_list) <: InteractionList
+                        Threads.@spawn nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
+                    else
+                        nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
+                    end
                 end
+                upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, concurrent_direct)
+                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, concurrent_direct)
             end
-            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, concurrent_direct)
-            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, concurrent_direct)
-            concurrent_direct && Threads.wait()
             downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
 
