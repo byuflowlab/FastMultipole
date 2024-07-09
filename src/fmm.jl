@@ -553,14 +553,16 @@ end
 #####
 ##### create interaction lists
 #####
-function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
+function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, sort_direct=false)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
     build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
+
+    sort_direct && (direct_list = sort_list(direct_list, source_branches, length(source_leaf_index)) )
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, sort_direct=false) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
@@ -583,24 +585,35 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
             build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
     end
-
-    sort_direct && sort_list!(direct_list, length(source_tree.leaf_index))
 end
 
-function sort_list!(direct_list, n_leaves)
+function sort_list(direct_list, source_branches, n_leaves)
     source_counter = zeros(Int32, n_leaves)
     place_counter = zeros(Int32, n_leaves)
-    buffer = similar(direct_list)
+    direct_list_sorted = similar(direct_list)
 
     # tally the contributions of each source
     for (i_target, j_source) in direct_list
-        source_counter[j_source] += 1
+        j_leaf = source_branches[j_source].i_leaf
+        source_counter[j_leaf] += 1
+    end
+
+    # prepare place counter
+    i_cum = 1
+    for (i,n) in enumerate(source_counter)
+        place_counter[i] = i_cum
+        i_cum += n
     end
 
     # place interactions
     for interaction in direct_list
         j_source = interaction[2]
+        j_leaf = source_branches[j_source].i_leaf
+        direct_list_sorted[place_counter[j_leaf]] = interaction
+        place_counter[j_leaf] += 1
     end
+
+    return direct_list_sorted
 end
 
 @inline function get_strength_dims(systems::Tuple)
@@ -1190,24 +1203,35 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
         # run FMM
         if Threads.nthreads() == 1
+
             nearfield && nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
             upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
             horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order)
+
         else # multithread
             # @assert !(typeof(direct_list) <: InteractionList) "`InteractionList` objects do not yet support multithreading"
-            @sync begin
-                if nearfield && length(direct_list) > 0
-                    if concurrent_direct || typeof(direct_list) <: InteractionList
+            if concurrent_direct || typeof(direct_list) <: InteractionList
+
+                @sync begin
+                    if nearfield && length(direct_list) > 0
                         Threads.@spawn nearfield_singlethread!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
-                    else
-                        nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
                     end
+                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, concurrent_direct)
+                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, concurrent_direct)
+                end
+                downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+
+            else
+
+                if nearfield && length(direct_list) > 0
+                    nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
                 end
                 upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, concurrent_direct)
                 horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, concurrent_direct)
+                downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
+
             end
-            downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, target_tree.levels_index, target_tree.leaf_index)
         end
 
     else

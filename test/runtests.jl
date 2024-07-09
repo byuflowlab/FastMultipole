@@ -566,7 +566,7 @@ FastMultipole.M2B!(mass_target_potential, mass_target, 2, tree)
 u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
-m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, true, true, true)
+m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, true, true, true, false)
 FastMultipole.nearfield_singlethread!((elements,), tree, (FastMultipole.DerivativesSwitch(),), (elements,), tree, direct_list)
 FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
 
@@ -1453,6 +1453,33 @@ for branch in tree.branches
         @test i_leaf == branch.i_leaf
         i_leaf += 1
     end
+end
+
+end
+
+@testset "sort direct list" begin
+
+n_bodies = 101
+bodies = rand(8,n_bodies)
+system = Gravitational(bodies)
+
+tree = FastMultipole.Tree(system; leaf_size=5)
+leaf_index = tree.leaf_index
+
+sort_direct = false
+_, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, 0.0, false, true, true, sort_direct)
+sort_direct = true
+_, direct_list_sorted = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, 0.0, false, true, true, sort_direct)
+
+# ensure the lists contain the same elements
+@test length(direct_list) == length(direct_list_sorted)
+@test sort(direct_list) == sort(direct_list_sorted)
+
+# ensure the sorted list is sorted properly
+global j_source_last = 0
+for (i_target, j_source) in direct_list_sorted
+    @test j_source >= j_source_last
+    global j_source_last = j_source
 end
 
 end
