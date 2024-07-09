@@ -1231,6 +1231,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             if concurrent_direct || typeof(direct_list) <: InteractionList
 
                 @sync begin
+                    direct_list = get_first_source_index(direct_source_bodies)
                     if nearfield && length(direct_list) > 0
                         Threads.@spawn nearfield_singlethread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies)
                     end
@@ -1241,6 +1242,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
             else
 
+                direct_list = get_first_source_index(direct_source_bodies)
                 if nearfield && length(direct_list) > 0
                     nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_target_bodies, direct_source_bodies)
                 end
