@@ -1228,7 +1228,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
         else # multithread
             # @assert !(typeof(direct_list) <: InteractionList) "`InteractionList` objects do not yet support multithreading"
-            if concurrent_direct || typeof(direct_list) <: InteractionList
+            if concurrent_direct
 
                 @sync begin
                     direct_list = get_first_source_index(direct_source_bodies)
