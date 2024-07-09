@@ -553,13 +553,19 @@ end
 #####
 ##### create interaction lists
 #####
-function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, sort_direct=false)
+function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
+
+    # prepare containers
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
+
+    # populate lists
     build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
 
-    sort_direct && (direct_list = sort_list(direct_list, source_branches, length(source_leaf_index)) )
-    return m2l_list, direct_list
+    # sort by source branch for more efficient interactions
+    direct_bodies_list = sort_list(direct_list, target_branches, source_branches, length(source_leaf_index))
+
+    return m2l_list, direct_bodies_list
 end
 
 function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
@@ -587,10 +593,13 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     end
 end
 
-function sort_list(direct_list, source_branches, n_leaves)
+@inline bodies_index_type(T::Type{<:MultiBranch{<:Any,NT}}) where NT = SVector{NT,UnitRange{Int64}}
+@inline bodies_index_type(T::Type{<:SingleBranch}) = UnitRange{Int64}
+
+function sort_list(direct_list, target_branches::Vector{TT}, source_branches::Vector{TS}, n_leaves) where {TT,TS}
     source_counter = zeros(Int32, n_leaves)
     place_counter = zeros(Int32, n_leaves)
-    direct_list_sorted = similar(direct_list)
+    direct_list_sorted = Vector{Tuple{bodies_index_type(TT), bodies_index_type(TS)}}(undef, length(direct_list))
 
     # tally the contributions of each source
     for (i_target, j_source) in direct_list
@@ -607,9 +616,10 @@ function sort_list(direct_list, source_branches, n_leaves)
 
     # place interactions
     for interaction in direct_list
+        i_target = interaction[1]
         j_source = interaction[2]
         j_leaf = source_branches[j_source].i_leaf
-        direct_list_sorted[place_counter[j_leaf]] = interaction
+        direct_list_sorted[place_counter[j_leaf]] = (target_branches[i_target].bodies_index, source_branches[j_source].bodies_index)
         place_counter[j_leaf] += 1
     end
 

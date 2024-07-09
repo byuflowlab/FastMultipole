@@ -1476,10 +1476,10 @@ _, direct_list_sorted = FastMultipole.build_interaction_lists(tree.branches, tre
 @test sort(direct_list) == sort(direct_list_sorted)
 
 # ensure the sorted list is sorted properly
-global j_source_last = 0
+j_source_last = 0
 for (i_target, j_source) in direct_list_sorted
     @test j_source >= j_source_last
-    global j_source_last = j_source
+    j_source_last = j_source
 end
 
 end
