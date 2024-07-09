@@ -21,7 +21,7 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_ra
         sort_index_buffer = get_sort_index_buffer(system)
 
         # grow root branch
-        root_branch, n_children = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+        root_branch, n_children, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, 0, 1, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
         branches = [root_branch] # this first branch will already have its child branches encoded
         # estimated_n_branches = estimate_n_branches(system, leaf_size, allocation_safety_factor)
         # sizehint!(branches, estimated_n_branches)
@@ -31,7 +31,7 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_ra
         levels_index = [parents_index] # store branches at each level
         for i_divide in 1:n_divisions
             if n_children > 0
-                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children, i_leaf = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
                 push!(levels_index, parents_index)
             end
         end
@@ -40,7 +40,7 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, scale_ra
         if n_children > 0
             n_children_prewhile = n_children
             while n_children > 0
-                parents_index, n_children = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children, i_leaf = child_branches!(branches, system, sort_index, buffer, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
                 push!(levels_index, parents_index)
             end
             if WARNING_FLAG_LEAF_SIZE[]
@@ -151,7 +151,7 @@ function estimate_n_branches(system, leaf_size, allocation_safety_factor)
     return Int(ceil(estimated_n_branches * allocation_safety_factor))
 end
 
-function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+function child_branches!(branches, system, sort_index, buffer, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
     i_first_branch = parents_index[end] + n_children + 1
     for i_parent in parents_index
         parent_branch = branches[i_parent]
@@ -169,7 +169,7 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
                     if get_population(cumulative_octant_census, i_octant) > 0
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
                         child_center = get_child_center(parent_branch.center, parent_branch.radius, i_octant)
-                        child_branch, n_grandchildren = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, i_parent, leaf_size, expansion_order)
+                        child_branch, n_grandchildren, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, i_parent, i_leaf, leaf_size, expansion_order)
                         i_first_branch += n_grandchildren
                         push!(branches, child_branch)
                     end
@@ -179,10 +179,10 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
     end
     n_children = i_first_branch - length(branches) - 1 # the grandchildren of branches[parents_index]
     parents_index = parents_index[end]+1:length(branches) # the parents of the next generation
-    return parents_index, n_children
+    return parents_index, n_children, i_leaf
 end
 
-function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, i_parent, leaf_size, expansion_order)
+function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, i_parent, i_leaf, leaf_size, expansion_order)
     # count bodies in each octant
     census!(octant_container, system, bodies_index, center)
 
@@ -203,15 +203,22 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
     branch_index = i_first_branch : i_first_branch + n_children - 1
     n_branches = length(branch_index)
 
-    return Branch(bodies_index, n_branches, branch_index, i_parent, center, radius, expansion_order), n_children
+    if n_branches == 0
+        i_leaf_index = i_leaf
+        i_leaf += 1
+    else
+        i_leaf_index = -1
+    end
+
+    return Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order), n_children, i_leaf
 end
 
-function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, center, radius, expansion_order)
-    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
-function Branch(bodies_index, n_branches, branch_index, i_parent, center, radius, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -689,6 +696,7 @@ end
     n_branches = branch[].n_branches
     branch_index = branch[].branch_index
     i_parent = branch[].i_parent
+    i_leaf = branch[].i_leaf
     center = branch[].center
     radius = branch[].radius
     multipole_expansion = branch[].multipole_expansion
@@ -696,7 +704,7 @@ end
     harmonics = branch[].harmonics
     ML = branch[].ML
     lock = branch[].lock
-    branch[] = TB(bodies_index, n_branches, branch_index, i_parent, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
+    branch[] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
 end
 
 function shrink_leaf!(branch, system)

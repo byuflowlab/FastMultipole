@@ -566,7 +566,7 @@ FastMultipole.M2B!(mass_target_potential, mass_target, 2, tree)
 u_fmm_67 = mass_target_potential[1]
 
 # perform horizontal pass
-m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, multipole_threshold, true, true, true)
+m2l_list, direct_list = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, true, true, true)
 FastMultipole.nearfield_singlethread!((elements,), tree, (FastMultipole.DerivativesSwitch(),), (elements,), tree, direct_list)
 FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
 
@@ -726,12 +726,15 @@ end
 
 expansion_order = 9
 Random.seed!(123)
-local_expansion = rand(2,4,55)
+local_expansion_scalar = rand(2,4,55)
+local_expansion_scalar[:,2:4,:] .= 0.0
+local_expansion_vector = rand(2,4,55)
+local_expansion_vector[:,1,:] .= 0.0
 target = SVector{3}([0.0, 0.5, 0.0])
 center = SVector{3}([0.01, 0.52, -0.03])
 
-phi_fd(x) = FastMultipole.L2B(x, center, local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order))[1]
-psi_fd(x) = FastMultipole.L2B(x, center, local_expansion, FastMultipole.DerivativesSwitch(), Val(expansion_order))[2]
+phi_fd(x) = FastMultipole.L2B(x, center, local_expansion_scalar, FastMultipole.DerivativesSwitch(), Val(expansion_order))[1]
+psi_fd(x) = FastMultipole.L2B(x, center, local_expansion_vector, FastMultipole.DerivativesSwitch(), Val(expansion_order))[2]
 
 function vector_velocity_fd(x)
 	j_psi = ForwardDiff.jacobian(psi_fd, x)
@@ -749,8 +752,8 @@ end
 scalar_velocity_gradient_fd(x) = ForwardDiff.jacobian(scalar_velocity_fd, x)
 vector_velocity_gradient_fd(x) = ForwardDiff.jacobian(vector_velocity_fd, x)
 
-_, _, scalar_velocity_check_fmm, scalar_velocity_gradient_check_fmm = FastMultipole.L2B(target, center, local_expansion, FastMultipole.DerivativesSwitch(true, false, true, true), Val(expansion_order))
-_, _, vector_velocity_check_fmm, vector_velocity_gradient_check_fmm = FastMultipole.L2B(target, center, local_expansion, FastMultipole.DerivativesSwitch(false, true, true, true), Val(expansion_order))
+_, _, scalar_velocity_check_fmm, scalar_velocity_gradient_check_fmm = FastMultipole.L2B(target, center, local_expansion_scalar, FastMultipole.DerivativesSwitch(true, false, true, true), Val(expansion_order))
+_, _, vector_velocity_check_fmm, vector_velocity_gradient_check_fmm = FastMultipole.L2B(target, center, local_expansion_vector, FastMultipole.DerivativesSwitch(false, true, true, true), Val(expansion_order))
 
 scalar_velocity_check_fd = scalar_velocity_fd(target)
 vector_velocity_check_fd = vector_velocity_fd(target)
@@ -806,11 +809,11 @@ vortexparticles.velocity_stretching .*= 0
 expansion_order = 9
 leaf_size = 1
 x_branch_1 = FastMultipole.SVector{3}([0.0,0,0])
-branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, x_branch_1, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
+branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 x_branch_2 = FastMultipole.SVector{3}(xs[:,1] .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, x_branch_2, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
+branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 x_branch_3 = FastMultipole.SVector{3}(xs[:,2] .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_3, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
+branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 
 # using FMM
 # tree = FastMultipole.Tree(branches, [expansion_order], leaf_size, B2M!, P2P!)
@@ -981,11 +984,11 @@ vortex_particles.velocity_stretching .*= 0
 expansion_order = 9
 leaf_size = 1
 x_branch_1 = SVector{3}((bodies[1:3,1] + bodies[1:3,2])/2)
-branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, x_branch_1, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
+branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 x_branch_2 = SVector{3}(bodies[1:3,1] .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, x_branch_2, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
+branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 x_branch_3 = SVector{3}(bodies[1:3,2] .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, x_branch_2, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
+branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_2, 1/8, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), FastMultipole.initialize_ML(expansion_order, Float64), ReentrantLock())
 
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)
@@ -1251,6 +1254,7 @@ branch = FastMultipole.SingleBranch(
     0,
     1:0,
     0,
+    1,
     SVector{3}(0.0,0.0,0.0) + displ,
     0.4,
     FastMultipole.initialize_expansion(P),
@@ -1434,3 +1438,21 @@ FastMultipole.fmm!((system_fmm_2, system_fmm_4), (system_fmm_1,system_fmm_3); mu
 
 end
 
+@testset "leaf index" begin
+
+n_bodies = 101
+bodies = rand(8,n_bodies)
+system = Gravitational(bodies)
+
+tree = fmm.Tree(system; leaf_size=5)
+leaf_index = tree.leaf_index
+
+i_leaf = 1
+for branch in tree.branches
+    if branch.n_branches == 0
+        @test i_leaf == branch.i_leaf
+        i_leaf += 1
+    end
+end
+
+end

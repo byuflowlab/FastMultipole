@@ -553,17 +553,19 @@ end
 #####
 ##### create interaction lists
 #####
-function build_interaction_lists(target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
+function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
+    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, sort_direct=false) where {ff,nf,si}
+    # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
+    # determine multipole criterion
     spacing = source_branch.center - target_branch.center
     center_spacing_squared = spacing[1]*spacing[1] + spacing[2]*spacing[2] + spacing[3]*spacing[3]
     summed_radii_squared = target_branch.radius + source_branch.radius
@@ -574,12 +576,30 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
         nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.radius >= source_branch.radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
     else # source is not a leaf AND target is a leaf or is smaller
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, multipole_threshold, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
+    end
+
+    sort_direct && sort_list!(direct_list, length(source_tree.leaf_index))
+end
+
+function sort_list!(direct_list, n_leaves)
+    source_counter = zeros(Int32, n_leaves)
+    place_counter = zeros(Int32, n_leaves)
+    buffer = similar(direct_list)
+
+    # tally the contributions of each source
+    for (i_target, j_source) in direct_list
+        source_counter[j_source] += 1
+    end
+
+    # place interactions
+    for interaction in direct_list
+        j_source = interaction[2]
     end
 end
 
@@ -990,7 +1010,7 @@ function fmm!(tree::Tree, systems;
     derivatives_switches = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, multipole_threshold, farfield, nearfield, self_induced)
+    m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
     influence_matrices && ( direct_list = InteractionList(direct_list, systems, tree, systems, tree, derivatives_switches) )
 
     # run fmm
@@ -1054,7 +1074,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     derivatives_switches = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, multipole_threshold, farfield, nearfield, self_induced)
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
     influence_matrices && ( direct_list = InteractionList(direct_list, target_systems, target_tree, source_systems, source_tree, derivatives_switches) )
 
     # run fmm
