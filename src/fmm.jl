@@ -1024,7 +1024,6 @@ function fmm!(tree::Tree, systems;
     multipole_threshold=0.4, reset_tree=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
-    influence_matrices=false,
     unsort_bodies=true,
     concurrent_direct=false
 )
@@ -1034,7 +1033,6 @@ function fmm!(tree::Tree, systems;
 
     # create interaction lists
     m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
-    influence_matrices && ( direct_list = InteractionList(direct_list, systems, tree, systems, tree, derivatives_switches) )
 
     # run fmm
     fmm!(tree, systems, m2l_list, direct_list, derivatives_switches;
@@ -1088,7 +1086,6 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     reset_source_tree=true, reset_target_tree=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
-    influence_matrices=false,
     unsort_source_bodies=true, unsort_target_bodies=true,
     concurrent_direct=false
 )
@@ -1098,7 +1095,6 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
     # create interaction lists
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
-    influence_matrices && ( direct_list = InteractionList(direct_list, target_systems, target_tree, source_systems, source_tree, derivatives_switches) )
 
     # run fmm
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches;
