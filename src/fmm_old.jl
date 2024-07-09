@@ -1,20 +1,38 @@
 #####
 ##### direct interactions
 #####
-function P2P!(target_system, direct_target_bodies, derivatives_switch, source_systems, direct_source_bodies::Tuple, index)
-    for (source_system, source_index) in zip(source_systems, direct_source_bodies)
-        P2P!(target_system, direct_target_bodies, derivatives_switch, source_system, source_index, index)
+function P2P!(target_system, target_indices, source_system, source_index::UnitRange, derivatives_switch)
+    _direct!(target_system, target_indices, derivatives_switch, source_system, source_index)
+end
+
+function P2P!(target_system, target_indices, source_systems, source_indices::AbstractVector{<:UnitRange}, derivatives_switch)
+    for (source_system, source_bodies_index) in zip(source_systems, source_indices)
+        _direct!(target_system, target_branch.bodies_index, derivatives_switch, source_system, source_bodies_index)
     end
 end
 
-function P2P!(target_systems, direct_target_bodies::Tuple, derivatives_switches, source_system, direct_source_bodies::Vector, index)
-    for (target_system, target_index, derivatives_switch) in zip(target_systems, direct_target_bodies, derivatives_switches)
-        P2P!(target_system, target_index, derivatives_switch, source_system, direct_source_bodies, index)
+function P2P!(target_systems, target_branch::MultiBranch, derivatives_switches, source_system, source_branch::SingleBranch)
+    for (target_system, target_bodies_index, derivatives_switch) in zip(target_systems, target_branch.bodies_index, derivatives_switches)
+        _direct!(target_system, target_bodies_index, derivatives_switch, source_system, source_branch.bodies_index)
     end
 end
 
-function P2P!(target_system, direct_target_bodies::Vector, derivatives_switch, source_system, direct_source_bodies::Vector, index)
-    _direct!(target_system, view(direct_target_bodies, index), derivatives_switch, source_system, direct_source_bodies[index[1]])
+function P2P!(target_systems, target_branch::MultiBranch, derivatives_switches, source_systems, source_branch::MultiBranch)
+    for (source_system, source_bodies_index) in zip(source_systems, source_branch.bodies_index)
+        for (target_system, target_bodies_index, derivatives_switch) in zip(target_systems, target_branch.bodies_index, derivatives_switches)
+            _direct!(target_system, target_bodies_index, derivatives_switch, source_system, source_bodies_index)
+        end
+    end
+end
+
+function P2P!(target_systems, target_branch::MultiBranch, derivatives_switches, source_system, source_bodies_index::UnitRange)
+    for (target_system, target_bodies_index, derivatives_switch) in zip(target_systems, target_branch.bodies_index, derivatives_switches)
+        _direct!(target_system, target_bodies_index, derivatives_switch, source_system, source_bodies_index)
+    end
+end
+
+function P2P!(target_system, target_branch::SingleBranch, derivatives_switch, source_system, source_bodies_index::UnitRange)
+    _direct!(target_system, target_branch.bodies_index, derivatives_switch, source_system, source_bodies_index)
 end
 
 #####
@@ -169,31 +187,19 @@ end
 #####
 ##### horizontal pass
 #####
-@inline function get_first_source_index(direct_source_bodies::Vector{<:UnitRange})
-    return direct_source_bodies
-end
-
-@inline function get_first_source_index(direct_source_bodies::Tuple)
-    return direct_source_bodies[1]
-end
-
-function nearfield_singlethread!(target_system, direct_target_bodies, derivatives_switch, source_system, direct_source_bodies)
-    first_direct_source_bodies = get_first_source_index(direct_source_bodies)
+function nearfield_singlethread!(target_system, derivatives_switch, source_system, direct_target_bodies, direct_source_bodies)
     i_start = 1
-    last_source_index = first_direct_source_bodies[1]
-    for (i,source_index) in enumerate(first_direct_source_bodies)
+    last_source_index = direct_source_bodies[1]
+    for (i,source_index) in enumerate(direct_source_bodies)
         if source_index != last_source_index # we've moved on to another source
-            # dispatch for targets
-            P2P!(target_system, direct_target_bodies, derivatives_switch, source_system, direct_source_bodies, i_start:i-1)
+            target_indices = view(direct_target_bodies, i_start:i-1)
+            P2P!(target_system, target_indices, source_system, last_source_index, derivatives_switch)
 
             # recurse
             i_start = i
             last_source_index = source_index
         end
     end
-
-    # don't forget about the last source
-    P2P!(target_system, direct_target_bodies, derivatives_switch, source_system, direct_source_bodies, i_start:length(first_direct_source_bodies))
 end
 
 function update_strengths!(strengths, source_branch::MultiBranch, source_systems::Tuple)
@@ -912,6 +918,7 @@ function fmm!(target_systems, source_systems;
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
+    influence_matrices=false,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
     save_tree=false, save_name="tree",
@@ -925,11 +932,12 @@ function fmm!(target_systems, source_systems;
     target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
-    m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
+    m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
+        influence_matrices,
         nearfield, farfield, self_induced,
         unsort_source_bodies, unsort_target_bodies,
         concurrent_direct
@@ -938,7 +946,7 @@ function fmm!(target_systems, source_systems;
     # visualize
     save_tree && (visualize(save_name, systems, tree))
 
-    return source_tree, target_tree, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches
+    return source_tree, target_tree, m2l_list, direct_list, derivatives_switches
 end
 
 """
@@ -979,6 +987,7 @@ function fmm!(systems;
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
+    influence_matrices=false,
     unsort_bodies=true, shrink_recenter=true,
     save_tree=false, save_name="tree",
     concurrent_direct=false
@@ -987,18 +996,19 @@ function fmm!(systems;
     tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
 
     # perform fmm
-    m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches = fmm!(tree, systems;
+    m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
+        influence_matrices,
         unsort_bodies, concurrent_direct
     )
 
     # visualize
     save_tree && (visualize(save_name, systems, tree))
 
-    return tree, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches
+    return tree, m2l_list, direct_list, derivatives_switches
 end
 
 """
@@ -1108,7 +1118,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     m2l_list, direct_target_bodies, direct_source_bodies = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
+    fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches;
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies, unsort_target_bodies, concurrent_direct
@@ -1221,7 +1231,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         # run FMM
         if Threads.nthreads() == 1
 
-            nearfield && nearfield_singlethread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies)
+            nearfield && nearfield_singlethread!(target_systems, derivatives_switches, source_systems, direct_target_bodies, direct_source_bodies)
             upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
             horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
             downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order)
@@ -1232,7 +1242,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
                 @sync begin
                     if nearfield && length(direct_list) > 0
-                        Threads.@spawn nearfield_singlethread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies)
+                        Threads.@spawn nearfield_singlethread!(target_systems, derivatives_switches, source_systems, direct_target_bodies, direct_source_bodies)
                     end
                     upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, concurrent_direct)
                     horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, concurrent_direct)

@@ -31,7 +31,9 @@ function Gravitational(bodies::Matrix)
     return Gravitational(bodies2,potential)
 end
 
-Base.getindex(g::Gravitational, i, ::FastMultipole.Position) = g.bodies[i].position
+function Base.getindex(g::Gravitational, i, ::FastMultipole.Position)
+    g.bodies[i].position
+end
 Base.getindex(g::Gravitational, i, ::FastMultipole.Radius) = g.bodies[i].radius
 Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.potential,2:4,i)
 Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarPotential) = g.potential[1,i]
@@ -69,26 +71,28 @@ FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(el
 
 FastMultipole.B2M!(system::Gravitational, args...) = FastMultipole.B2M!_sourcepoint(system, args...)
 
-function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_index)
+function FastMultipole.direct!(target_system, target_indices, derivatives_switch, source_system::Gravitational, source_index)
     # nbad = 0
     for i_source in source_index
         source_x, source_y, source_z = source_system[i_source,FastMultipole.POSITION]
         source_strength = source_system.bodies[i_source].strength
-        for j_target in target_index
-            target_x, target_y, target_z = target_system[j_target,FastMultipole.POSITION]
-            dx = target_x - source_x
-            dy = target_y - source_y
-            dz = target_z - source_z
-            r = sqrt(dx*dx + dy*dy + dz*dz)
-            # te = @elapsed begin
-            if r > 0
-                dϕ = source_strength / r
-                target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dϕ
-                dF = SVector{3}(dx,dy,dz) * source_strength / r^3
-                target_system[j_target,FastMultipole.VELOCITY] += dF
+        for target_index in target_indices
+            for j_target in target_index
+                target_x, target_y, target_z = target_system[j_target,FastMultipole.POSITION]
+                dx = target_x - source_x
+                dy = target_y - source_y
+                dz = target_z - source_z
+                r = sqrt(dx*dx + dy*dy + dz*dz)
+                # te = @elapsed begin
+                if r > 0
+                    dϕ = source_strength / r
+                    target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dϕ
+                    dF = SVector{3}(dx,dy,dz) * source_strength / r^3
+                    target_system[j_target,FastMultipole.VELOCITY] += dF
+                end
+            # end
+            # if te > 0.00001; nbad += 1; end
             end
-        # end
-        # if te > 0.00001; nbad += 1; end
         end
     end
     # println("nbad = $nbad")
