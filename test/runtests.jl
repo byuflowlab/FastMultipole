@@ -576,9 +576,9 @@ elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at ma
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[1]])
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[2]])
 # elements.direct!(elements.potential[i_POTENTIAL,new_order_index[2]], elements.bodies[i_POSITION,new_order_index[2]], elements.bodies[:,new_order_index[3]])
-FastMultipole.direct!(elements, (tree.branches[3].bodies_index), FastMultipole.DerivativesSwitch(), elements, tree.branches[3].bodies_index[1])
-FastMultipole.direct!(elements, (tree.branches[3].bodies_index), FastMultipole.DerivativesSwitch(), elements, tree.branches[4].bodies_index[1])
-FastMultipole.direct!(elements, (tree.branches[3].bodies_index), FastMultipole.DerivativesSwitch(), elements, tree.branches[5].bodies_index[1])
+FastMultipole.direct!(elements, tree.branches[3].bodies_index[1], FastMultipole.DerivativesSwitch(), elements, tree.branches[3].bodies_index[1])
+FastMultipole.direct!(elements, tree.branches[3].bodies_index[1], FastMultipole.DerivativesSwitch(), elements, tree.branches[4].bodies_index[1])
+FastMultipole.direct!(elements, tree.branches[3].bodies_index[1], FastMultipole.DerivativesSwitch(), elements, tree.branches[5].bodies_index[1])
 
 u_fmm_123 = elements.potential[i_POTENTIAL[1],new_order_index[2]]
 
@@ -1131,6 +1131,7 @@ function generate_gravitational(seed, n_bodies; radius_factor=0.1)
     system = Gravitational(bodies)
 end
 
+
 @testset "single/dual tree, single/multi branch" begin
 
 expansion_order, leaf_size, multipole_threshold = 14, 100, 0.31
@@ -1170,6 +1171,7 @@ end
 
 @testset "sortwrapper" begin
 
+Random.seed!(123)
 expansion_order, leaf_size, multipole_threshold = 14, 100, 0.31
 n_bodies = 5000
 shrink_recenter = true
@@ -1178,8 +1180,9 @@ validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 FastMultipole.direct!(validation_system)
 validation_potential = validation_system.potential[1,:]
 
+farfield, nearfield, self_induced = true, true, true
 system8 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!(system8; expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
+tree, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches = FastMultipole.fmm!(system8; expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield, farfield, self_induced, unsort_bodies=true)
 potential8 = system8.system.potential[1,:]
 @test isapprox(maximum(abs.(potential8 - validation_potential)), 0.0; atol=1e-9)
 

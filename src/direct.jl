@@ -61,7 +61,7 @@ Applies all interactions of `source_system` acting on `target_system` without mu
 """
 @inline function direct!(target_system, source_system; scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true)
     derivatives_switch = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
-    _direct!(target_system, (1:get_n_bodies(target_system)), derivatives_switch, source_system, 1:get_n_bodies(source_system))
+    _direct!(target_system, (1:get_n_bodies(target_system)), derivatives_switch, source_system, (1:get_n_bodies(source_system)))
 end
 
 function direct!(target_systems::Tuple, source_systems::Tuple; scalar_potential=fill(true, length(target_systems)), vector_potential=fill(true, length(target_systems)), velocity=fill(true, length(target_systems)), velocity_gradient=fill(true, length(target_systems)))
@@ -87,26 +87,40 @@ end
 #####
 ##### private methods for dispatch
 #####
-function _direct!(target_system, target_indices, derivatives_switch, source_system, source_index)
-    direct!(target_system, target_indices, derivatives_switch, source_system, source_index)
-end
-
-function _direct!(target_system, target_indices, derivatives_switch, source_system::SortWrapper, source_index)
-    for i in source_index
-        direct!(target_system, target_indices, derivatives_switch, source_system.system, source_system.index[i])
+function _direct!(target_system, target_index, derivatives_switch, source_system, source_index, ::Val{gpu}) where gpu
+    if gpu
+        direct_gpu!(target_system, target_index, derivatives_switch, source_system, source_index)
+    else
+        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
     end
 end
 
-function _direct!(target_system::SortWrapper, target_indices, derivatives_switch, source_system, source_index)
-    for target_index in target_indices
-        for i in target_index
-            direct!(target_system.system, (i:i), derivatives_switch, source_system, source_index)
+function _direct!(target_system, target_indices::AbstractVector{<:UnitRange}, derivatives_switch, source_system, source_indices::AbstractVector{<:UnitRange})
+    for (target_index, source_index) in zip(target_indices, source_indices)
+        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+    end
+end
+
+function _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+    direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+end
+
+function _direct!(target_system, target_index, derivatives_switch, source_system::SortWrapper, source_index::UnitRange)
+    for i in source_index
+        direct!(target_system, target_indices, derivatives_switch, source_system.system, source_system.index[i]:source_system.index[i])
+    end
+end
+
+function _direct!(target_system::SortWrapper, target_index::UnitRange, derivatives_switch, source_system, source_index::UnitRange)
+    for i in target_index
+        direct!(target_system.system, target_system.index[i]:target_system.index[i], derivatives_switch, source_system, source_index)
+    end
+end
+
+function _direct!(target_system::SortWrapper, target_index::UnitRange, derivatives_switch, source_system::SortWrapper, source_index::UnitRange)
+    for i in source_index
+        for j in target_index
+            direct!(target_system.system, target_system.index[j]:target_system.index[j], derivatives_switch, source_system.system, source_system.index[i]:source_system.index[i])
         end
-    end
-end
-
-function _direct!(target_system::SortWrapper, target_indices, derivatives_switch, source_system::SortWrapper, source_index)
-    for i in source_index
-        direct!(target_system, target_indices, derivatives_switch, source_system.system, source_system.index[i])
     end
 end

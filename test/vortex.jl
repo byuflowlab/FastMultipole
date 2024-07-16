@@ -103,50 +103,49 @@ end
 """
 Classical formulation so far.
 """
-function fmm.direct!(target_system, target_indices, derivatives_switch, source_system::VortexParticles, source_index)
+function fmm.direct!(target_system, target_index, derivatives_switch, source_system::VortexParticles, source_index)
     jacobian = zeros(eltype(target_system),3,4)
     hessian = zeros(eltype(target_system),3,3,4)
     for j_source in source_index
         x_source = source_system[j_source,fmm.POSITION]
-        for target_index in target_indices
-            for i_target in target_index
-                jacobian .*= 0.0
-                hessian .*= 0.0
-                x_target = target_system[i_target,fmm.POSITION]
-                dx = x_target - x_source
-                r = sqrt(dx' * dx)
-                if r > 0
-                    # calculate induced potential
-                    gamma_over_R = source_system.bodies[j_source].strength / r * ONE_OVER_4PI
-                    target_system[i_target,fmm.VECTOR_POTENTIAL] .+= gamma_over_R
+        for i_target in target_index
+            jacobian .*= 0.0
+            hessian .*= 0.0
+            x_target = target_system[i_target,fmm.POSITION]
+            dx = x_target - x_source
+            r = sqrt(dx' * dx)
+            if r > 0
+                # calculate induced potential
+                gamma_over_R = source_system.bodies[j_source].strength / r * ONE_OVER_4PI
+                target_system[i_target,fmm.VECTOR_POTENTIAL] .+= gamma_over_R
 
-                    # calculate induced jacobian
-                    # off diagonal elements are formed from the vector potential
-                    # diagonal elements are omitted (not needed?)
-                    # gamma_over_R3 = source_bodies[i_STRENGTH_vortex,j_source] / r^3
-                    gamma_over_R /= r^2
-                    for j_potential in 2:4
-                        for i_r in 1:3
-                            jacobian[i_r,j_potential] -= gamma_over_R[j_potential-1] * dx[i_r]
-                        end
+                # calculate induced jacobian
+                # off diagonal elements are formed from the vector potential
+                # diagonal elements are omitted (not needed?)
+                # gamma_over_R3 = source_bodies[i_STRENGTH_vortex,j_source] / r^3
+                gamma_over_R /= r^2
+                for j_potential in 2:4
+                    for i_r in 1:3
+                        jacobian[i_r,j_potential] -= gamma_over_R[j_potential-1] * dx[i_r]
                     end
-                    gamma_over_R /= r^2
-                    hessian[1,1,i_POTENTIAL_VECTOR] += gamma_over_R .* (2 * dx[1]^2 - dx[2]^2 - dx[3]^2) # dx2
-                    hessian[1,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
-                    hessian[1,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
-                    hessian[2,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
-                    hessian[2,2,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 + 2 * dx[2]^2 - dx[3]^2) # dy2
-                    hessian[2,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
-                    hessian[3,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
-                    hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
-                    hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
                 end
-                flatten_derivatives!(jacobian, hessian, derivatives_switch)
-
-                target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
-                target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)
+                gamma_over_R /= r^2
+                hessian[1,1,i_POTENTIAL_VECTOR] += gamma_over_R .* (2 * dx[1]^2 - dx[2]^2 - dx[3]^2) # dx2
+                hessian[1,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
+                hessian[1,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
+                hessian[2,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
+                hessian[2,2,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 + 2 * dx[2]^2 - dx[3]^2) # dy2
+                hessian[2,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
+                hessian[3,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
+                hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
+                hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
             end
+            flatten_derivatives!(jacobian, hessian, derivatives_switch)
+
+            target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
+            target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)
         end
+
     end
 end
 
