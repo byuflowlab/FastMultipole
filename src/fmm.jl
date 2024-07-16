@@ -896,7 +896,7 @@ function fmm!(target_systems, source_systems;
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
-    save_tree=false, save_name="tree",
+    save_tree=false, save_name="tree", gpu=false
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -912,7 +912,7 @@ function fmm!(target_systems, source_systems;
         reset_source_tree=false, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
-        unsort_source_bodies, unsort_target_bodies,
+        unsort_source_bodies, unsort_target_bodies, gpu
     )
 
     # visualize
@@ -960,7 +960,7 @@ function fmm!(systems;
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true, shrink_recenter=true,
-    save_tree=false, save_name="tree",
+    save_tree=false, save_name="tree", gpu=false
 )
     # create tree
     tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
@@ -971,7 +971,7 @@ function fmm!(systems;
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
-        unsort_bodies
+        unsort_bodies, gpu
     )
 
     # visualize
@@ -1014,7 +1014,7 @@ function fmm!(tree::Tree, systems;
     multipole_threshold=0.4, reset_tree=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
-    unsort_bodies=true,
+    unsort_bodies=true, gpu=false
 )
 
     # assemble derivatives switch
@@ -1027,7 +1027,7 @@ function fmm!(tree::Tree, systems;
     fmm!(tree, systems, m2l_list, direct_target_bodies, direct_source_bodies,  derivatives_switches;
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_bodies
+        unsort_bodies, gpu
     )
 
     return m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches
@@ -1076,6 +1076,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
+    gpu=false
 )
 
     # assemble derivatives switch
@@ -1088,7 +1089,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies, unsort_target_bodies
+        unsort_source_bodies, unsort_target_bodies, gpu
     )
 
     return m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches
@@ -1122,13 +1123,14 @@ Dispatches `fmm!` using an existing `::Tree`.
 function fmm!(tree::Tree, systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
     reset_tree=true,
     nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
-    unsort_bodies=true
+    unsort_bodies=true, gpu=false
 )
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false,
+        gpu
     )
 
 end
