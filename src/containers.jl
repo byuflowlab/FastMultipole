@@ -34,6 +34,15 @@ struct Strength <: Indexable end
 const STRENGTH = Strength()
 
 #####
+##### dispatch on multipole dimension method
+#####
+abstract type AbstractMethod end
+
+abstract type ScalarPlusVector <: AbstractMethod end
+
+abstract type LambHelmholtz <: AbstractMethod end
+
+#####
 ##### dispatch convenience functions for multipole creation definition
 #####
 abstract type AbstractKernel{sign} end

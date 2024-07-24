@@ -22,7 +22,7 @@ include(joinpath(test_dir, "gravitational.jl"))
 # allow expansion_order::Int to be used while testing
 FastMultipole.M2M!(branch, child, harmonics, M, expansion_order::Int) = FastMultipole.M2M!(branch, child, harmonics, M, Val(expansion_order))
 FastMultipole.M2L!(target_branch, source_branch, harmonics, L, expansion_order::Int) = FastMultipole.M2L!(target_branch, source_branch, harmonics, L, Val(expansion_order))
-FastMultipole.upward_pass_singlethread!(branches, systems, expansion_order::Int) = FastMultipole.upward_pass_singlethread!(branches, systems, Val(expansion_order))
+FastMultipole.upward_pass_singlethread!(branches, systems, expansion_order::Int) = FastMultipole.upward_pass_singlethread!(branches, systems, Val(expansion_order), FastMultipole.ScalarPlusVector)
 FastMultipole.M2L!(target_branch, source_branch, expansion_order::Int) = FastMultipole.M2L!(target_branch, source_branch, Val(expansion_order))
 
 @testset "complex" begin
@@ -568,7 +568,7 @@ u_fmm_67 = mass_target_potential[1]
 # perform horizontal pass
 m2l_list, direct_list_target, direct_list_source = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, true, true, true)
 FastMultipole.nearfield_singlethread!((elements,), direct_list_target, (FastMultipole.DerivativesSwitch(),), (elements,), direct_list_source)
-FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order)
+FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, expansion_order, FastMultipole.ScalarPlusVector)
 
 # consider the effect on branch 3 (mass 2)
 elements.potential[i_POTENTIAL,new_order_index[2]] .*= 0 # reset potential at mass 2
