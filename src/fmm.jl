@@ -28,7 +28,7 @@ end
 function get_n_interactions(target_system, target_index::Vector, source_system, source_index::Vector)
     n_interactions = 0
     for (targets, sources) in zip(target_index, source_index)
-        n_interactions += length(target_index) * length(source_index)
+        n_interactions += length(targets) * length(sources)
     end
     return n_interactions
 end
@@ -1220,7 +1220,6 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
                 downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, method)
 
             else # n_threads > 1 && !gpu
-
                 nearfield_multithread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies, n_threads)
                 upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, source_tree.expansion_order, source_tree.levels_index, source_tree.leaf_index, n_threads, method)
                 horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, n_threads, method)
