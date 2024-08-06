@@ -1,7 +1,7 @@
 # module VPM
 
 import FastMultipole as fmm
-import WriteVTK
+import FastMultipole.WriteVTK
 using SpecialFunctions:erf
 
 #####
