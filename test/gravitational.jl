@@ -1,6 +1,6 @@
 import FastMultipole
 using FastMultipole
-using WriteVTK
+using FastMultipole.WriteVTK
 import Base: getindex, setindex!
 using FastMultipole.StaticArrays
 const i_POSITION = 1:3
