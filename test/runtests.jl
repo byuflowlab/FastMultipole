@@ -11,13 +11,11 @@ using LegendrePolynomials
 using Random
 using SpecialFunctions
 
-test_dir = @__DIR__
-
 #####
 ##### define gravitational kernel and mass elements
 #####
 
-include(joinpath(test_dir, "gravitational.jl"))
+include("./gravitational.jl")
 
 # allow expansion_order::Int to be used while testing
 FastMultipole.M2M!(branch, child, harmonics, M, expansion_order::Int) = FastMultipole.M2M!(branch, child, harmonics, M, Val(expansion_order))
@@ -632,7 +630,7 @@ end
 ##### vector potential
 #####
 
-include("vortex.jl")
+include("./vortex.jl")
 
 @testset "spatial derivatives" begin
 """
