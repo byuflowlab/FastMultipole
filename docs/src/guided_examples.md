@@ -1,12 +1,10 @@
 # Guided Examples
 
-`FastMultipole` is designed to be compatible with nearly any Julia code for a wide range of scalar and/or vector potential problem satisfying Laplace's equation, with minimal effort to get things working. We'll go through the process of adding `FastMultipole` to your code in the following guided examples.
+`FastMultipole` is designed to incorporate easily into your existing Julia code with minimal effort. We'll walk through the process of adding `FastMultipole` to an existing code in the following guided examples.
 
-## Compatibility
+## Gravitational Example
 
-Prior to using `FastMultipole`, the user must set up some interface functions. In this example, we will walk through the process of defining the point mass model used in [Quick Start](@ref). This code can also be found under `test/gravitational.jl`. Note that an additional (minimalistic) vortex particle example is included in `test/vortex.jl`.
-
-### System Struct
+In order to use `FastMultipole`, certain interface functions must be defined. In this example, we will walk through the process of incorporating FMM into the gravitational point mass model used in [Quick Start](@ref). This code can also be found under `test/gravitational.jl`. Note that an additional (minimalistic) vortex particle example is included in `test/vortex.jl`.
 
 To better understand how the `FastMultipole` interface functions, let's take a look at the data structures we'll use to define our point masses:
 
@@ -44,31 +42,24 @@ Note that while the particular choice of data structures is completely arbitrary
 
 ### Overloading the `B2M!` Function
 
-The first interface function is used to create multipole expansions for our particular system, be that point masses, source panels, vortex filaments, etc. We can tell `FastMultipole` how to construct the expansions by overloading `FastMultipole.B2M!` for our `Gravitational` type.
+The function `B2M!` is used to generate multipole expansions for our particular system. This is done be overloading `B2M!` for the data structure representing our model. Convenience functions exist within `FastMultipole` to make this complicated function into a one-liner:
 
 ```@example guidedex
 FastMultipole.B2M!(system::Gravitational, args...) =
     FastMultipole.B2M!_sourcepoint(system, args...)
 ```
 
-In general, this is at best mathematically complex, and at worst computationally expensive; it is often one of the most difficult steps for integrating a fast multipole method into any code. However, convenience functions are provided in `FastMultipole` for 9 different element types, making this a one-line solution. They are implemented with the following syntax:
+Note that we are overloading `B2M!` to operate on our `::Gravitational` system. Other convenience functions exist in `FastMultipole` for:
 
-```
-FastMultipole.B2M!(system::<usersystem>, args...) =
-    FastMultipole.B2M!(<systemtype>, system, args...)
-```
+* vortex point
+* source panel
+* dipole panel
 
-`<systemtype>` can be determined with the following table.
-
-|         | Particle | Line | Panel |
-| ------- | -------- | ---- | ----- |
-| Source  | `Point{Source}` | `Line{Source}` | `Panel{Source}` |
-| Doublet | `Point{Doublet}` | `Line{Doublet}` | `Panel{Doublet}` |
-| Vortex  | `Point{Vortex}` | `Line{Vortex}` | `Panel{Vortex}` |
+with additional elements currently in development. We use the fast recursive method of generating exact coefficients for panels as developed by [GUMEROV2023112118](@cite).
 
 ### Overloading Getters
 
-The `Gravitational` struct needs the following getters to be overloaded to support the indexing format used by `FastMultipole`.
+The `Gravitational` struct needs the following getters to be overloaded to support the indexing format used by `FastMultipole`. This approach allows for great flexibility without harming performance.
 
 ```@example guidedex
 import Base: getindex
@@ -82,10 +73,11 @@ Base.getindex(g::Gravitational, i, ::FastMultipole.VelocityGradient) = reshape(v
 Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarStrength) = g.bodies[i].strength[1]
 Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = g.bodies[i], view(g.potential,:,i)
 ```
+It is worth noting that there are ways of defining these functions that would harm performance, e.g. by allocating an array each time the velocity is requested. It is up to the user to define these functions with the efficiency they desire.
 
 ### Overloading Setters
 
-`Gravitational` also needs the following setters to be overloaded as well.
+`Gravitational` also needs the following setters to be overloaded as well. These are used to update the potential and other quantities in-place. The same performance considerations that applied to getters apply here.
 
 ```@example guidedex
 import Base: setindex!
@@ -115,12 +107,17 @@ end
 In addition to the getters and setters listed above, each system struct must be overloaded with three additional methods. In `gravitational.jl`, these are they are overloaded as follows.
 
 ```@example guidedex
+# determine the number of bodies contained by the system
 FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
 
+# determine the float-type used by the system
 Base.eltype(::Gravitational{TF}) where TF = TF
 
+# return all data structures required to define a single body
 FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
 ```
+
+Note that the last of these functions, `buffer_element`, can return a tuple of values in case multiple data structures are required to define a single body.
 
 ### Non-required Functionality
 

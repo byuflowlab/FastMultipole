@@ -36,7 +36,7 @@ fmm.fmm!(target_system, source_system,
     unsort_source_bodies=false, unsort_target_bodies=false) # sorted bodies (not original indices)
 ```
 
-## Reuising the Octree
+## Reusing the Octree
 
 Users are able to define the tree to be used in the FMM by passing in a previously created tree into the `fmm!` call. For convenience, the `upward_pass`, `horizontal_pass`, and `downward_pass` can be toggled off seperately. These are important to toggle when generating octrees to be reused. Additionally, `unsort_target_bodies` and `unsort_source_bodies` should be set to `false` when generating the reusable trees.
 
@@ -52,7 +52,7 @@ target_tree, source_tree = fmm.fmm!(target_system, source_system;
     upward_pass=true, horizontal_pass=false, downward_pass=false,
     unsort_source_bodies=false, unsort_target_bodies=false) # generating trees to be reused
 
-fmm.fmm!(target_tree, target_system, source_tree, source_system; 
+fmm.fmm!(target_tree, target_system, source_tree, source_system;
     upward_pass=false, horizontal_pass=true, downward_pass=true) # reusing trees
 ```
 
@@ -66,9 +66,9 @@ The `nearfield`, `farfield`, and `self_induced` parameters allow users to bypass
 
 ```@example advanced
 system = generate_gravitational(123, 100)
-fmm.fmm!(system, 
+fmm.fmm!(system,
     nearfield=true, farfield=true, self_induced=true) # standard run (defaults)
-fmm.fmm!(system, 
+fmm.fmm!(system,
     nearfield=false, farfield=true, self_induced=true) # nearfield not evaluated
 ```
 
