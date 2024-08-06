@@ -70,7 +70,7 @@ Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.pot
 Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarPotential) = g.potential[1,i]
 Base.getindex(g::Gravitational, i, ::FastMultipole.Velocity) = view(g.potential,i_VELOCITY,i)
 Base.getindex(g::Gravitational, i, ::FastMultipole.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
-Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarStrength) = g.bodies[i].strength[1]
+Base.getindex(g::Gravitational, i, ::FastMultipole.Strength) = g.bodies[i].strength[1]
 Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = g.bodies[i], view(g.potential,:,i)
 ```
 It is worth noting that there are ways of defining these functions that would harm performance, e.g. by allocating an array each time the velocity is requested. It is up to the user to define these functions with the efficiency they desire.
@@ -285,7 +285,7 @@ A given `fmm!` call will typically return a single tree (if performed on the ent
 target_filepath = "target_tree"
 source_filepath = "source_tree"
 
-target_tree, source_tree = fmm.fmm!((target_one, target_two), source_one,
+target_tree, source_tree = fmm.fmm!((target_one, target_two), source_one;
     save_tree_target=true, save_name_target=target_filepath,
     save_tree_source=true, save_name_source=source_filepath)
 ```

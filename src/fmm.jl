@@ -885,18 +885,20 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for the `target_systems`
 - `source_shink_recenter::Bool`: indicates whether or not to resize branches for the `source_systems` octree after it is created to increase computational efficiency
 - `target_shink_recenter::Bool`: indicates whether or not to resize branches for the `target_systems` octree after it is created to increase computational efficiency
-- `save_tree::Bool`: indicates whether or not to save a VTK file for visualizing the octree
-- `save_name::String`: name and path of the octree visualization if `save_tree == true`
+- `save_tree_source::Bool`: indicates whether or not to save a VTK file for visualizing the source octree
+- `save_tree_target::Bool`: indicates whether or not to save a VTK file for visualizing the target octree
+- `save_name_source::String`: name and path of the source octree visualization if `save_tree == true`
+- `save_name_target::String`: name and path of the target octree visualization if `save_tree == true`
 
 """
 function fmm!(target_systems, source_systems;
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter=true, target_shrink_recenter=true,
-    save_tree=false, save_name="tree", gpu=false, method=ScalarPlusVector
+    save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree", gpu=false, method=ScalarPlusVector
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -916,7 +918,8 @@ function fmm!(target_systems, source_systems;
     )
 
     # visualize
-    save_tree && (visualize(save_name, systems, tree))
+    save_tree_source && (visualize(save_name_source, source_systems, source_tree))
+    save_tree_target && (visualize(save_name_target, target_systems, target_tree))
 
     return source_tree, target_tree, m2l_list, direct_list, derivatives_switches
 end
@@ -952,11 +955,12 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 - `shink_recenter::Bool`: indicates whether or not to resize branches for the octree after it is created to increase computational efficiency
 - `save_tree::Bool`: indicates whether or not to save a VTK file for visualizing the octree
 - `save_name::String`: name and path of the octree visualization if `save_tree == true`
+- `gpu::Bool`: indicates whether or not GPU is to be used for direct interactions
 
 """
 function fmm!(systems;
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true, shrink_recenter=true,
@@ -1007,11 +1011,12 @@ Dispatches `fmm!` using an existing `::Tree`.
 - `farfield::Bool`: indicates whether far-field (computed with multipoles) interactions should be included in the m2l_list
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
 - `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
+- `gpu::Bool`: indicates whether or not GPU is to be used for direct interactions
 
 """
 function fmm!(tree::Tree, systems;
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     multipole_threshold=0.4, reset_tree=true,
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
     unsort_bodies=true, gpu=false, method=ScalarPlusVector
@@ -1059,6 +1064,8 @@ Dispatches `fmm!` using existing `::Tree` objects.
 - `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `reset_source_tree::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(source_systems)` indicating whether or not to reset the expansions of each source tree
+- `reset_target_tree::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(source_systems)` indicating whether or not to reset the expansions of each target tree
 - `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
 - `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
 - `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
@@ -1067,11 +1074,12 @@ Dispatches `fmm!` using existing `::Tree` objects.
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
 - `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `source_systems`
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
+- `gpu::Bool`: indicates whether or not GPU is to be used for direct interactions
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     multipole_threshold=0.4,
+    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
     reset_source_tree=true, reset_target_tree=true,
     upward_pass=true, horizontal_pass=true, downward_pass=true,
     nearfield=true, farfield=true, self_induced=true,
