@@ -1251,5 +1251,4 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     n_sources > 0 && unsort_source_bodies && unsort!(source_systems, source_tree)
     n_targets > 0 && unsort_target_bodies && unsort!(target_systems, target_tree)
 
-    println("Yes.")
 end
