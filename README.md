@@ -1,6 +1,7 @@
 # FastMultipole.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://flow.byu.edu/FastMultipole)
+![](https://github.com/byuflowlab/CCBlade.jl/workflows/Run%20tests/badge.svg)
 
 *A fast, multi-system, multi-kernel, differentiable implementation of the fast multipole method for use with scalar-plus-vector potential N-body problems in pure Julia.*
 
