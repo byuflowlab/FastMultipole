@@ -1,20 +1,30 @@
-# FastMultipole.jl
-
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://flow.byu.edu/FastMultipole)
-![](https://github.com/byuflowlab/CCBlade.jl/workflows/Run%20tests/badge.svg)
+# FastMultipole
 
 *A fast, multi-system, multi-kernel, differentiable implementation of the fast multipole method for use with scalar-plus-vector potential N-body problems in pure Julia.*
 
-Authors: Ryan Anderson and contributors
+Author: Ryan Anderson
 
 Features:
 
-* Laplace $1/r$ kernel
-* meant to incorporate seamlessly into existing Julia code without modifications (only additions to define a few interface functions)
-* convenience functions for determining the expansion coefficients for source points, vortex points, source panels, and dipole panels (this list is growing!)
-* $\mathcal{O}(p^4)$ multipole-to-local translation operator (where ```math p``` is the expansion order), though this may improve in the near future
-* velocity and velocity gradient (or their equivalent for non-fluids problems) obtained using analytic expressions (no finite difference)
-* CPU-parallelization for expansions and direct interactions
-* GPU-parallelization for direct interactions using `CUDA.jl`
-* `ForwardDiff` and `ReverseDiff` compatible
+* solves ``N``-body problems governed by the Laplace (``1/r``) kernel, with work planned to support the Helmholtz kernel in the future
+* incorporates seamlessly into existing Julia code without modifications (just the addition of a few interface functions)
+* offers convenience functions for determining the expansion coefficients for source points, vortex points, source panels, and dipole panels (this list is growing!)
+* provides velocity and velocity gradient (or their equivalent for non-fluids problems) obtained using analytic expressions (no finite difference)
+* uses ``\\mathcal{O}(p^4)`` multipole-to-local translation operator (where ``p`` is the expansion order), though this may improve in the near future
+* automated CPU-parallelization of expansions and direct interactions
+* supports GPU-parallelization of direct interactions using [CUDA](https://github.com/JuliaGPU/CUDA.jl)
+* [ForwardDiff](https://github.com/JuliaDiff/ForwardDiff.jl) and [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl) compatible
+
+Installation:
+
+```julia
+pkg> add https://github.com/byuflowlab/FastMultipole.git
+```
+
+Documentation:
+
+* learn basic useage in the [Quick Start](quickstart.md) tutorial
+* discover more features in the [Guided Examples](guided_examples.md)
+* fine-tune performance in the [Advanced Usage](advanced_usage.md) section (for FMM experts)
+* brush up on the [theory](theory.md)
 

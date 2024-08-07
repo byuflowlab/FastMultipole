@@ -86,7 +86,3 @@ fmm.fmm!(target_system, source_system,
     source_shrink_recenter=false, target_shrink_recenter=false) # no branch recentering
 ```
 
-## References
-
-```@bibliography
-```

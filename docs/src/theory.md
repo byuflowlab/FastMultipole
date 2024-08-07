@@ -15,3 +15,8 @@ Local expansions are very similar to multipole expansions, but they converge ins
 ```
 
 More details of the fast multipole method (FMM) can be found in the original work by Greengard and Rokhlin.[greengard1987fast](@cite)
+
+## References
+
+```@bibliography
+```

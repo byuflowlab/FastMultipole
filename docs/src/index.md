@@ -1,4 +1,17 @@
 # FastMultipole
 
-[FastMultipole](https://github.com/byuflowlab/FastMultipole) is a highly performant, CPU parallelized, pure julia fast multipole code suitable for accelerating large ``N``-body problems in scalar and or vector potentials with a wide range of applications, including astronomy, electro-magnetism, and fluid-dynamics. Fast, analytic, recursive expressions are used to compute first and second derivatives of the potential (i.e., velocity and velocity gradient for fluid dynamics). The code is compatible with [`ForwardDiff`](https://github.com/JuliaDiff/ForwardDiff.jl) and [`ReverseDiff`](https://github.com/JuliaDiff/ReverseDiff.jl) algorithmic differentiation for gradient-based design optimization. Its elegant interface makes it extremely easy to incorporate into existing Julia code with minimal modification. Convenience functions are provided for generating the expansions of source and vortex points and constant source and doublet panels, with more support planned for the future. It currently only provides expansions that obey Laplace's equation, though this may change soon.
+*A fast, multi-system, multi-kernel, differentiable implementation of the fast multipole method for use with scalar-plus-vector potential N-body problems in pure Julia.*
+
+Author: Ryan Anderson
+
+Features:
+
+* solves ``N``-body problems governed by the Laplace (``1/r``) kernel, with work planned to support the Helmholtz kernel in the future
+* incorporates seamlessly into existing Julia code without modifications (just the addition of a few interface functions)
+* offers convenience functions for determining the expansion coefficients for source points, vortex points, source panels, and dipole panels (this list is growing!)
+* provides velocity and velocity gradient (or their equivalent for non-fluids problems) obtained using analytic expressions (no finite difference)
+* uses ``\\mathcal{O}(p^4)`` multipole-to-local translation operator (where ``p`` is the expansion order), though this may improve in the near future
+* automated CPU-parallelization of expansions and direct interactions
+* supports GPU-parallelization of direct interactions using [CUDA](https://github.com/JuliaGPU/CUDA.jl)
+* [ForwardDiff](https://github.com/JuliaDiff/ForwardDiff.jl) and [ReverseDiff](https://github.com/JuliaDiff/ReverseDiff.jl) compatible
 
