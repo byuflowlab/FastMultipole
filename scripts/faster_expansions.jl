@@ -1,0 +1,23 @@
+using FastMultipole
+
+include("../test/gravitational.jl")
+include("simple_gravitational.jl")
+
+for expansion_order in 6:10
+    println("\n\n#=== p=$expansion_order ===#")
+    multipole_threshold = 0.4
+    n_bodies = 1000000
+    leaf_size = 50
+    sys = generate_gravitational(123, n_bodies; radius_factor=0)
+    tree = Tree(sys; expansion_order, leaf_size, shrink_recenter=false)
+
+    # upward pass
+    FastMultipole.upward_pass_singlethread!(tree.branches, sys, tree.expansion_order, FastMultipole.ScalarPlusVector)
+
+    # horizontal pass, existing functions
+    farfield, nearfield, self_induced = true, true, true
+    m2l_list, direct_target_bodies, direct_source_bodies = FastMultipole.build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
+
+    @time FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, tree.expansion_order, FastMultipole.ScalarPlusVector)
+
+end
