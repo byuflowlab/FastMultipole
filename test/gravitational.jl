@@ -69,7 +69,7 @@ Base.eltype(::Gravitational{TF}) where TF = TF
 
 FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
 
-FastMultipole.B2M!(system::Gravitational, args...) = FastMultipole.B2M!_sourcepoint(system, args...)
+FastMultipole.body_to_multipole!(system::Gravitational, args...) = FastMultipole.body_to_multipole!(Point{Source{1}}, system, args...)
 
 function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_index)
     # nbad = 0

@@ -1,9 +1,21 @@
+#------- multipole generation function -------#
+
+@inline function body_to_multipole!(branch, system, harmonics, expansion_order)
+    body_to_multipole!(system, branch, branch.bodies_index, harmonics, expansion_order)
+end
+
+function body_to_multipole!(branch, systems::Tuple, harmonics, expansion_order)
+    # iterate over systems
+    for (system,bodies_index) in zip(systems, branch.bodies_index)
+        body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
+    end
+end
 
 #------- multipole generation convenience functions -------#
 
 #--- point elements ---#
 
-@inline function B2M!(element::Type{<:Point}, system, branch, bodies_index, harmonics, expansion_order::Val{P}) where P
+@inline function body_to_multipole!(element::Type{<:Point}, system, branch, bodies_index, harmonics, expansion_order::Val)
 
     c_x, c_y, c_z = branch.center
     multipole_coefficients = branch.multipole_expansion
@@ -12,31 +24,30 @@
         x = b_x - c_x
         y = b_y - c_y
         z = b_z - c_z
-        r, theta, phi = cartesian_2_spherical(x,y,z)
-        regular_harmonic!(harmonics, r, theta, -phi, P) # Ylm^* -> -dx[3]
+        r, theta, phi = cartesian_to_spherical(x,y,z)
+        regular_harmonics!(harmonics, r, theta, phi, expansion_order) # Ylm^* -> -dx[3]
 
         # update values
-        B2M_point!(element, multipole_coefficients, harmonics, system, i_body, expansion_order)
+        body_to_multipole_point!(element, multipole_coefficients, harmonics, system, i_body, expansion_order)
     end
 
 end
 
-@inline function B2M_point!(element, multipole_coefficients, harmonics, system, i_body, expansion_order) where scale
+@inline function body_to_multipole_point!(::Type{Point{Source{scale}}}, multipole_coefficients, harmonics, system, i_body, expansion_order::Val{P}) where {scale,P}
     multipole_coefficients = view(multipole_coefficients,:,1,:)
     q = system[i_body, STRENGTH]
-    B2M_point!(element, multipole_coefficients, harmonics, q, expansion_order)
-end
-
-@inline function B2M_point!(::Type{Point{Source{scale}}}, multipole_coefficients, harmonics, q, expansion_order::Val{P}) where {scale,P}
-    multipole_coefficients = view(multipole_coefficients,:,1,:)
     q *= scale
-    for l in 0:P
-        for m in 0:l
-            i_solid_harmonic = l*l + l + m + 1
-            i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
-            multipole_coefficients[1,i_compressed] += harmonics[1,i_solid_harmonic] * q
-            multipole_coefficients[2,i_compressed] += harmonics[2,i_solid_harmonic] * q
+    _1_n = 1
+    for n in 0:P
+        _1_n_m = _1_n
+        for m in 0:n
+            _q = _1_n_m * q
+            i = harmonic_index(n,m)
+            multipole_coefficients[1,i] += harmonics[1,i] * _q
+            multipole_coefficients[2,i] -= harmonics[2,i] * _q # Rnm*
+            _1_n_m *= -1
         end
+        _1_n *= -1
     end
 end
 

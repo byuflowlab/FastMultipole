@@ -1,4 +1,22 @@
-# overload for SortWrapper
+"""
+    SortWrapper(system)
+
+Convenience wrapper for systems whose elements cannot be sorted in-place (e.g. structured grids). The resulting object is treated like any other `system`.
+"""
+function SortWrapper(system)
+    return SortWrapper(system,collect(1:get_n_bodies(system)))
+end
+
+@inline wrap_duplicates(target_systems::Tuple, source_systems::Tuple) = Tuple(target_system in source_systems ? SortWrapper(target_system) : target_system for target_system in target_systems)
+
+@inline wrap_duplicates(target_system, source_system) = target_system == source_system ? SortWrapper(target_system) : target_system
+
+@inline wrap_duplicates(target_system, source_systems::Tuple) = target_system in source_systems ? SortWrapper(target_system) : target_system
+
+@inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
+
+
+# access functions for SortWrapper
 get_n_bodies(sys::SortWrapper) = get_n_bodies(sys.system)
 
 Base.setindex!(sys::SortWrapper,val,i) = setindex!(sys.system,val,sys.index[i])
@@ -19,5 +37,5 @@ Base.getindex(sys::SortWrapper, i, parameter::Vertex, i_vertex) = Base.getindex(
 
 Base.eltype(sys::SortWrapper) = Base.eltype(sys.system)
 
-B2M!(system::SortWrapper, branch, bodies_index, harmonics, expansion_order) =
-    B2M!(system.system, branch, system.index[bodies_index], harmonics, expansion_order)
+body_to_multipole!(system::SortWrapper, branch, bodies_index, harmonics, expansion_order) =
+    body_to_multipole!(system.system, branch, system.index[bodies_index], harmonics, expansion_order)

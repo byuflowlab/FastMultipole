@@ -98,9 +98,9 @@ function irregular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
         p = x * (2 * m + 1) * p1
         rhom *= invR
         rhon = rhom
-        for l=m+1:P
-            npm = l * l + l + m + 1
-            nmm = l * l + l - m + 1
+        for n=m+1:P
+            npm = n * n + n + m + 1
+            nmm = n * n + n - m + 1
             # npm_max = P^2 + P + P + 1 = (P+1)^2
             #harmonics[npm] = rhon * p * eim
             harmonics[1,npm] = rhon * p * eim[1]
@@ -110,8 +110,8 @@ function irregular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
             harmonics[2,nmm] = -harmonics[2,npm]
             p2 = p1
             p1 = p
-            p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
-            rhon *= invR * (l - m + 1)
+            p = (x * (2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1)
+            rhon *= invR * (n - m + 1)
         end
         pl = -pl * fact * y
         fact += 2
@@ -120,14 +120,36 @@ function irregular_harmonic!(harmonics, rho, theta, phi::TF, P) where TF
     end
 end
 
-@inline function B2M!(branch, system, harmonics, expansion_order)
-    B2M!(system, branch, branch.bodies_index, harmonics, expansion_order)
-end
+function M2B!(system, bodies_index, multipole_weights, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order, expansion_center) where {PS,VPS,VS,GS}
+    for i_body in bodies_index
+		scalar_potential, vector_potential, velocity, gradient = M2B(system[i_body,POSITION], expansion_center, multipole_weights, derivatives_switch, expansion_order)
 
-function B2M!(branch, systems::Tuple, harmonics, expansion_order)
-    # iterate over systems
-    for (system,bodies_index) in zip(systems, branch.bodies_index)
-        B2M!(system, branch, bodies_index, harmonics, expansion_order)
+        if PS
+            system[i_body,SCALAR_POTENTIAL] += scalar_potential
+        end
+        if VPS
+            vpx, vpy, vpz = system[i_body,VECTOR_POTENTIAL]
+            system[i_body,VECTOR_POTENTIAL] = SVector{3}(vpx+vector_potential[1],vpy+vector_potential[2],vpz+vector_potential[3])
+        end
+        if VS
+            vpx, vpy, vpz = system[i_body,VELOCITY]
+			system[i_body,VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
+        end
+        if GS
+            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
+            system[i_body,VELOCITY_GRADIENT] = SMatrix{3,3}(
+                gradient[1] + v1,
+                gradient[2] + v2,
+                gradient[3] + v3,
+                gradient[4] + v4,
+                gradient[5] + v5,
+                gradient[6] + v6,
+                gradient[7] + v7,
+                gradient[8] + v8,
+                gradient[9] + v9
+            )
+        end
+
     end
 end
 

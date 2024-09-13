@@ -98,7 +98,7 @@ Base.eltype(::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}) where TF = TF
 
 buffer_element(probe_system::ProbeSystem) = probe_system.position[1], get_scalar_potential(probe_system,1), get_vector_potential(probe_system,1), get_velocity(probe_system,1), get_velocity_gradient(probe_system,1)
 
-B2M!(system::ProbeSystem, args...) = nothing
+body_to_multipole!(system::ProbeSystem, args...) = nothing
 
 direct!(target_system, target_index, source_system::ProbeSystem, source_index) = nothing
 
