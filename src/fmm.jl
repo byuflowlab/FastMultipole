@@ -115,9 +115,8 @@ function nearfield_multithread!(target_system, target_index, derivatives_switch,
     end
 end
 
-#####
-##### upward pass
-#####
+#------- UPWARD PASS -------#
+
 function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
 
     # try preallocating one container to be reused
@@ -434,22 +433,27 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
     return nothing
 end
 
-#####
-##### downward pass
-#####
+#------- DOWNWARD PASS -------#
+
 function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}, n_threads) where P
     containers = [preallocate_l2b(float_type, expansion_type, expansion_order) for _ in 1:n_threads]
     return containers
 end
 
 function downward_pass_singlethread!(branches, systems, derivatives_switches, expansion_order::Val{P}) where P
-    regular_harmonics = zeros(eltype(branches[1].multipole_expansion), 2, (P+1)*(P+1))
+    # try preallocating one container to be reused
+    Ts = zeros(length_Ts(P))
+    eimϕs = zeros(2, P+1)
+    weights_tmp_1 = initialize_expansion(P, eltype(branches))
+    weights_tmp_2 = initialize_expansion(P, eltype(branches))
+
+    # loop over branches
     for branch in branches
         if branch.n_branches == 0 # leaf level
-			L2B!(systems, branch, derivatives_switches, expansion_order)
+            evaluate_local!(systems, branch, derivatives_switches, expansion_order)
         else
-            for child_branch in view(branches,branch.branch_index)
-                L2L!(branch, child_branch, regular_harmonics, branch.ML, expansion_order)
+            for i_child_branch in branch.branch_index
+                local_to_local!(branch, branches[i_child_branch], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order)
             end
         end
     end
