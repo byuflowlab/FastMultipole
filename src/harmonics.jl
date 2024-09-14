@@ -14,7 +14,8 @@ end
     x2y2 = x^2 + y^2
     r2 = x2y2 + z^2
     r = iszero(r2) ? r2 : sqrt(r2)
-    theta = iszero(r) ? zero(r) : (abs(z / r) == 1 ? pi*one(eltype(z/r)) : acos(z / r))
+    z_r = z/r
+    theta = iszero(r) ? zero(r) : (abs(z_r) == 1 ? pi*one(eltype(z_r)) : acos(z_r))
     phi = iszero(x2y2) ? zero(x2y2) : atan(y, x)
     return r, theta, phi
 end

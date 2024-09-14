@@ -182,7 +182,8 @@ function length_Ts(expansion_order)
 end
 
 function length_T(n)
-    return (n+1)^2
+    np1 = n+1
+    return np1*np1
 end
 
 function get_T(Ts, n)
@@ -196,7 +197,7 @@ function get_T(Ts, n)
 end
 
 @inline function T_index(mp, m)
-    return m^2 + mp + m + 1
+    return m*m + mp + m + 1
 end
 
 @inline function get_scalar(m_mp)
@@ -208,7 +209,7 @@ end
     end
 end
 
-function update_Ts!(Ts, Hs_π2, β, ::Val{expansion_order}) where expansion_order
+function update_Ts!(Ts, Hs_π2, β::TF, ::Val{expansion_order}) where {TF,expansion_order}
     p = expansion_order
 
     # initialize recursive indices
@@ -219,7 +220,7 @@ function update_Ts!(Ts, Hs_π2, β, ::Val{expansion_order}) where expansion_orde
 
     # other recursive values
     sβ, cβ = sincos(β)
-    _1_n = -1
+    _1_n = -1.0
 
     # rotate each expansion order
     Ts[1] = one(eltype(Ts))
@@ -261,9 +262,9 @@ function update_Ts!(Ts, Hs_π2, β, ::Val{expansion_order}) where expansion_orde
                     H_π2_n_m_ν = H_π2[H_index(i,j)]
 
                     # leverage symmetry to compute p/m mp
-                    val = H_π2_n_mp_ν * H_π2_n_m_ν * sc_νβ_m_mp
+                    val = H_π2_n_mp_ν * H_π2_n_m_ν * sc_νβ_m_mp #
                     val_positive_mp += val
-                    val_negative_mp += val * _1_n_mp_ν * _1_mp_odd
+                    val_negative_mp += val * _1_n_mp_ν * _1_mp_odd #
 
                     # recurse
                     c_νm1_β = c_νβ
@@ -276,7 +277,7 @@ function update_Ts!(Ts, Hs_π2, β, ::Val{expansion_order}) where expansion_orde
                 scalar = m_mp_even ? scalar : 0.0
                 val = H_π2_n_m_0 * H_π2_n_mp_0 * scalar
                 val_positive_mp += val
-                val_negative_mp += val * _1_n_mp * _1_mp_odd
+                val_negative_mp += val * _1_n_mp * _1_mp_odd #
                 T[T_index(mp,m)] = val_positive_mp
                 T[T_index(-mp,m)] = val_negative_mp
 
@@ -320,7 +321,7 @@ function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, expansion_order:
 end
 
 """
-Assumes eimϕs have already been computed.
+Assumes eimϕs have already been computed. DOES NOT overwrite rotated weights (unlike other rotate functions); rather, accumulates on top of it.
 """
 function back_rotate_z!(rotated_weights, source_weights, eimϕs, expansion_order::Val{P}) where P
     i_weight = 1
@@ -328,8 +329,8 @@ function back_rotate_z!(rotated_weights, source_weights, eimϕs, expansion_order
         for m in 0:n
             eimϕ_real, eimϕ_imag = eimϕs[1,m+1], -eimϕs[2,m+1]
             Xnm_real, Xnm_imag = source_weights[1,1,i_weight], source_weights[2,1,i_weight]
-            rotated_weights[1,1,i_weight] = Xnm_real * eimϕ_real - Xnm_imag * eimϕ_imag
-            rotated_weights[2,1,i_weight] = Xnm_real * eimϕ_imag + Xnm_imag * eimϕ_real
+            rotated_weights[1,1,i_weight] += Xnm_real * eimϕ_real - Xnm_imag * eimϕ_imag
+            rotated_weights[2,1,i_weight] += Xnm_real * eimϕ_imag + Xnm_imag * eimϕ_real
 
             # increment index
             i_weight += 1
@@ -418,28 +419,34 @@ end
 
 #--- functions to actually rotate ---#
 
-function _rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, ::Val{expansion_order}) where expansion_order
+function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, ::Val{expansion_order}) where expansion_order
     # reset container
     rotated_weights .= zero(eltype(rotated_weights))
 
     # rotate each order
-    for n in 0:expansion_order
-        T = get_T(Ts, n)
-        ζ = get_ζ(ζs_mag, n)
-        i_ζ = 0
-
+    i_ζ = 0
+    i_T = 0
+    #println("=== START ===")
+    @inbounds for n in 0:expansion_order
+        #println("== n=$n ==")
         for m in 0:n
+            #println("= m=$m =")
             val_real = zero(eltype(Ts))
             val_imag = zero(eltype(Ts))
             i_ζ += n+1
             i_ζ_mp = i_ζ
 
-            for mp in -n:-m-1 # -n <= mp < m
+            for mp in -n:-m-1 # -n <= mp < -m
+                #println("\tm'=$mp")
                 # T_n^{m',m} = T_n^{m,m'} = T_n^{-m,-m'}
-                T_mp_m = T[T_index(-m,-mp)] # should always be real
+                # @inline function T_index(mp, m)
+                #     return m*m + mp + m + 1
+                # end
+                T_mp_m = Ts[i_T + T_index(-m,-mp)] # should always be real
+                #@show T_index(-m,-mp)
 
                 # ζ_n^{m',m} = β_n^{m'} / β_n^m
-                ζ_real, ζ_imag = ζ_sign(ζ[i_ζ_mp] * T_mp_m, mp, m)
+                ζ_real, ζ_imag = ζ_sign(ζs_mag[i_ζ_mp] * T_mp_m, mp, m)
 
                 # current weights
                 i_weight = harmonic_index(n, -mp)
@@ -460,10 +467,14 @@ function _rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_m
             end
 
             for mp in -m:0 # -m <= mp <= 0
-                T_mp_m = T[T_index(mp,m)]
+                #println("\tm'=$mp")
+                i1, i2 = minmax(mp,m)
+                T_mp_m = Ts[i_T + T_index(i1,i2)]
+                # T_mp_m = T[T_index(mp,m)]
+                #@show T_index(mp,m)
 
                 # ζ_n^{m',m} = β_n^{m'} / β_n^m
-                ζ_real, ζ_imag = ζ_sign(ζ[i_ζ_mp] * T_mp_m, mp, m)
+                ζ_real, ζ_imag = ζ_sign(ζs_mag[i_ζ_mp] * T_mp_m, mp, m)
 
                 # current weights
                 i_weight = harmonic_index(n, -mp)
@@ -486,30 +497,15 @@ function _rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_m
             # augment index back to m'=1
             i_ζ_mp += 2
 
-            for mp in 1:m # 0 < mp <= m
-                T_mp_m = T[T_index(mp,m)]
+            #for mp in 1:m # 0 < mp <= m
+            for mp in 1:n # mp > 0
+                # T_mp_m = T[T_index(mp,m)]
+                i1, i2 = minmax(mp,m)
+                T_mp_m = Ts[i_T + T_index(i1,i2)]
+                #@show T_index(mp,m)
 
                 # ζ_n^{m',m} = β_n^{m'} / β_n^m
-                ζ_real, ζ_imag = ζ_sign(ζ[i_ζ_mp] * T_mp_m, mp, m)
-
-                # current weights
-                i_weight = harmonic_index(n, mp)
-                M_n_mp_real, M_n_mp_imag = source_weights[1,1,i_weight], source_weights[2,1,i_weight]
-
-                # sum contribution
-                val_real += M_n_mp_real * ζ_real - M_n_mp_imag * ζ_imag
-                val_imag += M_n_mp_real * ζ_imag + M_n_mp_imag * ζ_real
-
-                # increment index
-                i_ζ_mp += 1
-            end
-
-            for mp in m+1:n # m < mp <= n
-                # T_n^{m',m} = T_n^{m,m'}
-                T_mp_m = T[T_index(m,mp)]
-
-                # ζ_n^{m',m} = β_n^{m'} / β_n^m
-                ζ_real, ζ_imag = ζ_sign(ζ[i_ζ_mp] * T_mp_m, mp, m)
+                ζ_real, ζ_imag = ζ_sign(ζs_mag[i_ζ_mp] * T_mp_m, mp, m)
 
                 # current weights
                 i_weight = harmonic_index(n, mp)
@@ -528,6 +524,10 @@ function _rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_m
             rotated_weights[1,1,i] += val_real
             rotated_weights[2,1,i] += val_imag
         end
+
+        # next T matrix
+        np1 = n+1
+        i_T += np1*np1
     end
 end
 
@@ -539,14 +539,14 @@ function rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_ma
     update_Ts!(Ts, Hs_π2, θ, expansion_order)
 
     # perform rotation
-    _rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, expansion_order)
+    _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, expansion_order)
 end
 
 """
 Assumes Ts, Hs_π2, and ζs_mag have all been precomputed. Resets target_weights.
 """
-function back_rotate_multipole_y!(target_weights, rotated_weights, Ts, Hs_π2, ζs_mag, expansion_order)
-    _rotate_multipole_y!(target_weights, rotated_weights, Ts, Hs_π2, ζs_mag, expansion_order)
+function back_rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, expansion_order)
+    _rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, expansion_order)
 end
 
 #------- LOCAL ROTATIONS -------#
@@ -634,11 +634,10 @@ function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, 
     # reset container
     rotated_weights .= zero(eltype(rotated_weights))
 
+    i_η = 0
+    i_T = 0
     # rotate each order
-    for n in 0:expansion_order
-        T = get_T(Ts, n)
-        η = get_η(ηs_mag, n)
-        i_η = 0
+    @inbounds for n in 0:expansion_order
 
         for m in 0:n
             val_real = zero(eltype(Ts))
@@ -648,10 +647,10 @@ function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, 
 
             for mp in -n:-m-1 # -n <= mp < m
                 # T_n^{m',m} = T_n^{m,m'} = T_n^{-m,-m'}
-                T_mp_m = T[T_index(-m,-mp)] # should always be real
+                T_mp_m = Ts[i_T + T_index(-m,-mp)] # should always be real
 
                 # η_n^{m',m} = β_n^{m'} / β_n^m
-                η_real, η_imag = η_sign(η[i_η_mp] * T_mp_m, mp, m)
+                η_real, η_imag = η_sign(ηs_mag[i_η_mp] * T_mp_m, mp, m)
 
                 # current weights
                 i_weight = harmonic_index(n, -mp)
@@ -672,10 +671,10 @@ function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, 
             end
 
             for mp in -m:0 # -m <= mp <= 0
-                T_mp_m = T[T_index(mp,m)]
+                T_mp_m = Ts[i_T + T_index(mp,m)]
 
                 # η_n^{m',m} = β_n^{m'} / β_n^m
-                η_real, η_imag = η_sign(η[i_η_mp] * T_mp_m, mp, m)
+                η_real, η_imag = η_sign(ηs_mag[i_η_mp] * T_mp_m, mp, m)
 
                 # current weights
                 i_weight = harmonic_index(n, -mp)
@@ -698,30 +697,13 @@ function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, 
             # augment index back to m'=1
             i_η_mp += 2
 
-            for mp in 1:m # 0 < mp <= m
-                T_mp_m = T[T_index(mp,m)]
-
-                # η_n^{m',m} = β_n^{m'} / β_n^m
-                η_real, η_imag = η_sign(η[i_η_mp] * T_mp_m, mp, m)
-
-                # current weights
-                i_weight = harmonic_index(n, mp)
-                M_n_mp_real, M_n_mp_imag = source_weights[1,1,i_weight], source_weights[2,1,i_weight]
-
-                # sum contribution
-                val_real += M_n_mp_real * η_real - M_n_mp_imag * η_imag
-                val_imag += M_n_mp_real * η_imag + M_n_mp_imag * η_real
-
-                # increment index
-                i_η_mp += 1
-            end
-
-            for mp in m+1:n # m < mp <= n
+            for mp in 1:n # m < mp <= n
                 # T_n^{m',m} = T_n^{m,m'}
-                T_mp_m = T[T_index(m,mp)]
+                i1, i2 = minmax(mp,m)
+                T_mp_m = Ts[i_T + T_index(i1,i2)]
 
                 # η_n^{m',m} = β_n^{m'} / β_n^m
-                η_real, η_imag = η_sign(η[i_η_mp] * T_mp_m, mp, m)
+                η_real, η_imag = η_sign(ηs_mag[i_η_mp] * T_mp_m, mp, m)
 
                 # current weights
                 i_weight = harmonic_index(n, mp)
@@ -740,6 +722,10 @@ function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, 
             rotated_weights[1,1,i] += val_real
             rotated_weights[2,1,i] += val_imag
         end
+
+        # next T matrix
+        np1 = n+1
+        i_T += np1*np1
     end
 end
 

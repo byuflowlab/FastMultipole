@@ -31,7 +31,7 @@ end
 Hs_π2 = [1.0]
 
 expansion_order = 4
-update_Hs_π2!(Hs_π2, 10)
+update_Hs_π2!(Hs_π2, Val(10))
 
 H0 = [1.0;;;]
 H1 = [     -0.5+0.0im     0.707107+0.0im       0.5-0.0im
@@ -83,8 +83,8 @@ expansion_order = 5
 β = 3*pi/7
 Ts = zeros(length_Ts(expansion_order))
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
-update_Ts!(Ts, Hs_π2, β, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
+update_Ts!(Ts, Hs_π2, β, Val(expansion_order))
 
 T0 = [1.0;;]
 T1 = [ -0.61126   0.689378   0.38874;
@@ -134,7 +134,7 @@ end
 expansion_order = 10
 eimϕs = zeros(2, expansion_order+1)
 ϕ = π/7
-update_eimϕs!(eimϕs, ϕ, expansion_order)
+update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
 for m in 0:expansion_order
     eimϕ_test = exp(im*m*ϕ)
     @test isapprox(real(eimϕ_test), eimϕs[1,m+1]; atol=1e-12)
@@ -324,7 +324,7 @@ rotated_weights_test = ComplexF64[0.6999999999999998 + 0.0im, -0.024500000000000
 # rotate about y axis
 expansion_order = 10
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
 ζs_mag = zeros(length_ζs(expansion_order))
 update_ζs_mag!(ζs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
@@ -334,7 +334,7 @@ source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
 source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order)
+rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order))
 
 i = 1
 i_compressed = 1
@@ -494,7 +494,7 @@ unrotated_weights_test = unrotated_weights_real + im .* unrotated_weights_imag
 # rotate about y axis
 expansion_order = 10
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
 ζs_mag = zeros(length_ζs(expansion_order))
 update_ζs_mag!(ζs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
@@ -505,8 +505,8 @@ source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 back_rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order)
-back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ζs_mag, expansion_order)
+rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order))
+back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, Val(expansion_order))
 
 i_compressed = 1
 for n in 0:expansion_order
@@ -545,7 +545,7 @@ for n in 0:expansion_order
 end
 
 eimϕs = zeros(2,expansion_order+1)
-rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, expansion_order)
+rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order))
 
 i_compressed = 1
 i = 1
@@ -588,8 +588,8 @@ for n in 0:expansion_order
 end
 
 eimϕs = zeros(2,expansion_order+1)
-rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, expansion_order)
-back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, expansion_order)
+rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order))
+back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, Val(expansion_order))
 
 i_compressed = 1
 i = 1
@@ -663,13 +663,13 @@ for n in 0:expansion_order
 end
 
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
 ηs_mag = zeros(length_ηs(expansion_order))
 update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
 θ = 2.5010703409103683
 
-rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, expansion_order)
+rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, Val(expansion_order))
 
 i = 1
 i_compressed = 1
@@ -710,14 +710,14 @@ for n in 0:expansion_order
 end
 
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
 ηs_mag = zeros(length_ηs(expansion_order))
 update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
 
-update_Ts!(Ts, Hs_π2, θ, expansion_order)
+update_Ts!(Ts, Hs_π2, θ, Val(expansion_order))
 
-back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, expansion_order)
+back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, Val(expansion_order))
 
 i = 1
 i_compressed = 1
@@ -760,7 +760,7 @@ end
 
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
-rotate_z!(rotated_weights, weights, eimϕs, ϕ, expansion_order)
+rotate_z!(rotated_weights, weights, eimϕs, ϕ, Val(expansion_order))
 
 i = 1
 i_compressed = 1
@@ -802,8 +802,8 @@ end
 
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
-update_eimϕs!(eimϕs, ϕ, expansion_order)
-back_rotate_z!(back_rotated_weights, weights, eimϕs, expansion_order)
+update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
+back_rotate_z!(back_rotated_weights, weights, eimϕs, Val(expansion_order))
 
 i = 1
 i_compressed = 1

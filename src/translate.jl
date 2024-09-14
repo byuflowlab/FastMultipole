@@ -1,16 +1,5 @@
 #------- MULTIPOLE TO MULTIPOLE -------#
 
-function update_multipole!(target_branch, multipole_weights, expansion_order::Val{P}) where P
-    i = 1
-    for n in 0:P
-        for m in 0:n
-            target_branch.multipole_expansion[1,1,i] += multipole_weights[1,1,i]
-            target_branch.multipole_expansion[2,1,i] += multipole_weights[2,1,i]
-            i += 1
-        end
-    end
-end
-
 """
 Overwrites translated_weights
 """
@@ -68,29 +57,14 @@ function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, we
     #--- back rotate coordinate system ---#
 
     # back rotate about y axis
-    back_rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, expansion_order)
+    back_rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order)
 
-    # back rotate about z axis
-    back_rotate_z!(weights_tmp_1, weights_tmp_2, eimϕs, expansion_order)
-
-    #--- store coefficients ---#
-
-    update_multipole!(target_branch, weights_tmp_1, expansion_order)
+    # back rotate about z axis and accumulate on target branch
+    back_rotate_z!(target_branch.multipole_expansion, weights_tmp_2, eimϕs, expansion_order)
 
 end
 
 #------- MULTIPOLE TO LOCAL -------#
-
-function update_local!(target_branch, local_weights, expansion_order::Val{P}) where P
-    i = 1
-    for n in 0:P
-        for m in 0:n
-            target_branch.local_expansion[1,1,i] += local_weights[1,1,i]
-            target_branch.local_expansion[2,1,i] += local_weights[2,1,i]
-            i += 1
-        end
-    end
-end
 
 """
 Overwrites translated_weights
@@ -160,12 +134,8 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     # back rotate about y axis
     back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order)
 
-    # back rotate about z axis
-    back_rotate_z!(weights_tmp_1, weights_tmp_2, eimϕs, expansion_order)
-
-    #--- store coefficients ---#
-
-    update_local!(target_branch, weights_tmp_1, expansion_order)
+    # back rotate about z axis and accumulate on target branch
+    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order)
 
 end
 
@@ -230,12 +200,8 @@ function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tm
     # back rotate about y axis
     back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order)
 
-    # back rotate about z axis
-    back_rotate_z!(weights_tmp_1, weights_tmp_2, eimϕs, expansion_order)
-
-    #--- store coefficients ---#
-
-    update_local!(target_branch, weights_tmp_1, expansion_order)
+    # back rotate about z axis and accumulate result to target branch
+    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order)
 
 end
 
