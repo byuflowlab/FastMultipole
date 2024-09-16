@@ -3,7 +3,7 @@ using FastMultipole
 include("../test/gravitational.jl")
 include("simple_gravitational.jl")
 
-for expansion_order in [1,2,16,17,18,19,20]
+for expansion_order in [] #[1,2,16,17,18,19,20]
     println("\n\n#=== P=$expansion_order ===#")
     multipole_threshold = 0.4
     n_bodies = 1_000_000
@@ -35,21 +35,20 @@ end
 # @profile FastMultipole.horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, tree.expansion_order)
 # pprof()
 
-#=
 using PythonPlot
 
-ps_old = collect(1:10)
-old_FastMultipole = [1.0, 1.7, 3.1, 5.8, 13, 23, 37, 57, 84, 119]
-ps_new = collect(1:15)
-new_FastMultipole = [0.77, 1.5, 2.6, 4.4, 7.4, 11, 16, 24, 33, 45, 59, 77, 100, 127, 157, 195, 241, 294, 355, ]
+ps_old = collect(1:20)
+old_FastMultipole = [1.0, 1.7, 3.1, 5.8, 13, 23, 37, 57, 84, 119, 310, 420, 563, 737, 945, 1200, 1502, 1861, 2275, 2761]
+ps_new = collect(1:20)
+new_FastMultipole = [0.77, 1.5, 2.6, 4.4, 7.4, 11, 16, 24, 33, 45, 59, 77, 100, 127, 157, 195, 241, 294, 355, 427]
 
 fig = figure("benchmark_20240914")
 fig.clear()
 fig.add_subplot(xlabel="expansion order", ylabel="time, seconds")
 ax = fig.get_axes()[0]
 cmap = get_cmap("RdBu",7)
-ax.plot(ps, old_FastMultipole, color=cmap(0.15), "-x")
-ax.plot(ps, new_FastMultipole, color=cmap(0.85), "->")
+ax.plot(ps_old, old_FastMultipole, color=cmap(0.15), "-x")
+ax.plot(ps_new, new_FastMultipole, color=cmap(0.85), "->")
 ax.legend(["old FastMultipole", "new expansions"])
 ax.set_yscale("log")
 ax.set_xscale("log")
@@ -63,5 +62,7 @@ ax.set_xscale("log")
 #ax.plot(p3_line_x, p3_line_y, "--", color=cmap(0.85))
 
 #asymptotic behavior:
-
-=#
+get_slope(ps, ts; n=3) = (log(ts[end]) - log(ts[end-n])) / (log(ps[end]) - log(ps[end-n]))
+slope_old = get_slope(ps_old, old_FastMultipole)
+slope_new = get_slope(ps_new, new_FastMultipole)
+@show slope_old, slope_new

@@ -126,8 +126,6 @@ struct DerivativesSwitch{PS,VPS,VS,GS} end
 #####
 abstract type Branch{TF} end
 
-Base.eltype(::AbstractArray{<:Branch{TF}}) where TF = TF
-
 struct MultiBranch{TF,N} <: Branch{TF}
     bodies_index::SVector{N,UnitRange{Int64}}
     n_branches::Int64
@@ -144,6 +142,7 @@ struct MultiBranch{TF,N} <: Branch{TF}
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
+Base.eltype(::AbstractArray{MultiBranch{TF,<:Any}}) where TF = TF
 
 struct SingleBranch{TF} <: Branch{TF}
     bodies_index::UnitRange{Int64}
@@ -162,6 +161,7 @@ struct SingleBranch{TF} <: Branch{TF}
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
+Base.eltype(::AbstractArray{SingleBranch{TF}}) where TF = TF
 
 """
     abstract type Tree{TF,P} end
