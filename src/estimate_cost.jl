@@ -427,7 +427,7 @@ Base.setindex!(sys::DummySystem, val, i, ::ScalarPotential) = sys.potential[i] =
 Base.setindex!(sys::DummySystem, val, i, ::VectorPotential) = sys.vector_potential[i] = val
 Base.setindex!(sys::DummySystem, val, i, ::Velocity) = sys.velocity[i] = val
 Base.setindex!(sys::DummySystem, val, i, ::VelocityGradient) = sys.gradient[i] = val
-get_n_bodies(sys::DummySystem) = length(sys.bodies)
+Base.length(sys::DummySystem) = length(sys.bodies)
 
 function DummySystem(n_bodies, TF)
     bodies = [Dummy(rand(SVector{3,TF}), rand(), rand()) for _ in 1:n_bodies]
@@ -438,32 +438,32 @@ function DummySystem(n_bodies, TF)
     return DummySystem(bodies, potential, vector_potential, velocity, gradient)
 end
 
-function direct_cost_estimate(system, leaf_size; n_iter=10)
+function direct_cost_estimate(system, n_per_branch; n_iter=10)
     # create dummy system
-    # target_system = DummySystem(leaf_size, eltype(system[1,POSITION]))
+    # target_system = DummySystem(n_per_branch, eltype(system[1,POSITION]))
 
     # # benchmark
     # t = 0.0
     # for i in 1:n_iter+1 # one for precompilation
-    #     i > 1 && (t += @elapsed direct!(target_system, 1:leaf_size, system, 1:leaf_size))
+    #     i > 1 && (t += @elapsed direct!(target_system, 1:n_per_branch, system, 1:n_per_branch))
     # end
     # t /= n_iter # mean time per iteration
-    # t /= leaf_size^2 # mean time per interaction
+    # t /= n_per_branch^2 # mean time per interaction
 
     # return t
-    return dummy_direct_cost_estimate(system, leaf_size)
+    return dummy_direct_cost_estimate(system, n_per_branch)
 end
 
-function dummy_direct_cost_estimate(system, leaf_size)
+function dummy_direct_cost_estimate(system, n_per_branch)
     return NaN
 end
 
-function direct_cost_estimate(systems::Tuple, leaf_size; n_iter=10)
-    # return SVector{length(systems),Float64}(direct_cost_estimate(system, leaf_size; n_iter=n_iter) for system in systems)
-    return dummy_direct_cost_estimate(systems, leaf_size)
+function direct_cost_estimate(systems::Tuple, n_per_branch; n_iter=10)
+    # return SVector{length(systems),Float64}(direct_cost_estimate(system, n_per_branch; n_iter=n_iter) for system in systems)
+    return dummy_direct_cost_estimate(systems, n_per_branch)
 end
 
-function dummy_direct_cost_estimate(systems::Tuple, leaf_size)
-    return SVector{length(systems),Float64}(dummy_direct_cost_estimate(system, leaf_size) for system in systems)
+function dummy_direct_cost_estimate(systems::Tuple, n_per_branch)
+    return SVector{length(systems),Float64}(dummy_direct_cost_estimate(system, n_per_branch) for system in systems)
 end
 

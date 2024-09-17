@@ -20,27 +20,3 @@
     num_imag = z1_imag * z2_real - z1_real * z2_imag
     return num_real / denom, num_imag / denom
 end
-
-# vector arithmetic
-
-@inline function complex_cross_real(ux_real, ux_imag, uy_real, uy_imag, uz_real, uz_imag, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
-    return SVector{3}(
-        complex_multiply_real(uy_real, uy_imag, vz_real, vz_imag) - complex_multiply_real(vy_real, vy_imag, uz_real, uz_imag),
-        complex_multiply_real(vx_real, vx_imag, uz_real, uz_imag) - complex_multiply_real(ux_real, ux_imag, vz_real, vz_imag),
-        complex_multiply_real(ux_real, ux_imag, vy_real, vy_imag) - complex_multiply_real(vx_real, vx_imag, uy_real, uy_imag)
-    )
-end
-
-@inline function complex_multiply(A::AbstractMatrix, ux_real, ux_imag, uy_real, uy_imag, uz_real, uz_imag)
-	product_real = SVector{3}(
-		A[1,1] * ux_real + A[1,2] * uy_real + A[1,3] * uz_real,
-		A[2,1] * ux_real + A[2,2] * uy_real + A[2,3] * uz_real,
-		A[3,1] * ux_real + A[3,2] * uy_real + A[3,3] * uz_real
-	)
-	product_imag = SVector{3}(
-		A[1,1] * ux_imag + A[1,2] * uy_imag + A[1,3] * uz_imag,
-		A[2,1] * ux_imag + A[2,2] * uy_imag + A[2,3] * uz_imag,
-		A[3,1] * ux_imag + A[3,2] * uy_imag + A[3,3] * uz_imag
-	)
-	return product_real, product_imag
-end

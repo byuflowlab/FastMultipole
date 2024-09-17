@@ -1,5 +1,6 @@
-#------- dispatch for common interface for external packages -------#
-
+#####
+##### dispatch for common interface for external packages
+#####
 abstract type Indexable end
 
 struct Body <: Indexable end
@@ -29,38 +30,25 @@ const VERTEX = Vertex()
 struct Normal <: Indexable end
 const NORMAL = Normal()
 
-struct Strength <: Indexable end
-const STRENGTH = Strength()
+struct ScalarStrength <: Indexable end
+const SCALAR_STRENGTH = ScalarStrength()
 
-#------- dispatch convenience functions for multipole creation definition -------#
+struct VectorStrength <: Indexable end
+const VECTOR_STRENGTH = VectorStrength()
 
-abstract type AbstractKernel{sign} end
-
-abstract type Vortex{sign} <: AbstractKernel{sign} end
-
-abstract type Source{sign} <: AbstractKernel{sign} end
-
-abstract type Dipole{sign} <: AbstractKernel{sign} end
-
-abstract type SourceDipole{sign} <: AbstractKernel{sign} end
-
-abstract type AbstractElement{TK<:AbstractKernel} end
-
-abstract type Point{TK} <: AbstractElement{TK} end
-
-abstract type Filament{TK} <: AbstractElement{TK} end
-
-abstract type Panel{NS,TK} <: AbstractElement{TK} end
-
+##### 
+##### dispatch convenience functions for multipole creation definition 
 #####
-##### dispatch convenience functions to determine which derivatives are desired
-#####
-"""
-    DerivativesSwitch
+abstract type AbstractKernel end
 
-Switch indicating whether the scalar potential, vector potential, velocity, and/or velocity gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
-"""
-struct DerivativesSwitch{PS,VPS,VS,GS} end
+struct VortexPoint <: AbstractKernel end
+struct VortexLine <: AbstractKernel end # not yet derived
+struct VortexPanel <: AbstractKernel end # not yet derived
+struct SourcePoint <: AbstractKernel end
+struct UniformSourcePanel <: AbstractKernel end
+struct UniformNormalDipolePanel <: AbstractKernel end
+struct UniformSourceNormalDipolePanel <: AbstractKernel end
+
 
 #####
 ##### cost parameters
@@ -79,13 +67,13 @@ struct DerivativesSwitch{PS,VPS,VS,GS} end
 # end
 
 # SingleCostParameters(;
-#     alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT,
-#     tau_M2M_L2L = TAU_M2M_DEFAULT,
-#     alloc_M2L = ALLOC_M2L_DEFAULT,
-#     tau_M2L = TAU_M2L_DEFAULT,
-#     tau_L2L = TAU_L2L_DEFAULT,
-#     alloc_L2B = ALLOC_L2B_DEFAULT,
-#     tau_L2B = TAU_L2B_DEFAULT,
+#     alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT, 
+#     tau_M2M_L2L = TAU_M2M_DEFAULT, 
+#     alloc_M2L = ALLOC_M2L_DEFAULT, 
+#     tau_M2L = TAU_M2L_DEFAULT, 
+#     tau_L2L = TAU_L2L_DEFAULT, 
+#     alloc_L2B = ALLOC_L2B_DEFAULT, 
+#     tau_L2B = TAU_L2B_DEFAULT, 
 #     C_nearfield = C_NEARFIELD_DEFAULT,
 #     tau_B2M = TAU_B2M_DEFAULT
 # ) = SingleCostParameters(alloc_M2M_L2L, tau_M2M_L2L, alloc_M2L, tau_M2L, alloc_L2B, tau_L2B, C_nearfield, tau_B2M)
@@ -115,10 +103,10 @@ struct DerivativesSwitch{PS,VPS,VS,GS} end
 # CostParameters(systems::Tuple) = MultiCostParameters()
 # CostParameters(system) = SingleCostParameters()
 
-# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::Float64, tau_M2M_L2L) =
+# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::Float64, tau_M2M_L2L) = 
 #     SingleCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
 
-# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) =
+# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) = 
 #     MultiCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
 
 #####
@@ -131,7 +119,6 @@ struct MultiBranch{TF,N} <: Branch{TF}
     n_branches::Int64
     branch_index::UnitRange{Int64}
     i_parent::Int64
-    i_leaf::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
@@ -142,39 +129,30 @@ struct MultiBranch{TF,N} <: Branch{TF}
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
-Base.eltype(::AbstractArray{MultiBranch{TF,<:Any}}) where TF = TF
 
 struct SingleBranch{TF} <: Branch{TF}
     bodies_index::UnitRange{Int64}
     n_branches::Int64
     branch_index::UnitRange{Int64}
     i_parent::Int64
-    i_leaf::Int64
     center::SVector{3,TF}   # center of the branch
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,2}
-    #expansion_storage::Array{TF,3}
     ML::Matrix{TF}
     lock::ReentrantLock
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
-Base.eltype(::AbstractArray{SingleBranch{TF}}) where TF = TF
 
-"""
-    abstract type Tree{TF,P} end
-
-Supertype of all octree structures with `TF` the floating point type and `P` the expansion order.
-"""
-abstract type Tree{TF,P} end
+abstract type Tree{P} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
+struct MultiTree{TF,N,TB,P} <: Tree{P}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
@@ -182,12 +160,12 @@ struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
     expansion_order::Val{P}
-    leaf_size::Int64    # max number of bodies in a leaf
+    n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     # cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB,P} <: Tree{TF,P}
+struct SingleTree{TF,TB,P} <: Tree{P}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
@@ -195,19 +173,10 @@ struct SingleTree{TF,TB,P} <: Tree{TF,P}
     inverse_sort_index::Vector{Int64}
     buffer::TB
     expansion_order::Val{P}
-    leaf_size::Int64    # max number of bodies in a leaf
+    n_per_branch::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
     # cost_parameters::Float64
 end
-
-struct InteractionList{TF}
-    influence_matrices::Vector{Matrix{TF}}
-    strengths::Vector{TF}
-    influence::Vector{TF}
-    direct_list::Vector{SVector{2,Int32}}
-end
-
-Base.length(list::InteractionList) = length(list.direct_list)
 
 #####
 ##### allow input systems to take any form when desired
@@ -217,19 +186,6 @@ struct SortWrapper{TS}
     index::Vector{Int}
 end
 
-#####
-##### when we desire to evaluate the potential at locations not coincident with source centers
-#####
-
-"""
-    ProbeSystem
-
-Convenience system for defining locations at which the potential, velocity, or velocity gradient may be desired.
-"""
-struct ProbeSystem{TF,TSP,TVP,TV,TVG}
-    position::Vector{SVector{3,TF}}
-    scalar_potential::TSP
-    vector_potential::TVP
-    velocity::TV
-    velocity_gradient::TVG
+function SortWrapper(system)
+    return SortWrapper(system,collect(1:length(system)))
 end
