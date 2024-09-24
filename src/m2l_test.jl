@@ -32,7 +32,7 @@ for n in 0:expansion_order
 end
 z_translated_weights = initialize_expansion(expansion_order)
 
-translate_multipole_to_local_z!(z_translated_weights, original_weights, r, Val(expansion_order))
+translate_multipole_to_local_z!(z_translated_weights, original_weights, r, Val(expansion_order), ExpansionSwitch{true,false}())
 
 i = 1
 i_compressed = 1
@@ -88,7 +88,8 @@ update_ζs_mag!(ζs_mag, 0, expansion_order)
 update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
-multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order))
+expansion_switch = ExpansionSwitch{true,false}()
+multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), expansion_switch)
 
 i = 1
 i_compressed = 1

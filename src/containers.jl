@@ -62,6 +62,16 @@ Switch indicating whether the scalar potential, vector potential, velocity, and/
 """
 struct DerivativesSwitch{PS,VPS,VS,GS} end
 
+"""
+    ExpansionSwitch
+
+Switch indicating which expansions should be used:
+
+1. scalar potential (`SP`)
+2. vector potential via Lamb-Helmholtz decomposition (`VP`)
+"""
+struct ExpansionSwitch{SP,VP} end
+
 #####
 ##### cost parameters
 #####

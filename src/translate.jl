@@ -3,29 +3,54 @@
 """
 Overwrites translated_weights
 """
-function translate_multipole_z!(translated_weights, source_weights, t, expansion_order::Val{P}) where P
+function translate_multipole_z!(translated_weights, source_weights, t, expansion_order::Val{P}, ::ExpansionSwitch{SP,VP}) where {P,SP,VP}
     _t = -t
     i = 1
     for n in 0:P
     	for m in 0:n
-    		# inner summation
-            val_real = zero(eltype(translated_weights))
-            val_imag = zero(eltype(translated_weights))
+    		# preallocate recursive variables
+            if SP
+                val1_real = zero(eltype(translated_weights))
+                val1_imag = zero(eltype(translated_weights))
+            end
+            if VP
+                val2_real = zero(eltype(translated_weights))
+                val2_imag = zero(eltype(translated_weights))
+                val3_real = zero(eltype(translated_weights))
+                val3_imag = zero(eltype(translated_weights))
+            end
     		n_np! = 1.0
     		n_np = 1
     		_t_n_np = one(t)
-    		for np in n:-1:m
+
+            for np in n:-1:m
                 tmp = _t_n_np / n_np!
-                val_real += tmp * source_weights[1,1,harmonic_index(np,m)]
-                val_imag += tmp * source_weights[2,1,harmonic_index(np,m)]
+                if SP
+                    val1_real += tmp * source_weights[1,1,harmonic_index(np,m)]
+                    val1_imag += tmp * source_weights[2,1,harmonic_index(np,m)]
+                end
+                if VP
+                    val2_real += tmp * source_weights[1,2,harmonic_index(np,m)]
+                    val2_imag += tmp * source_weights[2,2,harmonic_index(np,m)]
+                    val3_real += tmp * source_weights[1,3,harmonic_index(np,m)]
+                    val3_imag += tmp * source_weights[2,3,harmonic_index(np,m)]
+                end
     			_t_n_np *= _t
     			n_np! *= n_np
     			n_np += 1
     		end
 
             # set translated coefficient
-            translated_weights[1,1,i] = val_real
-            translated_weights[2,1,i] = val_imag
+            if SP
+                translated_weights[1,1,i] = val1_real
+                translated_weights[2,1,i] = val1_imag
+            end
+            if VP
+                translated_weights[1,2,i] = val2_real
+                translated_weights[2,2,i] = val2_imag
+                translated_weights[1,3,i] = val3_real
+                translated_weights[2,3,i] = val3_imag
+            end
 
             # increment index
             i += 1
@@ -33,7 +58,99 @@ function translate_multipole_z!(translated_weights, source_weights, t, expansion
     end
 end
 
-function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order)
+function transform_lamb_helmholtz_multipole!(multipole_expansion, r, ::Val{P}) where P
+    i_P_m = harmonic_index(P, 0)
+    for m in 0:P
+        # declare recursive variable for inner loop over n
+        χ̂_nm1_real = multipole_expansion[1,3,i_P_m]
+        χ̂_nm1_imag = multipole_expansion[2,3,i_P_m]
+
+        # declare index
+        i_n_m = i_P_m
+
+        for n in P:-1:max(m,1)
+            # transform ϕ potential
+            ϕ̂_real = multipole_expansion[1,2,i_n_m]
+            ϕ̂_imag = multipole_expansion[2,2,i_n_m]
+
+            # recursively access χ̂ to reduce cost
+            χ̂_real = χ̂_nm1_real
+            χ̂_imag = χ̂_nm1_imag
+
+            # ϕ̃ = ϕ̂ - im * r * m/(n+1) * χ̂
+            r_m_np1 = r * m / (n+1)
+            multipole_expansion[1,2,i_n_m] = ϕ̂_real + r_m_np1 * χ̂_imag
+            multipole_expansion[2,2,i_n_m] = ϕ̂_imag - r_m_np1 * χ̂_real
+
+            # recurse χ̂_nm1
+            if m < n
+                χ̂_nm1_real = multipole_expansion[1,3,i_n_m-n]
+                χ̂_nm1_imag = multipole_expansion[2,3,i_n_m-n]
+            else # χ_{n-1}^m doesn't exist
+                χ̂_nm1_real = zero(eltype(multipole_expansion))
+                χ̂_nm1_imag = zero(eltype(multipole_expansion))
+            end
+
+            # χ̃ = χ̂ + r/n * χ̂_nm1
+            r_n = r / n
+            multipole_expansion[1,3,i_n_m] = χ̂_real + r_n * χ̂_nm1_real
+            multipole_expansion[2,3,i_n_m] = χ̂_imag + r_n * χ̂_nm1_imag
+
+            # update index
+            i_n_m -= n
+
+        end
+        i_P_m += 1
+    end
+end
+
+function transform_lamb_helmholtz_local!(local_expansion, r, ::Val{P}) where P
+    i_m_m = 1
+    for m in 0:P
+        # declare recursive variable for inner loop over n
+        χ̂_np1_real = local_expansion[1,3,i_m_m]
+        χ̂_np1_imag = local_expansion[2,3,i_m_m]
+
+        # declare index for fast access
+        i_n_m = i_m_m
+
+        for n in m:P # skip n=0
+            # recursively access χ̂ to reduce cost
+            χ̂_real = χ̂_np1_real
+            χ̂_imag = χ̂_np1_imag
+
+            if n > 0
+                # transform ϕ potential
+                ϕ̂_real = local_expansion[1,2,i_n_m]
+                ϕ̂_imag = local_expansion[2,2,i_n_m]
+
+                # ϕ̃ = ϕ̂ + im * r * m/n * χ̂
+                r_m_n = r * m / n
+                local_expansion[1,2,i_n_m] = ϕ̂_real - r_m_n * χ̂_imag
+                local_expansion[2,2,i_n_m] = ϕ̂_imag + r_m_n * χ̂_real
+            end
+
+            if n < P # χ_{n+1}^m = 0 when n+1>P
+                # recurse χ̂_np1
+                χ̂_np1_real = local_expansion[1,3,i_n_m+n+1]
+                χ̂_np1_imag = local_expansion[2,3,i_n_m+n+1]
+
+                # χ̃ = χ̂ - r/(n+1) * χ̂_nm1
+                r_np1 = r / (n+1)
+                local_expansion[1,3,i_n_m] = χ̂_real - r_np1 * χ̂_np1_real
+                local_expansion[2,3,i_n_m] = χ̂_imag - r_np1 * χ̂_np1_imag
+            end
+
+            # update index
+            i_n_m += n + 1
+
+        end
+
+        i_m_m += m + 2
+    end
+end
+
+function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, expansion_switch::ExpansionSwitch{<:Any,VP}) where VP
     # extract containers
     source_weights = source_branch.multipole_expansion
 
@@ -44,23 +161,27 @@ function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, we
     #--- rotate coordinate system ---#
 
     # rotate about z axis
-    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order)
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order, expansion_switch)
 
     # rotate about y axis
     # NOTE: the method used here results in an additional rotatation of π about the new z axis
-    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order)
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order, expansion_switch)
 
     #--- translate along new z axis ---#
 
-    translate_multipole_z!(weights_tmp_1, weights_tmp_2, r, expansion_order)
+    translate_multipole_z!(weights_tmp_1, weights_tmp_2, r, expansion_order, expansion_switch)
+
+    #--- transform Lamb-Helmholtz decomposition for the new center ---#
+
+    VP && transform_lamb_helmholtz_multipole!(weights_tmp_1, r, expansion_order)
 
     #--- back rotate coordinate system ---#
 
     # back rotate about y axis
-    back_rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order)
+    back_rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, expansion_switch)
 
     # back rotate about z axis and accumulate on target branch
-    back_rotate_z!(target_branch.multipole_expansion, weights_tmp_2, eimϕs, expansion_order)
+    back_rotate_z!(target_branch.multipole_expansion, weights_tmp_2, eimϕs, expansion_order, expansion_switch)
 
 end
 
@@ -69,7 +190,7 @@ end
 """
 Overwrites translated_weights
 """
-function translate_multipole_to_local_z!(translated_weights, source_weights, t, expansion_order::Val{P}) where P
+function translate_multipole_to_local_z!(translated_weights, source_weights, t, ::Val{P}, ::ExpansionSwitch{SP,VP}) where {P,SP,VP}
     one_over_t = 1/t
     n!_t_np1 = one_over_t
     i = 1
@@ -78,21 +199,45 @@ function translate_multipole_to_local_z!(translated_weights, source_weights, t, 
         n_m = n
     	for m in 0:n
             # inner summation
-            val_real = zero(eltype(translated_weights))
-            val_imag = zero(eltype(translated_weights))
+            if SP
+                val1_real = zero(eltype(translated_weights))
+                val1_imag = zero(eltype(translated_weights))
+            end
+            if VP
+                val2_real = zero(eltype(translated_weights))
+                val2_imag = zero(eltype(translated_weights))
+                val3_real = zero(eltype(translated_weights))
+                val3_imag = zero(eltype(translated_weights))
+            end
     		n_np! = n_m!_t_nmp1
             n_np = n_m
     		for np in m:P
-                val_real += n_np! * source_weights[1,1,harmonic_index(np,m)]
-                val_imag += n_np! * source_weights[2,1,harmonic_index(np,m)]
+                if SP
+                    val1_real += n_np! * source_weights[1,1,harmonic_index(np,m)]
+                    val1_imag += n_np! * source_weights[2,1,harmonic_index(np,m)]
+                end
+                if VP
+                    val2_real += n_np! * source_weights[1,2,harmonic_index(np,m)]
+                    val2_imag += n_np! * source_weights[2,2,harmonic_index(np,m)]
+                    val3_real += n_np! * source_weights[1,3,harmonic_index(np,m)]
+                    val3_imag += n_np! * source_weights[2,3,harmonic_index(np,m)]
+                end
 
                 n_np += 1
                 n_np! *= n_np * one_over_t
     		end
 
             # set translated coefficient
-            translated_weights[1,1,i] = val_real
-            translated_weights[2,1,i] = val_imag
+            if SP
+                translated_weights[1,1,i] = val1_real
+                translated_weights[2,1,i] = val1_imag
+            end
+            if VP
+                translated_weights[1,2,i] = val2_real
+                translated_weights[2,2,i] = val2_imag
+                translated_weights[1,3,i] = val3_real
+                translated_weights[2,3,i] = val3_imag
+            end
 
             # increment index
             i += 1
@@ -108,7 +253,7 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order)
+function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, expansion_switch::ExpansionSwitch{<:Any,VP}) where VP
     # extract containers
     source_weights = source_branch.multipole_expansion
 
@@ -119,23 +264,27 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     #--- rotate coordinate system ---#
 
     # rotate about z axis
-    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order)
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order, expansion_switch)
 
     # rotate about y axis
     # NOTE: the method used here results in an additional rotatation of π about the new z axis
-    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order)
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order, expansion_switch)
 
     #--- translate along new z axis ---#
 
-    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order)
+    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order, expansion_switch)
+
+    #--- transform Lamb-Helmholtz decomposition for the new center ---#
+
+    VP && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order)
 
     #--- back rotate coordinate system ---#
 
     # back rotate about y axis
-    back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order)
+    back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order, expansion_switch)
 
     # back rotate about z axis and accumulate on target branch
-    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order)
+    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, expansion_switch)
 
 end
 
@@ -144,26 +293,50 @@ end
 """
 Overwrites translated_weights
 """
-function translate_local_z!(translated_weights, source_weights, t, expansion_order)
+function translate_local_z!(translated_weights, source_weights, t, ::Val{P}, ::ExpansionSwitch{SP,VP}) where {P,SP,VP}
     _t = -t
     i = 1
-    for n in 0:expansion_order
+    for n in 0:P
     	for m in 0:n
     		# inner summation
-            val_real = zero(eltype(translated_weights))
-            val_imag = zero(eltype(translated_weights))
+            if SP
+                val1_real = zero(eltype(translated_weights))
+                val1_imag = zero(eltype(translated_weights))
+            end
+            if VP
+                val2_real = zero(eltype(translated_weights))
+                val2_imag = zero(eltype(translated_weights))
+                val3_real = zero(eltype(translated_weights))
+                val3_imag = zero(eltype(translated_weights))
+            end
     		n_np = 1
     		_t_n_n! = one(t)
-    		for np in n:expansion_order
-                val_real += _t_n_n! * source_weights[1,1,harmonic_index(np,m)]
-                val_imag += _t_n_n! * source_weights[2,1,harmonic_index(np,m)]
+    		for np in n:P
+                if SP
+                    val1_real += _t_n_n! * source_weights[1,1,harmonic_index(np,m)]
+                    val1_imag += _t_n_n! * source_weights[2,1,harmonic_index(np,m)]
+                end
+                if VP
+                    val2_real += _t_n_n! * source_weights[1,2,harmonic_index(np,m)]
+                    val2_imag += _t_n_n! * source_weights[2,2,harmonic_index(np,m)]
+                    val3_real += _t_n_n! * source_weights[1,3,harmonic_index(np,m)]
+                    val3_imag += _t_n_n! * source_weights[2,3,harmonic_index(np,m)]
+                end
     			_t_n_n! *= _t / n_np
     			n_np += 1
     		end
 
             # set translated coefficient
-            translated_weights[1,1,i] = val_real
-            translated_weights[2,1,i] = val_imag
+            if SP
+                translated_weights[1,1,i] = val1_real
+                translated_weights[2,1,i] = val1_imag
+            end
+            if VP
+                translated_weights[1,2,i] = val2_real
+                translated_weights[2,2,i] = val2_imag
+                translated_weights[1,3,i] = val3_real
+                translated_weights[2,3,i] = val3_imag
+            end
 
             # increment index
             i += 1
@@ -174,7 +347,7 @@ end
 """
 Expects ηs_mag and Hs_π2 to be precomputed. Ts and eimϕs are computed here.
 """
-function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order)
+function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, expansion_switch::ExpansionSwitch{<:Any,VP}) where VP
     # extract containers
     source_weights = source_branch.local_expansion
 
@@ -185,23 +358,27 @@ function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tm
     #--- rotate coordinate system ---#
 
     # rotate about z axis (and compute eimϕs)
-    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order)
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order, expansion_switch)
 
     # rotate about y axis (and compute Ts)
     # NOTE: the method used here results in an additional rotatation of π about the new z axis
-    rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, θ, expansion_order)
+    rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, θ, expansion_order, expansion_switch)
 
     #--- translate along new z axis ---#
 
-    translate_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order)
+    translate_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order, expansion_switch)
+
+    #--- Lamb-Helmholtz transformation ---#
+
+    VP && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order)
 
     #--- back rotate coordinate system ---#
 
     # back rotate about y axis
-    back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order)
+    back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order, expansion_switch)
 
     # back rotate about z axis and accumulate result to target branch
-    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order)
+    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, expansion_switch)
 
 end
 

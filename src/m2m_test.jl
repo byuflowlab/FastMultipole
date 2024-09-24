@@ -3,7 +3,7 @@ using StaticArrays
 
 include("harmonics.jl")
 include("rotate.jl")
-include("b2m.jl")
+include("bodytomultipole.jl")
 include("translate.jl")
 include("containers.jl")
 include("tree.jl")
@@ -20,7 +20,7 @@ translated_weights_test = ComplexF64[0.6999999999999998 + 0.0im, -0.073566636459
 
 z_translated_weights = zero(original_weights)
 
-translate_multipole_z!(z_translated_weights, original_weights, r, expansion_order)
+translate_multipole_z!(z_translated_weights, original_weights, r, Val(expansion_order), ExpansionSwitch{true,false}())
 
 i = 1
 i_compressed = 1
@@ -54,7 +54,7 @@ translated_weights_test = ComplexF64[0.6999999999999997 + 0.0im, -0.045499999999
 
 # preallocate containers
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
 Ts = zeros(length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
@@ -67,8 +67,9 @@ update_ζs_mag!(ζs_mag, 0, expansion_order)
 
 # next multipole branch
 branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), 0.0, expansion_order)
+expansion_switch = ExpansionSwitch{true,false}()
 
-multipole_to_multipole!(branch_2, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, Hs_π2, expansion_order)
+multipole_to_multipole!(branch_2, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, Val(expansion_order), expansion_switch)
 
 i = 1
 i_compressed = 1

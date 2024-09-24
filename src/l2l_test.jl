@@ -5,7 +5,7 @@ include("containers.jl")
 include("tree.jl")
 include("harmonics.jl")
 include("rotate.jl")
-include("b2m.jl")
+include("bodytomultipole.jl")
 include("translate.jl")
 include("../test/gravitational_noimport.jl")
 
@@ -33,7 +33,7 @@ for n in 0:expansion_order
     end
 end
 
-translate_local_z!(z_translated_weights, original_weights, r, expansion_order)
+translate_local_z!(z_translated_weights, original_weights, r, Val(expansion_order), ExpansionSwitch{true,false}())
 
 i = 1
 i_compressed = 1
@@ -78,7 +78,7 @@ end
 
 # preallocate containers
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
+update_Hs_π2!(Hs_π2, Val(expansion_order))
 Ts = zeros(length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
@@ -89,7 +89,8 @@ weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # transform
-local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order)
+expansion_switch = ExpansionSwitch{true,false}()
+local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, Val(expansion_order), expansion_switch)
 
 i = 1
 i_compressed = 1

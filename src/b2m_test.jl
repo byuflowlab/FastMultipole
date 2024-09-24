@@ -4,13 +4,15 @@ using Test
 
 include("containers.jl")
 include("compatibility.jl")
+include("derivativesswitch.jl")
 include("tree.jl")
 include("harmonics.jl")
-include("b2m.jl")
+include("bodytomultipole.jl")
 include("rotate.jl")
 include("../test/gravitational_noimport.jl")
 
 #--- point source ---#
+@testset "body-to-multipole: point source" begin
 
 x = SVector{3}(0.1,0.2,-0.3)
 xs = x + SVector{3}(-0.2,0.07,-0.1)
@@ -19,7 +21,7 @@ masses = Gravitational(bodies)
 expansion_order = 10
 branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, expansion_order)
 
-B2M!(Point{Source{1.0}}, masses, branch, 1:1, branch.harmonics, Val(expansion_order))
+body_to_multipole!(Point{Source{1.0}}, masses, branch, 1:1, branch.harmonics, Val(expansion_order))
 
 Δx = SVector{3}(bodies[1:3]) - branch.center
 ρ, θ, ϕ = cartesian_to_spherical(Δx...)
@@ -52,30 +54,10 @@ x_target = SVector{3}(2.3,-4.1, 0.4)
 r = x_target - xs
 rnorm = sqrt(r'*r)
 ϕ_analytic = masses.bodies[1].strength/rnorm
+@show branch.multipole_expansion
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(x_target, branch.center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
 
 @test isapprox(ϕ_m2b, ϕ_analytic; atol=1e-12)
 
-#--- translate multipole ---#
-
-include("translate.jl")
-
-# preallocate containers
-Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, expansion_order)
-Ts = zeros(length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
-weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
-weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
-translated_weights = initialize_expansion(expansion_order, eltype(Ts))
-
-# normalization
-global ζs_mag = zeros(length_ζs(expansion_order))
-update_ζs_mag!(ζs_mag, 0, expansion_order)
-
-# next multipole branch
-branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), 0.0, expansion_order)
-
-multipole_to_multipole!(branch_2, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, Hs_π2, expansion_order)
-
+end
 
