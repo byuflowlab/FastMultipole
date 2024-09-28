@@ -1,12 +1,3 @@
-using LegendrePolynomials
-using Test
-using StaticArrays
-
-include("rotate.jl")
-include("harmonics.jl")
-include("containers.jl")
-include("tree.jl")
-
 @testset "Legendre polynomials" begin
 
 # Legendre polynomials
@@ -327,14 +318,14 @@ update_Hs_π2!(Hs_π2, Val(expansion_order))
 ζs_mag = zeros(length_ζs(expansion_order))
 update_ζs_mag!(ζs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
-expansion_switch = ExpansionSwitch{true,false}()
+lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
 source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
 source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), expansion_switch)
+rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -498,7 +489,7 @@ update_Hs_π2!(Hs_π2, Val(expansion_order))
 ζs_mag = zeros(length_ζs(expansion_order))
 update_ζs_mag!(ζs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
-expansion_switch = ExpansionSwitch{true,false}()
+lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
 source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
@@ -506,8 +497,8 @@ source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 back_rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), expansion_switch)
-back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, Val(expansion_order), expansion_switch)
+rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
+back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, Val(expansion_order), lamb_helmholtz)
 
 i_compressed = 1
 for n in 0:expansion_order
@@ -532,7 +523,7 @@ rotated_weights_test = ComplexF64[0.6999999999999998 + 0.0im, 0.0735666364597430
 expansion_order = 10
 unrotated_weights = initialize_expansion(expansion_order, Float64)
 rotated_weights = initialize_expansion(expansion_order, Float64)
-expansion_switch = ExpansionSwitch{true,false}()
+lamb_helmholtz = Val(false)
 i_compressed = 1
 i = 1
 for n in 0:expansion_order
@@ -547,7 +538,7 @@ for n in 0:expansion_order
 end
 
 eimϕs = zeros(2,expansion_order+1)
-rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), expansion_switch)
+rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
 
 i_compressed = 1
 i = 1
@@ -589,10 +580,10 @@ for n in 0:expansion_order
     end
 end
 
-expansion_switch = ExpansionSwitch{true,false}()
+lamb_helmholtz = Val(false)
 eimϕs = zeros(2,expansion_order+1)
-rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), expansion_switch)
-back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, Val(expansion_order), expansion_switch)
+rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
+back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, Val(expansion_order), lamb_helmholtz)
 
 i_compressed = 1
 i = 1
@@ -671,9 +662,9 @@ update_Hs_π2!(Hs_π2, Val(expansion_order))
 update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
 θ = 2.5010703409103683
-expansion_switch = ExpansionSwitch{true,false}()
+lamb_helmholtz = Val(false)
 
-rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, Val(expansion_order), expansion_switch)
+rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -720,9 +711,9 @@ update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(length_Ts(expansion_order))
 
 update_Ts!(Ts, Hs_π2, θ, Val(expansion_order))
-expansion_switch = ExpansionSwitch{true,false}()
+lamb_helmholtz = Val(false)
 
-back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, Val(expansion_order), expansion_switch)
+back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -765,8 +756,8 @@ end
 
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
-expansion_switch = ExpansionSwitch{true,false}()
-rotate_z!(rotated_weights, weights, eimϕs, ϕ, Val(expansion_order), expansion_switch)
+lamb_helmholtz = Val(false)
+rotate_z!(rotated_weights, weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -809,8 +800,8 @@ end
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
 update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
-expansion_switch = ExpansionSwitch{true,false}()
-back_rotate_z!(back_rotated_weights, weights, eimϕs, Val(expansion_order), expansion_switch)
+lamb_helmholtz = Val(false)
+back_rotate_z!(back_rotated_weights, weights, eimϕs, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1

@@ -1,16 +1,3 @@
-using StaticArrays
-using LegendrePolynomials
-using Test
-
-include("containers.jl")
-include("compatibility.jl")
-include("derivativesswitch.jl")
-include("tree.jl")
-include("harmonics.jl")
-include("bodytomultipole.jl")
-include("rotate.jl")
-include("../test/gravitational_noimport.jl")
-
 #--- point source ---#
 @testset "body-to-multipole: point source" begin
 
@@ -54,7 +41,6 @@ x_target = SVector{3}(2.3,-4.1, 0.4)
 r = x_target - xs
 rnorm = sqrt(r'*r)
 ϕ_analytic = masses.bodies[1].strength/rnorm
-@show branch.multipole_expansion
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(x_target, branch.center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
 
 @test isapprox(ϕ_m2b, ϕ_analytic; atol=1e-12)

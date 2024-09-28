@@ -1,13 +1,9 @@
-function evaluate_multipole!(system, bodies_index, multipole_weights, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order, expansion_center) where {PS,VPS,VS,GS}
+function evaluate_multipole!(system, bodies_index, multipole_weights, derivatives_switch::DerivativesSwitch{PS,VS,GS}, expansion_order, expansion_center) where {PS,VS,GS}
     for i_body in bodies_index
 		scalar_potential, vector_potential, velocity, gradient = evaluate_multipole(system[i_body,POSITION], expansion_center, multipole_weights, derivatives_switch, expansion_order)
 
         if PS
             system[i_body,SCALAR_POTENTIAL] += scalar_potential
-        end
-        if VPS
-            vpx, vpy, vpz = system[i_body,VECTOR_POTENTIAL]
-            system[i_body,VECTOR_POTENTIAL] = SVector{3}(vpx+vector_potential[1],vpy+vector_potential[2],vpz+vector_potential[3])
         end
         if VS
             vpx, vpy, vpz = system[i_body,VELOCITY]
@@ -31,7 +27,7 @@ function evaluate_multipole!(system, bodies_index, multipole_weights, derivative
     end
 end
 
-function evaluate_multipole(x_target, expansion_center, multipole_weights::AbstractArray{TF}, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+function evaluate_multipole(x_target, expansion_center, multipole_weights::AbstractArray{TF}, derivatives_switch::DerivativesSwitch{PS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VS,GS,P}
     # outputs
     potential = zero(TF)
     velocity = zero(SVector{3,TF})

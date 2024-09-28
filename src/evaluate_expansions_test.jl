@@ -1,16 +1,3 @@
-using Test
-using StaticArrays
-
-include("containers.jl")
-include("harmonics.jl")
-include("rotate.jl")
-include("bodytomultipole.jl")
-include("translate.jl")
-include("tree.jl")
-include("evaluate_expansions.jl")
-include("derivativesswitch.jl")
-include("../test/gravitational_noimport.jl")
-
 #@testset "evaluate local expansion" begin
 
 expansion_order = 10
@@ -36,7 +23,9 @@ end
 Δx = x_target - branch.center
 harmonics = initialize_harmonics(expansion_order)
 derivatives_switch = DerivativesSwitch(true,false,true,true)
-u, velocity, gradient = evaluate_local(Δx, harmonics, branch.local_expansion, derivatives_switch, Val(expansion_order))
+lamb_helmholtz = Val(false)
+velocity_n_m = zeros(2,3,size(harmonics,2))
+u, velocity, gradient = evaluate_local(Δx, harmonics, velocity_n_m, branch.local_expansion, Val(expansion_order), lamb_helmholtz, derivatives_switch)
 
 
 dx = x_target - xs

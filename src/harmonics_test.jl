@@ -1,7 +1,4 @@
-include("harmonics.jl")
-
-using LegendrePolynomials
-using Test
+@testset "solid harmonics" begin
 
 p = 7
 expansion_order = Val(p)
@@ -30,3 +27,4 @@ for n in 0:p
     end
 end
 
+end

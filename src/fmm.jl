@@ -117,7 +117,7 @@ end
 
 #------- UPWARD PASS -------#
 
-function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) where P
+function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}, lamb_helmholtz) where P
 
     # try preallocating one container to be reused
     Ts = zeros(length_Ts(P))
@@ -137,7 +137,7 @@ function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) w
                 #weights_tmp_1 = child_branch.expansion_storage
                 #weights_tmp_2 = branch.expansion_storage
 
-                multipole_to_multipole!(branch, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order)
+                multipole_to_multipole!(branch, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
@@ -270,105 +270,13 @@ function upward_pass_multithread!(branches, systems, expansion_order, levels_ind
     translate_multipoles_multithread!(branches, expansion_order, levels_index, n_threads)
 end
 
-#####
-##### horizontal pass
-#####
-function update_strengths!(strengths, source_branch::MultiBranch, source_systems::Tuple)
-    i_strength = 0
-    for (source_system, bodies_index) in zip(source_systems, source_branch.bodies_index)
-        i_strength = update_strengths!(strengths, i_strength, bodies_index, source_system)
-    end
-    return i_strength
-end
+#------- direct interaction matrix -------#
 
-function update_strengths!(strengths, source_branch, source_system)
-    update_strengths!(strengths, 0, source_branch.bodies_index, source_system)
-end
+# TODO: add influence matrix approach to direct interactions
 
-function update_strengths!(strengths, i_strength, bodies_index, source_system)
-    strength_dims = get_strength_dims(source_system)
-    for i_source_body in bodies_index
-        σ = source_system[i_source_body, STRENGTH]
-        for σi in σ
-            i_strength += 1
-            strengths[i_strength] = σi
-        end
-    end
-    return i_strength
-end
+#------- horizontal pass -------#
 
-function update_influence!(target_systems::Tuple, this_influence::AbstractVector{TF}, i_row_prev, bodies_indices, derivatives_switches::Tuple) where TF
-    for (target_system, bodies_index, switch) in zip(target_systems, bodies_indices, derivatives_switches)
-        i_row_prev = update_influence!(target_system, this_influence, i_row_prev, bodies_index, switch)
-    end
-    return i_row_prev
-end
-
-function update_influence!(target_system, this_influence::AbstractVector{TF}, i_row_prev, bodies_index::UnitRange, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}) where {TF,PS,VPS,VS,GS}
-
-    for i_body in bodies_index
-        if PS
-            i_row_prev += 1
-            ϕ = target_system[i_body,SCALAR_POTENTIAL]
-            target_system[i_body,SCALAR_POTENTIAL] = ϕ + this_influence[i_row_prev]
-        end
-
-        if VPS
-            i_row_prev += 3
-            ψ = target_system[i_body,VECTOR_POTENTIAL]
-            target_system[i_body,VECTOR_POTENTIAL] = ψ + SVector{3,TF}(this_influence[i_row_prev-2], this_influence[i_row_prev-1], this_influence[i_row_prev])
-        end
-
-        if VS
-            i_row_prev += 3
-            v = target_system[i_body,VELOCITY]
-            target_system[i_body,VELOCITY] = v + SVector{3,TF}(this_influence[i_row_prev-2], this_influence[i_row_prev-1], this_influence[i_row_prev])
-        end
-
-        if GS
-            i_row_prev += 9
-            ∇v = target_system[i_body,VELOCITY_GRADIENT]
-            target_system[i_body,VELOCITY_GRADIENT] = ∇v + SMatrix{3,3,TF,9}(this_influence[i_row_prev-8], this_influence[i_row_prev-7], this_influence[i_row_prev-6], this_influence[i_row_prev-5], this_influence[i_row_prev-4], this_influence[i_row_prev-3], this_influence[i_row_prev-2], this_influence[i_row_prev-1], this_influence[i_row_prev])
-        end
-    end
-
-    return i_row_prev
-end
-
-function nearfield_singlethread!(target_system, target_tree::Tree, derivatives_switch, source_system, source_tree::Tree, interaction_list::InteractionList)
-    @assert length(source_tree.leaf_index) == length(interaction_list.influence_matrices)
-
-    # unpack
-    strengths = interaction_list.strengths
-    influence = interaction_list.influence
-
-    # loop over source leaves
-    for (i_source_branch, matrix) in zip(source_tree.leaf_index, interaction_list.influence_matrices)
-
-        # update strengths
-        source_branch = source_tree.branches[i_source_branch]
-        i_strength = update_strengths!(strengths, source_branch, source_system)
-
-        # obtain influence
-        n_rows, n_cols = size(matrix)
-        this_influence = view(influence, 1:n_rows)
-        @assert i_strength == n_cols
-        this_strength = view(strengths, 1:n_cols)
-        mul!(this_influence, matrix, this_strength)
-
-        # apply influence to targets
-        i_row_prev = 0
-        for (i_target, j_source) in interaction_list.direct_list
-            if j_source == i_source_branch # found a target
-                i_row_prev = update_influence!(target_system, this_influence, i_row_prev, target_tree.branches[i_target].bodies_index, derivatives_switch)
-            end
-        end
-        @assert i_row_prev == n_rows
-
-    end
-end
-
-function horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, expansion_order::Val{P}) where P
+function horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, expansion_order::Val{P}, lamb_helmholtz) where P
     # preallocate containers to be reused
     TF = eltype(target_branches)
     weights_tmp_1 = initialize_expansion(P, TF)
@@ -381,7 +289,7 @@ function horizontal_pass_singlethread!(target_branches, source_branches, m2l_lis
         source_branch = source_branches[j_source]
         #weights_tmp_1 = target_branch.expansion_storage
         #weights_tmp_2 = source_branch.expansion_storage
-        multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order)
+        multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
     end
 end
 
@@ -440,7 +348,7 @@ function preallocate_l2b(float_type, expansion_type, expansion_order::Val{P}, n_
     return containers
 end
 
-function downward_pass_singlethread!(branches, systems, derivatives_switches, expansion_order::Val{P}) where P
+function downward_pass_singlethread!(branches, systems, expansion_order::Val{P}, lamb_helmholtz, derivatives_switches) where P
     # try preallocating one container to be reused
     Ts = zeros(length_Ts(P))
     eimϕs = zeros(2, P+1)
@@ -450,10 +358,10 @@ function downward_pass_singlethread!(branches, systems, derivatives_switches, ex
     # loop over branches
     for branch in branches
         if branch.n_branches == 0 # leaf level
-            evaluate_local!(systems, branch, derivatives_switches, expansion_order)
+            evaluate_local!(systems, branch, expansion_order, lamb_helmholtz, derivatives_switches)
         else
             for i_child_branch in branch.branch_index
-                local_to_local!(branch, branches[i_child_branch], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order)
+                local_to_local!(branch, branches[i_child_branch], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
@@ -639,208 +547,6 @@ function sort_list_by_source(direct_list, target_branches::Vector{TT}, source_br
     return direct_target_bodies, direct_source_bodies
 end
 
-@inline function update_direct_bodies!(direct_bodies::Vector{<:UnitRange}, leaf_index, bodies_index::UnitRange)
-    direct_bodies[leaf_index] = bodies_index
-end
-
-@inline function update_direct_bodies!(direct_bodies_list, leaf_index, bodies_indices::AbstractVector{<:UnitRange})
-    for (direct_bodies, bodies_index) in zip(direct_bodies_list, bodies_indices)
-        update_direct_bodies!(direct_bodies, leaf_index, bodies_index)
-    end
-end
-
-@inline function get_strength_dims(systems::Tuple)
-    return SVector{length(systems),Int}(get_strength_dims(system) for system in systems)
-end
-
-@inline function get_strength_dims(system)
-    return length(system[1,STRENGTH])
-end
-
-@inline function get_one(TF,::Val{n},i) where {n}
-    return SVector{n,TF}(0.0^(i!=j) for j in 1:n)
-end
-
-@inline function get_one(TF,::Val{1},i)
-    return one(TF)
-end
-
-@inline function get_n_rows(bodies_index::UnitRange, ::DerivativesSwitch{PS,VPS,VS,GS}) where {PS,VPS,VS,GS}
-    return length(bodies_index) * (0^!PS + 3*0^!VPS + 3*0^!VS + 9*0^!GS)
-end
-
-@inline function get_n_rows(bodies_indices, derivatives_switches::Tuple)
-    return sum(get_n_rows(bodies_index, switch) for (bodies_index, switch) in zip(bodies_indices, derivatives_switches))
-end
-
-"multiple source systems"
-function populate_influence_matrix!(matrix, target_systems, direct_list, target_branches, derivatives_switches, source_systems, i_source_branch, source_bodies_indices, strength_dims)
-    i_col_prev = 0
-    for (source_system, source_bodies_index, strength_dim) in zip(source_systems, source_bodies_indices, strength_dims)
-        i_col_prev = populate_influence_matrix!(matrix, i_col_prev, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index, strength_dim)
-    end
-end
-
-"single source system (without specifying i_col_prev)"
-function populate_influence_matrix!(matrix::Matrix{TF}, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index::UnitRange, strength_dims::Int) where TF
-    populate_influence_matrix!(matrix, 0, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index, strength_dims)
-end
-
-"single source system"
-function populate_influence_matrix!(matrix::Matrix{TF}, i_col_prev, target_systems, direct_list, target_branches, derivatives_switches, source_system, i_source_branch, source_bodies_index::UnitRange, strength_dims::Int) where TF
-    strength_dims_val = Val(strength_dims)
-    for i_source_body in source_bodies_index
-        strength = source_system[i_source_body,STRENGTH]
-        for i_strength_component in 1:strength_dims
-            i_col_prev += 1
-            source_system[i_source_body,STRENGTH] = get_one(TF,strength_dims_val,i_strength_component)
-            i_row_prev = 0
-
-            # search for targets
-            for (i_target, j_source) in direct_list
-                if j_source == i_source_branch # found a target
-                    target_bodies_index = target_branches[i_target].bodies_index
-                    i_row_prev = populate_influence_matrix!(matrix, i_row_prev, i_col_prev, target_systems, target_bodies_index, derivatives_switches, source_system, i_source_body)
-                end
-            end
-
-        end
-        source_system[i_source_body,STRENGTH] = strength
-    end
-    return i_col_prev
-end
-
-"single source body, multiple target systems"
-function populate_influence_matrix!(matrix, i_row_prev, i_col, target_systems::Tuple, target_bodies_indices, derivatives_switches::Tuple, source_system, i_source_body)
-    for (target_system, target_bodies_index, switch) in zip(target_systems, target_bodies_indices, derivatives_switches)
-        i_row_prev = populate_influence_matrix!(matrix, i_row_prev, i_col, target_system, target_bodies_index, switch, source_system, i_source_body)
-    end
-    return i_row_prev
-end
-
-"single source body, single target system"
-function populate_influence_matrix!(matrix::Matrix{TF}, i_row_prev, i_col, target_system, target_bodies_index::UnitRange, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, source_system, i_source_body) where {TF,PS,VPS,VS,GS}
-
-    # loop over targets
-    for i_target_body in target_bodies_index
-
-        # save old influence and reset
-        if PS
-            ϕ_old = target_system[i_target_body, SCALAR_POTENTIAL]
-            target_system[i_target_body, SCALAR_POTENTIAL] = zero(TF)
-        end
-        if VPS
-            ψ_old = SVector{3,TF}(target_system[i_target_body, VECTOR_POTENTIAL])
-            target_system[i_target_body, VECTOR_POTENTIAL] = zero(SVector{3,TF})
-        end
-        if VS
-            v_old = SVector{3,TF}(target_system[i_target_body, VELOCITY])
-            target_system[i_target_body, VELOCITY] = zero(SVector{3,TF})
-        end
-        if GS
-            ∇v_old = SMatrix{3,3,TF,9}(target_system[i_target_body, VELOCITY_GRADIENT])
-            target_system[i_target_body, VELOCITY_GRADIENT] = zero(SMatrix{3,3,TF,9})
-        end
-
-        # compute unit influence of source
-        direct!(target_system, i_target_body, derivatives_switch, source_system, i_source_body)
-
-        # update influence matrix
-        if PS
-            i_row_prev += 1
-            matrix[i_row_prev, i_col] = target_system[i_target_body, SCALAR_POTENTIAL]
-        end
-
-        if VPS
-            ψ = target_system[i_target_body, VECTOR_POTENTIAL]
-            for i in eachindex(ψ)
-                i_row_prev += 1
-                matrix[i_row_prev, i_col] = ψ[i]
-            end
-        end
-
-        if VS
-            v = target_system[i_target_body, VELOCITY]
-            for i in eachindex(v)
-                i_row_prev += 1
-                matrix[i_row_prev, i_col] = v[i]
-            end
-        end
-
-        if GS
-            ∇v = target_system[i_target_body, VELOCITY_GRADIENT]
-            for i in eachindex(∇v)
-                i_row_prev += 1
-                matrix[i_row_prev, i_col] = ∇v[i]
-            end
-        end
-
-        # restore old influence
-        if PS
-            target_system[i_target_body, SCALAR_POTENTIAL] = ϕ_old
-        end
-        if VPS
-            target_system[i_target_body, VECTOR_POTENTIAL] = ψ_old
-        end
-        if VS
-            target_system[i_target_body, VELOCITY] = v_old
-        end
-        if GS
-            target_system[i_target_body, VELOCITY_GRADIENT] = ∇v_old
-        end
-
-    end
-
-    return i_row_prev
-end
-
-@inline function get_n_strengths(bodies_index::UnitRange, strength_dim::Int)
-    return length(bodies_index) * strength_dim
-end
-
-@inline function get_n_strengths(bodies_indices, strength_dims)
-    n = 0
-    for (bodies_index, strength_dim) in zip(bodies_indices, strength_dims)
-        n += get_n_strengths(bodies_index, strength_dim)
-    end
-    return n
-end
-
-function add_influence_matrix!(influence_matrices::Vector{Matrix{TF}}, i_matrix, target_systems, target_branches, source_systems, source_branches, i_source_branch, strength_dims, direct_list, derivatives_switches) where TF
-
-    # unpack
-    source_branch = source_branches[i_source_branch]
-
-    # number of source strength values
-    n_cols = get_n_strengths(source_branch.bodies_index, strength_dims)
-
-    # number of target locations
-    n_rows = 0
-    for (i_target, j_source) in direct_list
-        j_source == i_source_branch && (n_rows += get_n_rows(target_branches[i_target].bodies_index, derivatives_switches))
-    end
-
-    # preallocate influence matrix
-    matrix = Matrix{TF}(undef, n_rows, n_cols)
-
-    # populate influence matrix
-    populate_influence_matrix!(matrix, target_systems, direct_list, target_branches, derivatives_switches, source_systems, i_source_branch, source_branch.bodies_index, strength_dims)
-
-    # update matrices
-    influence_matrices[i_matrix] = matrix
-
-end
-
-@inline function get_influence_storage(::DerivativesSwitch{PS,VPS,VS,GS}, tree::Tree{TF,<:Any}) where {PS,VPS,VS,GS,TF}
-    n_rows = 1^PS + 3^VPS + 3^VS + 9^GS
-    n_cols = tree.leaf_size
-    return Matrix{TF}(undef, n_rows, n_cols)
-end
-
-@inline function get_influence_storage(derivatives_switches::Tuple, tree::Tree)
-    return Tuple(get_influence_storage(switch,tree) for switch in derivatives_switches)
-end
-
 function InteractionList(direct_list, target_systems, target_tree::Tree, source_systems, source_tree::Tree{TF,<:Any}, derivatives_switches) where TF
     # unpack tree
     leaf_index = source_tree.leaf_index
@@ -883,8 +589,7 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 
 - `target_systems`: either
 
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
+    - a system object for which compatibility functions have been overloaded, or - a tuple of system objects for which compatibility functions have been overloaded
 
 - `source_systems`: either
 
@@ -897,8 +602,8 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 - `leaf_size_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
 - `leaf_size_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
 - `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
+- `lamb_helmholtz::Bool`: determines whether or not to calculate the induced velocity due to a vector potential using the Lamb-Helmholtz decomposition; erroroneous velocity and gradient will result if `lamb_helmholtz==false` and a vector potential is used.
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 - `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
@@ -919,12 +624,13 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 """
 function fmm!(target_systems, source_systems;
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    upward_pass=true, horizontal_pass=true, downward_pass=true,
-    nearfield=true, farfield=true, self_induced=true,
-    unsort_source_bodies=true, unsort_target_bodies=true,
-    source_shrink_recenter=true, target_shrink_recenter=true,
-    save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree", gpu=false
+    lamb_helmholtz::Bool=false,
+    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
+    unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
+    source_shrink_recenter::Bool=true, target_shrink_recenter::Bool=true,
+    save_tree_source::Bool=false, save_tree_target::Bool=false, save_name_source="source_tree", save_name_target="target_tree", gpu::Bool=false
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -935,7 +641,7 @@ function fmm!(target_systems, source_systems;
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
-        scalar_potential, vector_potential, velocity, velocity_gradient,
+        scalar_potential, velocity, velocity_gradient,
         multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
@@ -968,7 +674,6 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 - `leaf_size::Int`: maximum number of bodies from `systems` allowed in a leaf-level branch
 - `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 - `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
@@ -986,18 +691,19 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 """
 function fmm!(systems;
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    upward_pass=true, horizontal_pass=true, downward_pass=true,
-    nearfield=true, farfield=true, self_induced=true,
-    unsort_bodies=true, shrink_recenter=true,
-    save_tree=false, save_name="tree", gpu=false
+    lamb_helmholtz::Bool=false,
+    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
+    unsort_bodies::Bool=true, shrink_recenter::Bool=true,
+    save_tree::Bool=false, save_name::Bool="tree", gpu::Bool=false
 )
     # create tree
     tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
 
     # perform fmm
     m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches = fmm!(tree, systems;
-        scalar_potential, vector_potential, velocity, velocity_gradient,
+        scalar_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
@@ -1027,7 +733,6 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 - `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 - `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
@@ -1041,21 +746,23 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 """
 function fmm!(tree::Tree, systems;
-    multipole_threshold=0.4, reset_tree=true,
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    upward_pass=true, horizontal_pass=true, downward_pass=true,
-    nearfield=true, farfield=true, self_induced=true,
-    unsort_bodies=true, gpu=false
+    multipole_threshold=0.4, reset_tree::Bool=true,
+    lamb_helmholtz::Bool=false
+    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
+    unsort_bodies::Bool=true, gpu::Bool=false
 )
 
     # assemble derivatives switch
-    derivatives_switches = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, systems)
+    derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, systems)
 
     # create interaction lists
     m2l_list, direct_target_bodies, direct_source_bodies = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
     fmm!(tree, systems, m2l_list, direct_target_bodies, direct_source_bodies,  derivatives_switches;
+        lamb_helmholtz,
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_bodies, gpu
@@ -1087,7 +794,6 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 - `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 - `reset_source_tree::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(source_systems)` indicating whether or not to reset the expansions of each source tree
@@ -1105,22 +811,24 @@ Dispatches `fmm!` using existing `::Tree` objects.
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
     multipole_threshold=0.4,
-    scalar_potential=true, vector_potential=true, velocity=true, velocity_gradient=true,
-    reset_source_tree=true, reset_target_tree=true,
-    upward_pass=true, horizontal_pass=true, downward_pass=true,
-    nearfield=true, farfield=true, self_induced=true,
-    unsort_source_bodies=true, unsort_target_bodies=true,
-    gpu=false
+    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    lamb_helmholtz::Bool=false,
+    reset_source_tree::Bool=true, reset_target_tree::Bool=true,
+    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
+    unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
+    gpu::Bool=false
 )
 
     # assemble derivatives switch
-    derivatives_switches = DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
+    derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
     m2l_list, direct_target_bodies, direct_source_bodies = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
+        lamb_helmholtz,
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies, unsort_target_bodies, gpu
@@ -1155,12 +863,14 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 """
 function fmm!(tree::Tree, systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
-    reset_tree=true,
-    nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
-    unsort_bodies=true, gpu=false
+    lamb_helmholtz::Bool=false,
+    reset_tree::Bool=true,
+    nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    unsort_bodies::Bool=true, gpu::Bool=false
 )
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
+        lamb_helmholtz,
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false,
@@ -1201,7 +911,6 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 - `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `vector_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector potential from `source_systems`
 - `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
 - `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
 - `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
@@ -1215,10 +924,11 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
-    reset_source_tree=true, reset_target_tree=true,
-    nearfield=true, upward_pass=true, horizontal_pass=true, downward_pass=true,
-    unsort_source_bodies=true, unsort_target_bodies=true,
-    gpu=false
+    lamb_helmholtz::Bool=false,
+    reset_source_tree::Bool=true, reset_target_tree::Bool=true,
+    nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
+    gpu::Bool=false
 )
     # check if systems are empty
     n_sources = get_n_bodies(source_systems)
@@ -1249,9 +959,9 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             if n_threads == 1 # && !gpu || gpu
 
                 nearfield_singlethread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies, Val(gpu))
-                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
-                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-                downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order)
+                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order, Val(lamb_helmholtz))
+                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, Val(lamb_helmholtz))
+                downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switches, target_tree.expansion_order, Val(lamb_helmholtz))
 
             else # n_threads > 1 && !gpu
                 nearfield_multithread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies, n_threads)

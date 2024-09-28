@@ -14,9 +14,6 @@ const RADIUS = Radius()
 struct ScalarPotential <: Indexable end
 const SCALAR_POTENTIAL = ScalarPotential()
 
-struct VectorPotential <: Indexable end
-const VECTOR_POTENTIAL = VectorPotential()
-
 struct Velocity <: Indexable end
 const VELOCITY = Velocity()
 
@@ -60,7 +57,7 @@ abstract type Panel{NS,TK} <: AbstractElement{TK} end
 
 Switch indicating whether the scalar potential, vector potential, velocity, and/or velocity gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
 """
-struct DerivativesSwitch{PS,VPS,VS,GS} end
+struct DerivativesSwitch{PS,VS,GS} end
 
 """
     ExpansionSwitch

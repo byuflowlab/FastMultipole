@@ -1,16 +1,16 @@
-function evaluate_local!(systems, branch::MultiBranch, harmonics, velocity_n_m, derivatives_switches, expansion_switches, expansion_order)
+function evaluate_local!(systems, branch::MultiBranch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     for i in eachindex(systems)
-        evaluate_local!(systems[i], branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.center, derivatives_switches[i], expansion_switches[i], expansion_order)
+        evaluate_local!(systems[i], branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.center, expansion_order, lamb_helmholtz, derivatives_switches[i])
     end
 end
 
-function evaluate_local!(system, branch::SingleBranch, harmonics, velocity_n_m, derivatives_switch, expansion_switch, expansion_order)
-    evaluate_local!(system, branch.bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.center, derivatives_switch, expansion_switch, expansion_order)
+function evaluate_local!(system, branch::SingleBranch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
+    evaluate_local!(system, branch.bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.center, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
-function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_expansion, expansion_center, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_switch, expansion_order::Val{P}) where {PS,VPS,VS,GS,P}
+function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_expansion, expansion_center, expansion_order::Val{P}, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {P,PS,VS,GS}
     for i_body in bodies_index
-        scalar_potential, velocity, gradient = evaluate_local(system[i_body,POSITION] - expansion_center, harmonics, velocity_n_m, local_expansion, derivatives_switch, expansion_switch, expansion_order)
+        scalar_potential, velocity, gradient = evaluate_local(system[i_body,POSITION] - expansion_center, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
         PS && (system[i_body, SCALAR_POTENTIAL] += scalar_potential)
         if VS
             vpx, vpy, vpz = system[i_body, VELOCITY]
@@ -33,7 +33,7 @@ function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_ex
     end
 end
 
-function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::DerivativesSwitch{PS,VPS,VS,GS}, ::ExpansionSwitch{SP,VP}, expansion_order::Val{P}) where {PS,VPS,VS,GS,SP,VP,P}
+function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion_order::Val{P}, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {P,LH,PS,VS,GS}
     # convert to spherical coordinates
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
@@ -68,7 +68,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
     Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
 
     # scalar potential
-    if PS && SP
+    if PS && !LH # scalar potential is scrambled to preserve velocity when using Lamb-Helmholtz
         ϕ_n_m_real = local_expansion[1,1,i_n_m]
         ϕ_n_m_imag = local_expansion[2,1,i_n_m]
         u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag
@@ -82,7 +82,6 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
         vz = -ϕ_{1}^0
         =#
 
-
         # expansion coefficients
         vx_n_m_real = zero(eltype(local_expansion))
         vx_n_m_imag = zero(eltype(local_expansion))
@@ -91,29 +90,16 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
         vz_n_m_real = zero(eltype(local_expansion))
         vz_n_m_imag = zero(eltype(local_expansion))
 
-        if SP
-            ϕ_np1_m_real = local_expansion[1,1,i_n_m+n+1]
-            ϕ_np1_m_imag = local_expansion[2,1,i_n_m+n+1]
-            ϕ_np1_mp1_real = local_expansion[1,1,i_n_m+n+2]
-            ϕ_np1_mp1_imag = local_expansion[2,1,i_n_m+n+2]
+        # due to ϕ
+        ϕ_np1_m_real = local_expansion[1,1,i_n_m+n+1]
+        ϕ_np1_m_imag = local_expansion[2,1,i_n_m+n+1]
+        ϕ_np1_mp1_real = local_expansion[1,1,i_n_m+n+2]
+        ϕ_np1_mp1_imag = local_expansion[2,1,i_n_m+n+2]
 
-            vx_n_m_real -= ϕ_np1_mp1_imag
-            vy_n_m_real -= ϕ_np1_mp1_real
-            vz_n_m_real -= ϕ_np1_m_real
-            vz_n_m_imag -= ϕ_np1_m_imag
-        end
-
-        if VP
-            ϕ_np1_m_real = local_expansion[1,2,i_n_m+n+1]
-            ϕ_np1_m_imag = local_expansion[2,2,i_n_m+n+1]
-            ϕ_np1_mp1_real = local_expansion[1,2,i_n_m+n+2]
-            ϕ_np1_mp1_imag = local_expansion[2,2,i_n_m+n+2]
-
-            vx_n_m_real -= ϕ_np1_mp1_imag
-            vy_n_m_real -= ϕ_np1_mp1_real
-            vz_n_m_real -= ϕ_np1_m_real
-            vz_n_m_imag -= ϕ_np1_m_imag
-        end
+        vx_n_m_real -= ϕ_np1_mp1_imag
+        vy_n_m_real -= ϕ_np1_mp1_real
+        vz_n_m_real -= ϕ_np1_m_real
+        vz_n_m_imag -= ϕ_np1_m_imag
 
         if VS
             # evaluate expansion
@@ -132,8 +118,6 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
 
     end
 
-
-
     #------- n > 0 -------#
 
     for n in 1:P
@@ -147,7 +131,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
         Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
 
         # scalar potential
-        if PS && SP
+        if PS && !LH
             ϕ_n_m_real = local_expansion[1,1,i_n_m]
             ϕ_n_m_imag = local_expansion[2,1,i_n_m]
             u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag
@@ -169,18 +153,12 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
             vz_n_m_real = zero(eltype(local_expansion))
             vz_n_m_imag = zero(eltype(local_expansion))
 
-            if SP
-                if n < P
-                    ϕ_np1_m_real = local_expansion[1,1,i_n_m+n+1]
-                    ϕ_np1_m_imag = local_expansion[2,1,i_n_m+n+1]
-                    ϕ_np1_mp1_real = local_expansion[1,1,i_n_m+n+2]
-                    ϕ_np1_mp1_imag = local_expansion[2,1,i_n_m+n+2]
-                else
-                    ϕ_np1_m_real = zero(eltype(local_expansion))
-                    ϕ_np1_m_imag = zero(eltype(local_expansion))
-                    ϕ_np1_mp1_real = zero(eltype(local_expansion))
-                    ϕ_np1_mp1_imag = zero(eltype(local_expansion))
-                end
+            # due to ϕ
+            if n < P
+                ϕ_np1_m_real = local_expansion[1,1,i_n_m+n+1]
+                ϕ_np1_m_imag = local_expansion[2,1,i_n_m+n+1]
+                ϕ_np1_mp1_real = local_expansion[1,1,i_n_m+n+2]
+                ϕ_np1_mp1_imag = local_expansion[2,1,i_n_m+n+2]
 
                 vx_n_m_real -= ϕ_np1_mp1_imag
                 vy_n_m_real -= ϕ_np1_mp1_real
@@ -188,27 +166,14 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
                 vz_n_m_imag -= ϕ_np1_m_imag
             end
 
-            if VP
-                if n < P
-                    ϕ_np1_m_real = local_expansion[1,2,i_n_m+n+1]
-                    ϕ_np1_m_imag = local_expansion[2,2,i_n_m+n+1]
-                    ϕ_np1_mp1_real = local_expansion[1,2,i_n_m+n+2]
-                    ϕ_np1_mp1_imag = local_expansion[2,2,i_n_m+n+2]
-                else
-                    ϕ_np1_m_real = zero(eltype(local_expansion))
-                    ϕ_np1_m_imag = zero(eltype(local_expansion))
-                    ϕ_np1_mp1_real = zero(eltype(local_expansion))
-                    ϕ_np1_mp1_imag = zero(eltype(local_expansion))
-                end
 
+            # due to χ
+            if LH
                 χ_n_mp1_real = local_expansion[1,3,i_n_m+1]
                 χ_n_mp1_imag = local_expansion[2,3,i_n_m+1]
 
-                vx_n_m_real += n * χ_n_mp1_real - ϕ_np1_mp1_imag
-                vy_n_m_real -= n * χ_n_mp1_imag + ϕ_np1_mp1_real
-                vz_n_m_real -= ϕ_np1_m_real
-                vz_n_m_imag -= ϕ_np1_m_imag
-
+                vx_n_m_real += n * χ_n_mp1_real
+                vy_n_m_real -= n * χ_n_mp1_imag
             end
 
             if VS
@@ -239,10 +204,10 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
             Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
 
             # scalar potential
-            if PS && SP
+            if PS && !LH
                 ϕ_n_m_real = local_expansion[1,1,i_n_m]
                 ϕ_n_m_imag = local_expansion[2,1,i_n_m]
-                u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag
+                u += 2 * (Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag)
             end
 
             # velocity
@@ -261,22 +226,13 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
                 vz_n_m_real = zero(eltype(local_expansion))
                 vz_n_m_imag = zero(eltype(local_expansion))
 
-                if SP
-                    if n < P
-                        ϕ_np1_mm1_real = local_expansion[1,1,i_n_m+n]
-                        ϕ_np1_mm1_imag = local_expansion[2,1,i_n_m+n]
-                        ϕ_np1_m_real = local_expansion[1,1,i_n_m+n+1]
-                        ϕ_np1_m_imag = local_expansion[2,1,i_n_m+n+1]
-                        ϕ_np1_mp1_real = local_expansion[1,1,i_n_m+n+2]
-                        ϕ_np1_mp1_imag = local_expansion[2,1,i_n_m+n+2]
-                    else
-                        ϕ_np1_mm1_real = zero(eltype(local_expansion))
-                        ϕ_np1_mm1_imag = zero(eltype(local_expansion))
-                        ϕ_np1_m_real = zero(eltype(local_expansion))
-                        ϕ_np1_m_imag = zero(eltype(local_expansion))
-                        ϕ_np1_mp1_real = zero(eltype(local_expansion))
-                        ϕ_np1_mp1_imag = zero(eltype(local_expansion))
-                    end
+                if n < P
+                    ϕ_np1_mm1_real = local_expansion[1,1,i_n_m+n]
+                    ϕ_np1_mm1_imag = local_expansion[2,1,i_n_m+n]
+                    ϕ_np1_m_real = local_expansion[1,1,i_n_m+n+1]
+                    ϕ_np1_m_imag = local_expansion[2,1,i_n_m+n+1]
+                    ϕ_np1_mp1_real = local_expansion[1,1,i_n_m+n+2]
+                    ϕ_np1_mp1_imag = local_expansion[2,1,i_n_m+n+2]
 
                     vx_n_m_real -= (ϕ_np1_mm1_imag + ϕ_np1_mp1_imag) * 0.5
                     vx_n_m_imag += (ϕ_np1_mm1_real + ϕ_np1_mp1_real) * 0.5
@@ -286,49 +242,33 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, ::Derivat
                     vz_n_m_imag -= ϕ_np1_m_imag
                 end
 
-                if VP
+                if LH
                     # extract expansion coefficients
-                    if n < P
-                        ϕ_np1_mm1_real = local_expansion[1,2,i_n_m+n]
-                        ϕ_np1_mm1_imag = local_expansion[2,2,i_n_m+n]
-                        ϕ_np1_mp1_real = local_expansion[1,2,i_n_m+n+2]
-                        ϕ_np1_mp1_imag = local_expansion[2,2,i_n_m+n+2]
-                    else
-                        ϕ_np1_mm1_real = zero(eltype(local_expansion))
-                        ϕ_np1_mm1_imag = zero(eltype(local_expansion))
-                        ϕ_np1_mp1_real = zero(eltype(local_expansion))
-                        ϕ_np1_mp1_imag = zero(eltype(local_expansion))
-                    end
                     χ_n_mm1_real = local_expansion[1,3,i_n_m-1]
                     χ_n_mm1_imag = local_expansion[2,3,i_n_m-1]
+
+                    # form velocity coefficients
+                    vx_n_m_real -= (n+m) * χ_n_mm1_real * 0.5
+                    vx_n_m_imag -= (n+m) * χ_n_mm1_imag * 0.5
+                    vy_n_m_real -= (n+m) * χ_n_mm1_imag * 0.5
+                    vy_n_m_imag += (n+m) * χ_n_mm1_real * 0.5
                     if m < n
                         χ_n_mp1_real = local_expansion[1,3,i_n_m+1]
                         χ_n_mp1_imag = local_expansion[2,3,i_n_m+1]
-                    else
-                        χ_n_mp1_real = zero(eltype(local_expansion))
-                        χ_n_mp1_imag = zero(eltype(local_expansion))
-                    end
 
-                    # form velocity coefficients
-                    vx_n_m_real -= (ϕ_np1_mm1_imag + ϕ_np1_mp1_imag - (n-m) * χ_n_mp1_real + (n+m) * χ_n_mm1_real) * 0.5
-                    vx_n_m_imag += (ϕ_np1_mm1_real + ϕ_np1_mp1_real + (n-m) * χ_n_mp1_imag - (n+m) * χ_n_mm1_imag) * 0.5
-                    vy_n_m_real += (ϕ_np1_mm1_real - ϕ_np1_mp1_real - (n-m) * χ_n_mp1_imag - (n+m) * χ_n_mm1_imag) * 0.5
-                    vy_n_m_imag += (ϕ_np1_mm1_imag - ϕ_np1_mp1_imag + (n-m) * χ_n_mp1_real + (n+m) * χ_n_mm1_real) * 0.5
+                        vx_n_m_real += (n-m) * χ_n_mp1_real * 0.5
+                        vx_n_m_imag += (n-m) * χ_n_mp1_imag * 0.5
+                        vy_n_m_real -= (n-m) * χ_n_mp1_imag * 0.5
+                        vy_n_m_imag += (n-m) * χ_n_mp1_real * 0.5
+                    end
 
                     # extract expansion coefficients
-                    if n < P
-                        ϕ_np1_m_real = local_expansion[1,2,i_n_m+n+1]
-                        ϕ_np1_m_imag = local_expansion[2,2,i_n_m+n+1]
-                    else
-                        ϕ_np1_m_real = zero(eltype(local_expansion))
-                        ϕ_np1_m_imag = zero(eltype(local_expansion))
-                    end
                     χ_n_m_real = local_expansion[1,3,i_n_m]
                     χ_n_m_imag = local_expansion[2,3,i_n_m]
 
                     # form velocity coefficients
-                    vz_n_m_real += -ϕ_np1_m_real + m * χ_n_m_imag
-                    vz_n_m_imag += -ϕ_np1_m_imag - m * χ_n_m_real
+                    vz_n_m_real += m * χ_n_m_imag
+                    vz_n_m_imag -= m * χ_n_m_real
                 end
 
                 # evaluate expansion

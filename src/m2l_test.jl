@@ -1,14 +1,3 @@
-using Test
-using StaticArrays
-
-include("containers.jl")
-include("harmonics.jl")
-include("rotate.jl")
-include("bodytomultipole.jl")
-include("translate.jl")
-include("tree.jl")
-include("../test/gravitational_noimport.jl")
-
 @testset "multipole-to-local z translation" begin
 
 expansion_order = 10
@@ -88,8 +77,8 @@ update_ζs_mag!(ζs_mag, 0, expansion_order)
 update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
-expansion_switch = ExpansionSwitch{true,false}()
-multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), expansion_switch)
+lamb_helmholtz = Val(false)
+multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
