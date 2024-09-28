@@ -1,4 +1,4 @@
-#@testset "evaluate local expansion" begin
+@testset "evaluate local expansion" begin
 
 expansion_order = 10
 x_target = SVector{3}([2.3, -4.1, 0.4])
@@ -14,15 +14,15 @@ for n in 0:expansion_order
         if m >= 0
             branch.local_expansion[1,1,i_compressed] = real(local_weights_test[i])
             branch.local_expansion[2,1,i_compressed] = imag(local_weights_test[i])
-            global i_compressed += 1
+            i_compressed += 1
         end
-        global i += 1
+        i += 1
     end
 end
 
 Δx = x_target - branch.center
 harmonics = initialize_harmonics(expansion_order)
-derivatives_switch = DerivativesSwitch(true,false,true,true)
+derivatives_switch = DerivativesSwitch(true,true,true)
 lamb_helmholtz = Val(false)
 velocity_n_m = zeros(2,3,size(harmonics,2))
 u, velocity, gradient = evaluate_local(Δx, harmonics, velocity_n_m, branch.local_expansion, Val(expansion_order), lamb_helmholtz, derivatives_switch)
@@ -37,5 +37,5 @@ g_test = SMatrix{3,3}(2*dx[1]^2 - dx[2]^2 - dx[3]^2, 3*dx[1]*dx[2], 3*dx[1]*dx[3
 @test isapprox(velocity, v_test; atol=1e-11)
 @test isapprox(gradient, g_test; atol=1e-9)
 
-#end
+end
 

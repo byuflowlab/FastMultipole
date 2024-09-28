@@ -244,8 +244,8 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
 
                 if LH
                     # extract expansion coefficients
-                    χ_n_mm1_real = local_expansion[1,3,i_n_m-1]
-                    χ_n_mm1_imag = local_expansion[2,3,i_n_m-1]
+                    χ_n_mm1_real = local_expansion[1,2,i_n_m-1]
+                    χ_n_mm1_imag = local_expansion[2,2,i_n_m-1]
 
                     # form velocity coefficients
                     vx_n_m_real -= (n+m) * χ_n_mm1_real * 0.5

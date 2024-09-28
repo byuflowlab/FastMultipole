@@ -21,7 +21,7 @@ for n in 0:expansion_order
 end
 z_translated_weights = initialize_expansion(expansion_order)
 
-translate_multipole_to_local_z!(z_translated_weights, original_weights, r, Val(expansion_order), ExpansionSwitch{true,false}())
+translate_multipole_to_local_z!(z_translated_weights, original_weights, r, Val(expansion_order), Val(false))
 
 i = 1
 i_compressed = 1
