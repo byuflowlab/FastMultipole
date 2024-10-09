@@ -148,7 +148,7 @@ end
 end
 
 function initialize_expansion(expansion_order, type=Float64)
-    return zeros(type, 2, 3, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function vector_to_expansion!(expansion, vector,index, expansion_order)

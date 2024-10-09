@@ -65,7 +65,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
     i_n_m += 1
 
     # get regular harmonic
-    Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
+    Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
     # scalar potential
     if PS && !LH # scalar potential is scrambled to preserve velocity when using Lamb-Helmholtz
@@ -128,7 +128,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
         i_n_m += 1
 
         # get regular harmonic
-        Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
+        Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
         # scalar potential
         if PS && !LH
@@ -169,8 +169,8 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
 
             # due to χ
             if LH
-                χ_n_mp1_real = local_expansion[1,3,i_n_m+1]
-                χ_n_mp1_imag = local_expansion[2,3,i_n_m+1]
+                χ_n_mp1_real = local_expansion[1,2,i_n_m+1]
+                χ_n_mp1_imag = local_expansion[2,2,i_n_m+1]
 
                 vx_n_m_real += n * χ_n_mp1_real
                 vy_n_m_real -= n * χ_n_mp1_imag
@@ -201,7 +201,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
             i_n_m += 1
 
             # get regular harmonic
-            Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
+            Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
             # scalar potential
             if PS && !LH
@@ -253,8 +253,8 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                     vy_n_m_real -= (n+m) * χ_n_mm1_imag * 0.5
                     vy_n_m_imag += (n+m) * χ_n_mm1_real * 0.5
                     if m < n
-                        χ_n_mp1_real = local_expansion[1,3,i_n_m+1]
-                        χ_n_mp1_imag = local_expansion[2,3,i_n_m+1]
+                        χ_n_mp1_real = local_expansion[1,2,i_n_m+1]
+                        χ_n_mp1_imag = local_expansion[2,2,i_n_m+1]
 
                         vx_n_m_real += (n-m) * χ_n_mp1_real * 0.5
                         vx_n_m_imag += (n-m) * χ_n_mp1_imag * 0.5
@@ -263,8 +263,8 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                     end
 
                     # extract expansion coefficients
-                    χ_n_m_real = local_expansion[1,3,i_n_m]
-                    χ_n_m_imag = local_expansion[2,3,i_n_m]
+                    χ_n_m_real = local_expansion[1,2,i_n_m]
+                    χ_n_m_imag = local_expansion[2,2,i_n_m]
 
                     # form velocity coefficients
                     vz_n_m_real += m * χ_n_m_imag
@@ -303,7 +303,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
             i_n_m += 1
 
             # get regular harmonic
-            Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
+            Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
             vg_xx_real = -velocity_n_m[2,1,i_n_m+n+2]
             vxx += vg_xx_real * Rnm_real
@@ -344,7 +344,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                 i_n_m += 1
 
                 # get regular harmonic
-                Rnm_real, Rnm_imag = harmonics[1,i_n_m], harmonics[2,i_n_m]
+                Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
                 vg_xx_real = -(velocity_n_m[2,1,i_n_m+n] + velocity_n_m[2,1,i_n_m+n+2]) * 0.5
                 vg_xx_imag = (velocity_n_m[1,1,i_n_m+n] + velocity_n_m[1,1,i_n_m+n+2]) * 0.5
@@ -386,6 +386,6 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
         end
     end
 
-    return u, SVector{3}(vx,vy,vz), SMatrix{3,3,eltype(local_expansion),9}(vxx, vyx, vzx, vxy, vyy, vzy, vxz, vyz, vzz)
+    return -u * ONE_OVER_4π, SVector{3}(vx,vy,vz) * ONE_OVER_4π, SMatrix{3,3,eltype(local_expansion),9}(vxx, vyx, vzx, vxy, vyy, vzy, vxz, vyz, vzz) * ONE_OVER_4π
 end
 

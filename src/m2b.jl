@@ -105,5 +105,5 @@ function evaluate_multipole(x_target, expansion_center, multipole_weights::Abstr
         i_eim_imag = i_eim_real_tmp * i_ei_imag + i_eim_imag_tmp * i_ei_real
     end
 
-    return potential, velocity, velocity_gradient
+    return -potential / 4 / pi, velocity / 4 / pi, velocity_gradient / 4 / pi
 end

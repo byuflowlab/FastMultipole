@@ -33,13 +33,13 @@ end
 const WARNING_FLAG_VECTOR_POTENTIAL = Array{Bool,0}(undef)
 WARNING_FLAG_VECTOR_POTENTIAL[] = true
 
-function Base.getindex(sys, i, ::VectorPotential)
-    if WARNING_FLAG_VECTOR_POTENTIAL[]
-        @warn "getindex! not overloaded for `FastMultipole.VectorPotential` for type $(typeof(sys)); zero assumed"
-        WARNING_FLAG_VECTOR_POTENTIAL[] = false
-    end
-    return SVector{3}(0.0,0.0,0.0)
-end
+#function Base.getindex(sys, i, ::VectorPotential)
+#    if WARNING_FLAG_VECTOR_POTENTIAL[]
+#        @warn "getindex! not overloaded for `FastMultipole.VectorPotential` for type $(typeof(sys)); zero assumed"
+#        WARNING_FLAG_VECTOR_POTENTIAL[] = false
+#    end
+#    return SVector{3}(0.0,0.0,0.0)
+#end
 
 const WARNING_FLAG_VELOCITY = Array{Bool,0}(undef)
 WARNING_FLAG_VELOCITY[] = true
@@ -93,7 +93,7 @@ Base.setindex!(sys::AbstractArray, val, i, ::Body) = sys[i] = val
 
 Base.setindex!(sys, val, i, ::ScalarPotential) = nothing
 
-Base.setindex!(sys, val, i, ::VectorPotential) = nothing
+#Base.setindex!(sys, val, i, ::VectorPotential) = nothing
 
 Base.setindex!(sys, val, i, ::Velocity) = nothing
 

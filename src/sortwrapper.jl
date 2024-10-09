@@ -21,7 +21,7 @@ get_n_bodies(sys::SortWrapper) = get_n_bodies(sys.system)
 
 Base.setindex!(sys::SortWrapper,val,i) = setindex!(sys.system,val,sys.index[i])
 Base.setindex!(sys::SortWrapper,val,i,parameter::ScalarPotential) = setindex!(sys.system,val,sys.index[i],parameter)
-Base.setindex!(sys::SortWrapper,val,i,parameter::VectorPotential) = setindex!(sys.system,val,sys.index[i],parameter)
+#Base.setindex!(sys::SortWrapper,val,i,parameter::VectorPotential) = setindex!(sys.system,val,sys.index[i],parameter)
 Base.setindex!(sys::SortWrapper,val,i,parameter::Velocity) = setindex!(sys.system,val,sys.index[i],parameter)
 Base.setindex!(sys::SortWrapper,val,i,parameter::VelocityGradient) = setindex!(sys.system,val,sys.index[i],parameter)
 
@@ -30,7 +30,7 @@ Base.getindex(sys::SortWrapper, i, parameter::Position) = getindex(sys.system, s
 Base.getindex(sys::SortWrapper, i, parameter::Radius) = getindex(sys.system, sys.index[i], parameter)
 Base.getindex(sys::SortWrapper, i, parameter::Strength) = getindex(sys.system, sys.index[i], parameter)
 Base.getindex(sys::SortWrapper, i, parameter::ScalarPotential) = getindex(sys.system, sys.index[i], parameter)
-Base.getindex(sys::SortWrapper, i, parameter::VectorPotential) = getindex(sys.system, sys.index[i], parameter)
+#Base.getindex(sys::SortWrapper, i, parameter::VectorPotential) = getindex(sys.system, sys.index[i], parameter)
 Base.getindex(sys::SortWrapper, i, parameter::Velocity) = getindex(sys.system, sys.index[i], parameter)
 Base.getindex(sys::SortWrapper, i, parameter::VelocityGradient) = getindex(sys.system, sys.index[i], parameter)
 Base.getindex(sys::SortWrapper, i, parameter::Vertex, i_vertex) = Base.getindex(sys.system, sys.index[i], parameter, i_vertex)

@@ -39,8 +39,8 @@ function regular_harmonics!(harmonics, ρ::TF, θ::TF, ϕ::TF, expansion_order::
         ρm_p = ρm * p
 
         # set harmonics
-        harmonics[1,i] = ρm_p * i_eim_real
-        harmonics[2,i] = ρm_p * i_eim_imag
+        harmonics[1,1,i] = ρm_p * i_eim_real
+        harmonics[2,1,i] = ρm_p * i_eim_imag
 
         p1 = p
         p = x * (2 * m + 1) * p1
@@ -50,8 +50,8 @@ function regular_harmonics!(harmonics, ρ::TF, θ::TF, ϕ::TF, expansion_order::
             i = harmonic_index(n, m)
             ρn /= -(n + m)
             ρn_p = ρn * p
-            harmonics[1,i] = ρn_p * i_eim_real
-            harmonics[2,i] = ρn_p * i_eim_imag
+            harmonics[1,1,i] = ρn_p * i_eim_real
+            harmonics[2,1,i] = ρn_p * i_eim_imag
 
             # recurse
             p2 = p1
@@ -89,8 +89,8 @@ function irregular_harmonics!(harmonics, ρ, θ, ϕ::TF, expansion_order::Val{P}
         i = harmonic_index(m, m)
         ρm_p = ρm * p
 
-        harmonics[1,i] = ρm_p * i_eim_real
-        harmonics[2,i] = ρm_p * i_eim_imag
+        harmonics[1,1,i] = ρm_p * i_eim_real
+        harmonics[2,1,i] = ρm_p * i_eim_imag
 
         p1 = p
         p = x * (2 * m + 1) * p1
@@ -99,8 +99,8 @@ function irregular_harmonics!(harmonics, ρ, θ, ϕ::TF, expansion_order::Val{P}
         for n=m+1:P # n>m
             i = harmonic_index(n, m)
             ρn_p = ρn * p
-            harmonics[1,i] = ρn_p * i_eim_real
-            harmonics[2,i] = ρn_p * i_eim_imag
+            harmonics[1,1,i] = ρn_p * i_eim_real
+            harmonics[2,1,i] = ρn_p * i_eim_imag
             p2 = p1
             p1 = p
             p = (x * (2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1)

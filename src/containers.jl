@@ -31,15 +31,15 @@ const STRENGTH = Strength()
 
 #------- dispatch convenience functions for multipole creation definition -------#
 
-abstract type AbstractKernel{sign} end
+abstract type AbstractKernel end
 
-abstract type Vortex{sign} <: AbstractKernel{sign} end
+abstract type Vortex <: AbstractKernel end
 
-abstract type Source{sign} <: AbstractKernel{sign} end
+abstract type Source <: AbstractKernel end
 
-abstract type Dipole{sign} <: AbstractKernel{sign} end
+abstract type Dipole <: AbstractKernel end
 
-abstract type SourceDipole{sign} <: AbstractKernel{sign} end
+abstract type SourceDipole <: AbstractKernel end
 
 abstract type AbstractElement{TK<:AbstractKernel} end
 
@@ -143,7 +143,7 @@ struct MultiBranch{TF,N} <: Branch{TF}
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
-    harmonics::Array{TF,2}
+    harmonics::Array{TF,3}
     ML::Matrix{TF}
     lock::ReentrantLock
 end
@@ -161,7 +161,7 @@ struct SingleBranch{TF} <: Branch{TF}
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
-    harmonics::Array{TF,2}
+    harmonics::Array{TF,3}
     #expansion_storage::Array{TF,3}
     ML::Matrix{TF}
     lock::ReentrantLock

@@ -794,7 +794,7 @@ end
 function initialize_harmonics(expansion_order, type=Float64)
     p = expansion_order
     n_harmonics = harmonic_index(p,p)
-    return zeros(type, 2, n_harmonics)
+    return zeros(type, 2, 2, n_harmonics)
 end
 
 function initialize_ML(expansion_order, type=Float64)

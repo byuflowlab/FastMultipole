@@ -9,7 +9,7 @@ using WriteVTK
 
 #------- CONSTANTS -------#
 
-const ONE_OVER_4PI = 1/4/pi
+const ONE_OVER_4π = 1/4/pi
 
 # multithreading parameters
 const MIN_NPT_B2M = 100

@@ -3,6 +3,8 @@ using LinearAlgebra
 using StaticArrays
 using Test
 
+const ONE_OVER_4π = 1/4/pi
+
 # include headers
 include("containers.jl")
 include("derivativesswitch.jl")
