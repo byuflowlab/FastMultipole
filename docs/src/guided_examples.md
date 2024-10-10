@@ -40,22 +40,18 @@ end
 
 Note that while the particular choice of data structures is completely arbitrary, `FastMultipole` does not create any new storage containers for values of interest such as potential, velocity, velocity gradient. If these are desired, they must exist in the user-defined system, and will be updated in-place by `FastMultipole`.
 
-### Overloading the `B2M!` Function
+### Overloading the `body_to_multipole!` Function
 
-The function `B2M!` is used to generate multipole expansions for our particular system. This is done be overloading `B2M!` for the data structure representing our model. Convenience functions exist within `FastMultipole` to make this complicated function into a one-liner:
+The function `body_to_multipole!` is used to generate multipole expansions for our particular system. This is done be overloading `body_to_multipole!` for the data structure representing our model. Convenience functions exist within `FastMultipole` to make this complicated function into a one-liner:
 
 ```@example guidedex
-FastMultipole.B2M!(system::Gravitational, args...) =
-    FastMultipole.B2M!_sourcepoint(system, args...)
+FastMultipole.body_to_multipole!(system::Gravitational, args...) =
+    FastMultipole.body_to_multipole!(Point{Source}, system, args...)
 ```
 
-Note that we are overloading `B2M!` to operate on our `::Gravitational` system. Other convenience functions exist in `FastMultipole` for:
+Note that we are overloading `body_to_multipole!` to operate on our `::Gravitational` system, which consists of point sources. Other convenience functions exist in `FastMultipole` for any combination of `Point`, `Filament`, or `Panel` geometries using `Source`, `Dipole`, or `Vortex` kernels. These are specified when overloading `body_to_multipole!` as `<geometry>{<kernel>}`. For example, if my model used vortex filaments, I would replace `Point{Source}` in the example above to `Filament{Vortex}`.
 
-* vortex point
-* source panel
-* dipole panel
-
-with additional elements currently in development. We use the fast recursive method of generating exact coefficients for panels as developed by [GUMEROV2023112118](@cite).
+We use the fast recursive method of generating exact coefficients for panels as developed by [GUMEROV2023112118](@cite).
 
 ### Overloading Getters
 
@@ -66,7 +62,6 @@ import Base: getindex
 
 Base.getindex(g::Gravitational, i, ::FastMultipole.Position) = g.bodies[i].position
 Base.getindex(g::Gravitational, i, ::FastMultipole.Radius) = g.bodies[i].radius
-Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.potential,2:4,i)
 Base.getindex(g::Gravitational, i, ::FastMultipole.ScalarPotential) = g.potential[1,i]
 Base.getindex(g::Gravitational, i, ::FastMultipole.Velocity) = view(g.potential,i_VELOCITY,i)
 Base.getindex(g::Gravitational, i, ::FastMultipole.VelocityGradient) = reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3)
@@ -90,9 +85,6 @@ function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Body)
 end
 function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.ScalarPotential)
     g.potential[i_POTENTIAL[1],i] = val
-end
-function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.VectorPotential)
-    g.potential[i_POTENTIAL[2:4],i] .= val
 end
 function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Velocity)
     g.potential[i_VELOCITY,i] .= val
@@ -118,6 +110,10 @@ FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(el
 ```
 
 Note that the last of these functions, `buffer_element`, can return a tuple of values in case multiple data structures are required to define a single body.
+
+### Vector Potential
+
+Ordinarily, a 3-dimensional vector potential, such as the stream function in 3-dimensional fluid dynamics, requires 3 separate expansions (1 for each dimension). In `FastMultipole`, however, we employ the Lamb-Helmholtz decomposition demonstrated by [gumerov2013efficient](@cite) to reduce the number of expansions required from 3 to 2, thus reducing computational cost.
 
 ### Non-required Functionality
 
@@ -253,7 +249,7 @@ fmm.fmm!((target_one, target_two), (source_one, source_two))
 
 ## Non-Potential Flow Applications
 
-As a default, target systems will be evaluated and returned with `scalar_potential`, `vector_potential`, `velocity`, and `velocity_gradient` fields populated. In some situations, only some of these values may be required. By inputting a boolean vector of the same length as target systems, the user is able to speed up the calculation by not storing unecessary values.
+As a default, target systems will be evaluated and returned with `scalar_potential`, `velocity`, and `velocity_gradient` fields populated. (Note that the vector potential is not explicitly tracked, though its induced velocity and velocity gradient are.) In some situations, only some of these values may be required. By inputting a boolean vector of the same length as target systems, the user is able to speed up the calculation by not storing unecessary values.
 
 $\overline{V} = -\nabla \phi + \nabla \times \overline{\psi}$
 
@@ -273,7 +269,7 @@ target_two = generate_vortex(124, 100)
 source_one = generate_gravitational(125, 100)
 
 fmm.fmm!((target_one, target_two), source_one, scalar_potential=[true, false],
-    vector_potential=[false, true], velocity=[true, true], velocity_gradient=[false, false])
+    velocity=[true, true], velocity_gradient=[false, false])
 ```
 
 ## Saving Generated Trees

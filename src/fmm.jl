@@ -637,12 +637,12 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 function fmm!(target_systems, source_systems;
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
-    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
+    unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter::Bool=true, target_shrink_recenter::Bool=true,
-    save_tree_source::Bool=false, save_tree_target::Bool=false, save_name_source="source_tree", save_name_target="target_tree", gpu::Bool=false
+    save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree", gpu::Bool=false
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -704,7 +704,7 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 function fmm!(systems;
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
-    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, shrink_recenter::Bool=true,
@@ -760,7 +760,7 @@ Dispatches `fmm!` using an existing `::Tree`.
 function fmm!(tree::Tree, systems;
     multipole_threshold=0.4, reset_tree::Bool=true,
     lamb_helmholtz::Bool=false,
-    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, gpu::Bool=false
@@ -823,7 +823,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
     multipole_threshold=0.4,
-    scalar_potential::Bool=true, velocity::Bool=true, velocity_gradient::Bool=true,
+    scalar_potential=true, velocity=true, velocity_gradient=true,
     lamb_helmholtz::Bool=false,
     reset_source_tree::Bool=true, reset_target_tree::Bool=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
