@@ -1,10 +1,22 @@
 #------- multipole generation function -------#
 
+#=
+
+Convenience functions are accessed by overloading as follows:
+
+body_to_multipole!(system::<mysystemtype>, args...) = body_to_multipole!(<geometry>{<kernel>}, system, args...)
+
+For example, if my system type were called VortexSheetSurface and consisted of vortex panels, I would overload
+
+body_to_multipole!(system::VortexSheetSurface, args...) = body_to_multipole!(Panel{Vortex}, system, args...)
+
+=#
+
 @inline function body_to_multipole!(branch, system, harmonics, expansion_order)
     body_to_multipole!(system, branch, branch.bodies_index, harmonics, expansion_order)
 end
 
-function body_to_multipole!(branch, systems::Tuple, harmonics, expansion_order)
+@inline function body_to_multipole!(branch, systems::Tuple, harmonics, expansion_order)
     # iterate over systems
     for (system,bodies_index) in zip(systems, branch.bodies_index)
         body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
@@ -256,6 +268,9 @@ function source_to_dipole!(harmonics, i_dipole, i_source, qx, qy, qz, ::Val{P}) 
     end
 end
 
+"""
+my novel derivation
+"""
 function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength, i_source, multiplier, expansion_order::Val{P}) where P
 
     #--- first potential ϕ ---#
@@ -305,6 +320,9 @@ function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength,
     end
 end
 
+"""
+might be slightly faster than mirrored_source_to_vortex
+"""
 function source_to_vortex_point!(multipole_coefficients, harmonics, strength, Δx, i_source, i_dipole, expansion_order::Val{P}) where P
 
     #--- first scalar potential ---#

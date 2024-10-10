@@ -149,7 +149,6 @@ struct MultiBranch{TF,N} <: Branch{TF}
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
-Base.eltype(::AbstractArray{MultiBranch{TF,<:Any}}) where TF = TF
 
 struct SingleBranch{TF} <: Branch{TF}
     bodies_index::UnitRange{Int64}
@@ -168,7 +167,6 @@ struct SingleBranch{TF} <: Branch{TF}
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
-Base.eltype(::AbstractArray{SingleBranch{TF}}) where TF = TF
 
 """
     abstract type Tree{TF,P} end

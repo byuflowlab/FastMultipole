@@ -35,7 +35,7 @@ function evaluate_multipole(x_target, expansion_center, multipole_weights::Abstr
 
     # distance vector
     Δx = x_target - expansion_center
-    ρ, θ, ϕ = cartesian_to_spherical(Δx)
+    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
 
     # compute irregular solid harmonics on the fly
     y, x = sincos(θ)
@@ -48,7 +48,7 @@ function evaluate_multipole(x_target, expansion_center, multipole_weights::Abstr
 
     for m=0:P # n=m
         p = pn
-        i = harmonic_index(m, m)
+        i = FastMultipole.harmonic_index(m, m)
         ρm_p = ρm * p
 
         # irregular solid harmonics
@@ -72,7 +72,7 @@ function evaluate_multipole(x_target, expansion_center, multipole_weights::Abstr
         ρn = -ρm
 
         for n=m+1:P # n>m
-            i = harmonic_index(n, m)
+            i = FastMultipole.harmonic_index(n, m)
             ρn_p = ρn * p
 
             # irregular solid harmonics

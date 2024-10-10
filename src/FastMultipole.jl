@@ -34,9 +34,10 @@ include("derivatives.jl")
 include("harmonics.jl")
 include("rotate.jl")
 include("translate.jl")
+include("evaluate_expansions.jl")
 include("tree.jl")
 
-export Branch, SingleBranch, MultiBranch, Tree, SingleTree, MultiTree
+export Branch, SingleBranch, MultiBranch, Tree, SingleTree, MultiTree, initialize_expansion, initialize_harmonics
 export unsort!, resort!, unsorted_index_2_sorted_index, sorted_index_2_unsorted_index
 
 include("compatibility.jl")
@@ -46,6 +47,9 @@ export Vortex, Source, Dipole, SourceDipole, Point, Filament, Panel
 export get_n_bodies, buffer_element, body_to_multipole!, direct!, direct_gpu!
 
 include("bodytomultipole.jl")
+
+export body_to_multipole!
+
 include("direct.jl")
 
 export direct!

@@ -12,10 +12,10 @@ i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            multipole_expansion[1,2,i_compressed] = real(weights_1[i])
-            multipole_expansion[2,2,i_compressed] = imag(weights_1[i])
-            multipole_expansion[1,3,i_compressed] = real(weights_2[i])
-            multipole_expansion[2,3,i_compressed] = imag(weights_2[i])
+            multipole_expansion[1,1,i_compressed] = real(weights_1[i])
+            multipole_expansion[2,1,i_compressed] = imag(weights_1[i])
+            multipole_expansion[1,2,i_compressed] = real(weights_2[i])
+            multipole_expansion[2,2,i_compressed] = imag(weights_2[i])
             i_compressed += 1
         end
         i += 1
@@ -24,16 +24,16 @@ end
 
 r = 0.03741657386773942
 
-transform_lamb_helmholtz_multipole!(multipole_expansion, r, Val(expansion_order))
+FastMultipole.transform_lamb_helmholtz_multipole!(multipole_expansion, r, Val(expansion_order))
 
 i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            @test isapprox(multipole_expansion[1,2,i_compressed], real(new_weights_1[i]); atol=1e-12)
-            @test isapprox(multipole_expansion[2,2,i_compressed], imag(new_weights_1[i]); atol=1e-12)
-            @test isapprox(multipole_expansion[1,3,i_compressed], real(new_weights_2[i]); atol=1e-12)
-            @test isapprox(multipole_expansion[2,3,i_compressed], imag(new_weights_2[i]); atol=1e-12)
+            @test isapprox(multipole_expansion[1,1,i_compressed], real(new_weights_1[i]); atol=1e-12)
+            @test isapprox(multipole_expansion[2,1,i_compressed], imag(new_weights_1[i]); atol=1e-12)
+            @test isapprox(multipole_expansion[1,2,i_compressed], real(new_weights_2[i]); atol=1e-12)
+            @test isapprox(multipole_expansion[2,2,i_compressed], imag(new_weights_2[i]); atol=1e-12)
             i_compressed += 1
         end
         i += 1
@@ -55,10 +55,10 @@ i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            local_expansion[1,2,i_compressed] = real(weights_1[i])
-            local_expansion[2,2,i_compressed] = imag(weights_1[i])
-            local_expansion[1,3,i_compressed] = real(weights_2[i])
-            local_expansion[2,3,i_compressed] = imag(weights_2[i])
+            local_expansion[1,1,i_compressed] = real(weights_1[i])
+            local_expansion[2,1,i_compressed] = imag(weights_1[i])
+            local_expansion[1,2,i_compressed] = real(weights_2[i])
+            local_expansion[2,2,i_compressed] = imag(weights_2[i])
             i_compressed += 1
         end
         i += 1
@@ -66,16 +66,16 @@ for n in 0:expansion_order
 end
 r = 0.9501052573267869
 
-transform_lamb_helmholtz_local!(local_expansion, r, Val(expansion_order))
+FastMultipole.transform_lamb_helmholtz_local!(local_expansion, r, Val(expansion_order))
 
 i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            @test isapprox(local_expansion[1,2,i_compressed], real(new_weights_1[i]); atol=1e-12)
-            @test isapprox(local_expansion[2,2,i_compressed], imag(new_weights_1[i]); atol=1e-12)
-            @test isapprox(local_expansion[1,3,i_compressed], real(new_weights_2[i]); atol=1e-12)
-            @test isapprox(local_expansion[2,3,i_compressed], imag(new_weights_2[i]); atol=1e-12)
+            @test isapprox(local_expansion[1,1,i_compressed], real(new_weights_1[i]); atol=1e-12)
+            @test isapprox(local_expansion[2,1,i_compressed], imag(new_weights_1[i]); atol=1e-12)
+            @test isapprox(local_expansion[1,2,i_compressed], real(new_weights_2[i]); atol=1e-12)
+            @test isapprox(local_expansion[2,2,i_compressed], imag(new_weights_2[i]); atol=1e-12)
             i_compressed += 1
         end
         i += 1
@@ -104,10 +104,10 @@ i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            branch.multipole_expansion[1,2,i_compressed] = real(weights_1[i])
-            branch.multipole_expansion[2,2,i_compressed] = imag(weights_1[i])
-            branch.multipole_expansion[1,3,i_compressed] = real(weights_2[i])
-            branch.multipole_expansion[2,3,i_compressed] = imag(weights_2[i])
+            branch.multipole_expansion[1,1,i_compressed] = real(weights_1[i])
+            branch.multipole_expansion[2,1,i_compressed] = imag(weights_1[i])
+            branch.multipole_expansion[1,2,i_compressed] = real(weights_2[i])
+            branch.multipole_expansion[2,2,i_compressed] = imag(weights_2[i])
             i_compressed += 1
         end
         i += 1
@@ -116,55 +116,35 @@ end
 
 # preallocate containers
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
-ζs_mag = zeros(length_ζs(expansion_order))
-update_ζs_mag!(ζs_mag, 0, expansion_order)
+ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
+FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 
-expansion_switch = ExpansionSwitch{false,true}()
+lamb_helmholtz = Val(true)
 
-multipole_to_multipole!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, Val(expansion_order), expansion_switch)
+FastMultipole.multipole_to_multipole!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
 
 # test result
 i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            @test isapprox(translated_branch.multipole_expansion[1,2,i_compressed], real(translated_weights_1[i]); atol=1e-12)
-            @test isapprox(translated_branch.multipole_expansion[2,2,i_compressed], imag(translated_weights_1[i]); atol=1e-12)
-            @test isapprox(translated_branch.multipole_expansion[1,3,i_compressed], real(translated_weights_2[i]); atol=1e-12)
-            @test isapprox(translated_branch.multipole_expansion[2,3,i_compressed], imag(translated_weights_2[i]); atol=1e-12)
+            @test isapprox(translated_branch.multipole_expansion[1,1,i_compressed], real(translated_weights_1[i]); atol=1e-12)
+            @test isapprox(translated_branch.multipole_expansion[2,1,i_compressed], imag(translated_weights_1[i]); atol=1e-12)
+            @test isapprox(translated_branch.multipole_expansion[1,2,i_compressed], real(translated_weights_2[i]); atol=1e-12)
+            @test isapprox(translated_branch.multipole_expansion[2,2,i_compressed], imag(translated_weights_2[i]); atol=1e-12)
             i_compressed += 1
         end
         i += 1
     end
 end
 
-end
-
-function initialize_expansion(expansion_order, type=Float64)
-    return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
-end
-
-function vector_to_expansion!(expansion, vector,index, expansion_order)
-    len = length(expansion)
-    i_comp = 1
-    i = 1
-    for n in 0:expansion_order
-        for m in -n:n
-            if m >= 0
-                expansion[1,index,i_comp] = real(vector[i])
-                expansion[2,index,i_comp] = imag(vector[i])
-                i_comp += 1
-            end
-            i += 1
-        end
-    end
 end
 
 @testset "Lamb-Helmholtz transform: multipole-to-local" begin
@@ -184,36 +164,37 @@ translated_center = SVector{3}([0.96, 0.03, -0.02])
 translated_branch = Branch(1:1, 0, 1:0, 0, 1, translated_center, 0.0, expansion_order)
 
 # set source expansion
-vector_to_expansion!(branch.multipole_expansion, weights_1, 2, expansion_order)
-vector_to_expansion!(branch.multipole_expansion, weights_2, 3, expansion_order)
+vector_to_expansion!(branch.multipole_expansion, weights_1, 1, expansion_order)
+vector_to_expansion!(branch.multipole_expansion, weights_2, 2, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
-ζs_mag = zeros(length_ζs(expansion_order))
-update_ζs_mag!(ζs_mag, 0, expansion_order)
-ηs_mag = zeros(length_ηs(expansion_order))
-update_ηs_mag!(ηs_mag, 0, expansion_order)
+ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
+FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
+ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
+FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-expansion_switch = ExpansionSwitch{false,true}()
+lamb_helmholtz = Val(true)
 
 # translate expansion
-multipole_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), expansion_switch)
+FastMultipole.multipole_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
 
+# apply Lamb-Helmholtz
 i, i_compressed = 1, 1
 for n in 0:7
     for m in -n:n
         if m >= 0
-            @test isapprox(translated_branch.local_expansion[1,2,i_compressed], real(translated_weights_1[i]); rtol=1e-12, atol=1e-12)
-            @test isapprox(translated_branch.local_expansion[2,2,i_compressed], imag(translated_weights_1[i]); rtol=1e-12, atol=1e-12)
-            @test isapprox(translated_branch.local_expansion[1,3,i_compressed], real(translated_weights_2[i]); rtol=1e-12, atol=1e-12)
-            @test isapprox(translated_branch.local_expansion[2,3,i_compressed], imag(translated_weights_2[i]); rtol=1e-12, atol=1e-12)
+            @test isapprox(translated_branch.local_expansion[1,1,i_compressed], real(translated_weights_1[i]); rtol=1e-12, atol=1e-12)
+            @test isapprox(translated_branch.local_expansion[2,1,i_compressed], imag(translated_weights_1[i]); rtol=1e-12, atol=1e-12)
+            @test isapprox(translated_branch.local_expansion[1,2,i_compressed], real(translated_weights_2[i]); rtol=1e-12, atol=1e-12)
+            @test isapprox(translated_branch.local_expansion[2,2,i_compressed], imag(translated_weights_2[i]); rtol=1e-12, atol=1e-12)
             i_compressed += 1
         end
         i += 1
@@ -238,34 +219,34 @@ translated_center = SVector{3}([0.98, 0.01, 0.01])
 translated_branch = Branch(1:1, 0, 1:0, 0, 1, translated_center, 0.0, expansion_order)
 
 # set source expansion
-vector_to_expansion!(branch.local_expansion, weights_1, 2, expansion_order)
-vector_to_expansion!(branch.local_expansion, weights_2, 3, expansion_order)
+vector_to_expansion!(branch.local_expansion, weights_1, 1, expansion_order)
+vector_to_expansion!(branch.local_expansion, weights_2, 2, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
-ηs_mag = zeros(length_ηs(expansion_order))
-update_ηs_mag!(ηs_mag, 0, expansion_order)
+ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
+FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-expansion_switch = ExpansionSwitch{false,true}()
+lamb_helmholtz = Val(true)
 
 # translate expansion
-local_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, Val(expansion_order), expansion_switch)
+FastMultipole.local_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
 
 i, i_compressed = 1, 1
 for n in 0:7
     for m in -n:n
         if m >= 0
-            @test isapprox(translated_branch.local_expansion[1,2,i_compressed], real(translated_weights_1[i]); rtol=1e-12, atol=1e-11)
-            @test isapprox(translated_branch.local_expansion[2,2,i_compressed], imag(translated_weights_1[i]); rtol=1e-12, atol=1e-11)
-            @test isapprox(translated_branch.local_expansion[1,3,i_compressed], real(translated_weights_2[i]); rtol=1e-12, atol=1e-11)
-            @test isapprox(translated_branch.local_expansion[2,3,i_compressed], imag(translated_weights_2[i]); rtol=1e-12, atol=1e-11)
+            @test isapprox(translated_branch.local_expansion[1,1,i_compressed], real(translated_weights_1[i]); rtol=1e-12, atol=1e-11)
+            @test isapprox(translated_branch.local_expansion[2,1,i_compressed], imag(translated_weights_1[i]); rtol=1e-12, atol=1e-11)
+            @test isapprox(translated_branch.local_expansion[1,2,i_compressed], real(translated_weights_2[i]); rtol=1e-12, atol=1e-11)
+            @test isapprox(translated_branch.local_expansion[2,2,i_compressed], imag(translated_weights_2[i]); rtol=1e-12, atol=1e-11)
             i_compressed += 1
         end
         i += 1
@@ -288,36 +269,36 @@ local_branch = Branch(1:1, 0, 1:0, 0, 1, x_target + SVector{3}(-0.04, 0.03, -0.0
 multipole_weights_1 = ComplexF64[0.0 + 0.0im, -0.0025 - 0.005im, 0.0 + 0.0im, 0.0025 - 0.005im, 3.333333333333335e-5 + 2.500000000000001e-5im, -4.9999999999999996e-5 - 9.999999999999999e-5im, 0.0 + 0.0im, 4.9999999999999996e-5 - 9.999999999999999e-5im, 3.333333333333335e-5 - 2.500000000000001e-5im, -1.7187500000000013e-7 - 3.125000000000006e-8im, 7.500000000000004e-7 + 5.625000000000003e-7im, -4.843749999999998e-7 - 9.687499999999996e-7im, 0.0 + 0.0im, 4.843749999999998e-7 - 9.687499999999996e-7im, 7.500000000000004e-7 - 5.625000000000003e-7im, 1.7187500000000013e-7 - 3.125000000000006e-8im, 5.000000000000007e-10 - 1.458333333333335e-10im, -4.125000000000003e-9 - 7.500000000000011e-10im, 8.16666666666667e-9 + 6.125000000000003e-9im, -2.6249999999999974e-9 - 5.2499999999999966e-9im, 0.0 + 0.0im, 2.6249999999999974e-9 - 5.2499999999999966e-9im, 8.16666666666667e-9 - 6.125000000000003e-9im, 4.125000000000003e-9 - 7.500000000000011e-10im, 5.000000000000007e-10 + 1.458333333333335e-10im, -8.897569444444466e-13 + 8.246527777777796e-13im, 1.2500000000000005e-11 - 3.6458333333333345e-12im, -4.798177083333337e-11 - 8.72395833333334e-12im, 5.4166666666666686e-11 + 4.062500000000001e-11im, -5.772569444444427e-12 - 1.1545138888888862e-11im, 0.0 + 0.0im, 5.772569444444427e-12 - 1.1545138888888862e-11im, 5.4166666666666686e-11 - 4.062500000000001e-11im, 4.798177083333337e-11 - 8.72395833333334e-12im, 1.2500000000000005e-11 + 3.6458333333333345e-12im, 8.897569444444466e-13 + 8.246527777777796e-13im, 8.184523809523819e-16 - 2.1763392857142933e-15im, -2.2879464285714336e-14 + 2.1205357142857183e-14im, 1.5178571428571467e-13 - 4.427083333333343e-14im, -3.4988839285714296e-13 - 6.36160714285715e-14im, 2.235863095238098e-13 + 1.676897321428574e-13im, 2.834821428571441e-14 + 5.669642857142871e-14im, 0.0 + 0.0im, -2.834821428571441e-14 + 5.669642857142871e-14im, 2.235863095238098e-13 - 1.676897321428574e-13im, 3.4988839285714296e-13 - 6.36160714285715e-14im, 1.5178571428571467e-13 + 4.427083333333343e-14im, 2.2879464285714336e-14 + 2.1205357142857183e-14im, 8.184523809523819e-16 + 2.1763392857142933e-15im, 3.933376736111114e-19 + 3.7706163194444516e-18im, 2.1484375000000026e-17 - 5.71289062500002e-17im, -2.8639051649305604e-16 + 2.6543511284722267e-16im, 1.1718750000000027e-15 - 3.417968750000007e-16im, -1.7254638671875033e-15 - 3.1372070312500076e-16im, 4.316406250000017e-16 + 3.2373046875000143e-16im, 3.2781304253472126e-16 + 6.556260850694421e-16im, 0.0 + 0.0im, -3.2781304253472126e-16 + 6.556260850694421e-16im, 4.316406250000017e-16 - 3.2373046875000143e-16im, 1.7254638671875033e-15 - 3.1372070312500076e-16im, 1.1718750000000027e-15 + 3.417968750000007e-16im, 2.8639051649305604e-16 + 2.6543511284722267e-16im, 2.1484375000000026e-17 + 5.71289062500002e-17im, -3.933376736111114e-19 + 3.7706163194444516e-18im, -2.8935185185185183e-21 - 4.538346009700186e-21im, 1.0489004629629646e-20 + 1.0054976851851883e-19im, 2.750909391534395e-19 - 7.3149181547619315e-19im, -2.298538773148151e-18 + 2.130353009259262e-18im, 6.322337962962972e-18 - 1.844015239197533e-18im, -5.621744791666671e-18 - 1.0221354166666681e-18im, -1.1800733024691392e-18 - 8.85054976851854e-19im, 1.5913835152116374e-18 + 3.1827670304232737e-18im, 0.0 + 0.0im, -1.5913835152116374e-18 + 3.1827670304232737e-18im, -1.1800733024691392e-18 + 8.85054976851854e-19im, 5.621744791666671e-18 - 1.0221354166666681e-18im, 6.322337962962972e-18 + 1.844015239197533e-18im, 2.298538773148151e-18 + 2.130353009259262e-18im, 2.750909391534395e-19 + 7.3149181547619315e-19im, -1.0489004629629646e-20 + 1.0054976851851883e-19im, -2.8935185185185183e-21 + 4.538346009700186e-21im, 5.808027963789718e-24 + 3.4780350942460546e-24im, -7.812499999999994e-23 - 1.2253534226190493e-22im, 1.3668484157986129e-22 + 1.3102891710069483e-21im, 2.2712053571428575e-21 - 6.039341517857155e-21im, -1.311199854290675e-20 + 1.2152584015376984e-20im, 2.445312500000003e-20 - 7.132161458333344e-21im, -8.998074001736076e-21 - 1.6360134548611065e-21im, -1.3312872023809537e-20 - 9.984654017857154e-21im, 4.541180323040666e-21 + 9.082360646081333e-21im, 0.0 + 0.0im, -4.541180323040666e-21 + 9.082360646081333e-21im, -1.3312872023809537e-20 + 9.984654017857154e-21im, 8.998074001736076e-21 - 1.6360134548611065e-21im, 2.445312500000003e-20 + 7.132161458333344e-21im, 1.311199854290675e-20 + 1.2152584015376984e-20im, 2.2712053571428575e-21 + 6.039341517857155e-21im, -1.3668484157986129e-22 + 1.3102891710069483e-21im, -7.812499999999994e-23 + 1.2253534226190493e-22im, -5.808027963789718e-24 + 3.4780350942460546e-24im, -7.6232782938512e-27 - 5.798193054052366e-28im, 1.5840076264880992e-25 + 9.485550257034661e-26im, -1.0324600168350196e-24 - 1.619364371643026e-24im, 1.1531945430871238e-24 + 1.105476148200761e-23im, 1.3465518043154768e-23 - 3.580603661475252e-23im, -5.548703412472947e-23 + 5.1427007237554135e-23im, 6.463350018037516e-23 - 1.8851437552609444e-23im, 1.9525437127976443e-23 + 3.5500794778138974e-24im, -5.77788323149651e-23 - 4.333412423622383e-23im, 5.356561569940499e-24 + 1.0713123139881006e-23im, 0.0 + 0.0im, -5.356561569940499e-24 + 1.0713123139881006e-23im, -5.77788323149651e-23 + 4.333412423622383e-23im, -1.9525437127976443e-23 + 3.5500794778138974e-24im, 6.463350018037516e-23 + 1.8851437552609444e-23im, 5.548703412472947e-23 + 5.1427007237554135e-23im, 1.3465518043154768e-23 + 3.580603661475252e-23im, -1.1531945430871238e-24 + 1.105476148200761e-23im, -1.0324600168350196e-24 + 1.619364371643026e-24im, -1.5840076264880992e-25 + 9.485550257034661e-26im, -7.6232782938512e-27 + 5.798193054052366e-28im]
 multipole_weights_2 = ComplexF64[0.0 + 0.0im, 0.0 + 0.0im, 1.0 + 0.0im, 0.0 + 0.0im, 0.0 + 0.0im, -0.005000000000000002 + 0.002500000000000001im, 0.015 + 0.0im, 0.005000000000000002 + 0.002500000000000001im, 0.0 + 0.0im, 0.0 + 0.0im, 1.2500000000000012e-5 - 1.6666666666666674e-5im, -0.00010000000000000006 + 5.000000000000003e-5im, 0.00010833333333333327 + 0.0im, 0.00010000000000000006 + 5.000000000000003e-5im, 1.2500000000000012e-5 + 1.6666666666666674e-5im, 0.0 + 0.0im, 0.0 + 0.0im, -1.0416666666666685e-8 + 5.7291666666666745e-8im, 2.812500000000002e-7 - 3.7500000000000017e-7im, -9.687500000000003e-7 + 4.843750000000001e-7im, 1.8749999999999924e-7 + 0.0im, 9.687500000000003e-7 + 4.843750000000001e-7im, 2.812500000000002e-7 + 3.7500000000000017e-7im, 1.0416666666666685e-8 + 5.7291666666666745e-8im, 0.0 + 0.0im, 0.0 + 0.0im, -3.645833333333341e-11 - 1.250000000000003e-10im, -2.500000000000002e-10 + 1.3750000000000007e-9im, 3.0625000000000018e-9 - 4.083333333333336e-9im, -5.2500000000000015e-9 + 2.6250000000000008e-9im, -3.7187500000000064e-9 + 0.0im, 5.2500000000000015e-9 + 2.6250000000000008e-9im, 3.0625000000000018e-9 + 4.083333333333336e-9im, 2.500000000000002e-10 + 1.3750000000000007e-9im, -3.645833333333341e-11 + 1.250000000000003e-10im, 0.0 + 0.0im, 0.0 + 0.0im, 1.6493055555555618e-13 + 1.7795138888888932e-13im, -9.114583333333346e-13 - 3.125000000000006e-12im, -2.907986111111119e-12 + 1.599392361111115e-11im, 2.0312500000000004e-11 - 2.7083333333333334e-11im, -1.1545138888888888e-11 + 5.772569444444444e-12im, -4.046875000000002e-11 + 0.0im, 1.1545138888888888e-11 + 5.772569444444444e-12im, 2.0312500000000004e-11 + 2.7083333333333334e-11im, 2.907986111111119e-12 + 1.599392361111115e-11im, -9.114583333333346e-13 + 3.125000000000006e-12im, -1.6493055555555618e-13 + 1.7795138888888932e-13im, 0.0 + 0.0im, 0.0 + 0.0im, -3.627232142857149e-16 - 1.3640873015873046e-16im, 4.241071428571445e-15 + 4.575892857142869e-15im, -1.1067708333333349e-14 - 3.7946428571428636e-14im, -2.12053571428572e-14 + 1.1662946428571454e-13im, 8.384486607142875e-14 - 1.1179315476190498e-13im, 5.6696428571428594e-14 - 2.8348214285714297e-14im, -2.146701388888889e-13 + 0.0im, -5.6696428571428594e-14 - 2.8348214285714297e-14im, 8.384486607142875e-14 + 1.1179315476190498e-13im, 2.12053571428572e-14 + 1.1662946428571454e-13im, -1.1067708333333349e-14 + 3.7946428571428636e-14im, -4.241071428571445e-15 + 4.575892857142869e-15im, -3.627232142857149e-16 + 1.3640873015873046e-16im, 0.0 + 0.0im, 0.0 + 0.0im, 5.386594742063502e-19 - 5.619109623015824e-20im, -9.521484375000029e-18 - 3.58072916666668e-18im, 5.308702256944467e-17 + 5.727810329861126e-17im, -8.544921875000009e-17 - 2.929687500000004e-16im, -1.045735677083335e-16 + 5.751546223958339e-16im, 1.618652343750001e-16 - 2.1582031250000004e-16im, 6.556260850694454e-16 - 3.278130425347227e-16im, -6.278366815476184e-16 + 0.0im, -6.556260850694454e-16 - 3.278130425347227e-16im, 1.618652343750001e-16 + 2.1582031250000004e-16im, 1.045735677083335e-16 + 5.751546223958339e-16im, -8.544921875000009e-17 + 2.929687500000004e-16im, -5.308702256944467e-17 + 5.727810329861126e-17im, -9.521484375000029e-18 + 3.58072916666668e-18im, -5.386594742063502e-19 - 5.619109623015824e-20im, 0.0 + 0.0im, 0.0 + 0.0im, -5.672932512125255e-22 + 3.6168981481481694e-22im, 1.4364252645502657e-20 - 1.4984292328042185e-21im, -1.2191530257936541e-19 - 4.584848985890667e-20im, 4.2607060185185297e-19 + 4.597077546296302e-19im, -4.610038097993824e-19 - 1.5805844907407403e-18im, -3.4071180555555596e-19 + 1.873914930555557e-18im, -4.425274884259278e-19 + 5.900366512345702e-19im, 3.1827670304232833e-18 - 1.5913835152116416e-18im, -2.716053688547128e-19 + 0.0im, -3.1827670304232833e-18 - 1.5913835152116416e-18im, -4.425274884259278e-19 - 5.900366512345702e-19im, 3.4071180555555596e-19 + 1.873914930555557e-18im, -4.610038097993824e-19 + 1.5805844907407403e-18im, -4.2607060185185297e-19 + 4.597077546296302e-19im, -1.2191530257936541e-19 + 4.584848985890667e-20im, -1.4364252645502657e-20 - 1.4984292328042185e-21im, -5.672932512125255e-22 - 3.6168981481481694e-22im, 0.0 + 0.0im, 0.0 + 0.0im, 3.8644834380511364e-25 - 6.453364404210751e-25im, -1.531691778273814e-23 + 9.765625000000024e-24im, 1.8718416728670722e-22 - 1.9526405939980042e-23im, -1.0065569196428603e-21 - 3.785342261904774e-22im, 2.4305168030754038e-21 + 2.6223997085813528e-21im, -1.783040364583333e-21 - 6.113281250000001e-21im, -5.453378182870358e-22 + 2.9993580005786955e-21im, -4.992327008928588e-21 + 6.656436011904783e-21im, 9.082360646081339e-21 - 4.5411803230406695e-21im, 7.142101469494068e-21 + 0.0im, -9.082360646081339e-21 - 4.5411803230406695e-21im, -4.992327008928588e-21 - 6.656436011904783e-21im, 5.453378182870358e-22 + 2.9993580005786955e-21im, -1.783040364583333e-21 + 6.113281250000001e-21im, -2.4305168030754038e-21 + 2.6223997085813528e-21im, -1.0065569196428603e-21 + 3.785342261904774e-22im, -1.8718416728670722e-22 - 1.9526405939980042e-23im, -1.531691778273814e-23 - 9.765625000000024e-24im, -3.8644834380511364e-25 - 6.453364404210751e-25im, 0.0 + 0.0im]
 
-vector_to_expansion!(branch.multipole_expansion, multipole_weights_1, 2, expansion_order)
-vector_to_expansion!(branch.multipole_expansion, multipole_weights_2, 3, expansion_order)
+vector_to_expansion!(branch.multipole_expansion, multipole_weights_1, 1, expansion_order)
+vector_to_expansion!(branch.multipole_expansion, multipole_weights_2, 2, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
-ζs_mag = zeros(length_ζs(expansion_order))
-update_ζs_mag!(ζs_mag, 0, expansion_order)
-ηs_mag = zeros(length_ηs(expansion_order))
-update_ηs_mag!(ηs_mag, 0, expansion_order)
+ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
+FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
+ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
+FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-expansion_switch = ExpansionSwitch{false,true}()
-derivatives_switch = DerivativesSwitch(false,false,true,true)
+lamb_helmholtz = Val(true)
+derivatives_switch = DerivativesSwitch(true,true,true)
 
 # translate expansion
-multipole_to_local!(local_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), expansion_switch)
+FastMultipole.multipole_to_local!(local_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
 
 # evaluate local expansion
 Δx = x_target - local_branch.center
-velocity_n_m = zeros(2,3,size(local_branch.harmonics, 2))
-ϕ, v, vg = evaluate_local(Δx, local_branch.harmonics, velocity_n_m, local_branch.local_expansion, derivatives_switch, expansion_switch, Val(expansion_order))
+velocity_n_m = zeros(2,3,size(local_branch.multipole_expansion, 3))
+ϕ, v, vg = FastMultipole.evaluate_local(Δx, local_branch.harmonics, velocity_n_m, local_branch.local_expansion, Val(expansion_order), lamb_helmholtz, derivatives_switch)
 
 Δx = x_target - x_source
-velocity = -cross(Δx, Γ) / norm(Δx)^3
+velocity = -cross(Δx, Γ) / norm(Δx)^3 / (4*pi)
 
 Δx5 = norm(Δx)^5
 g11 = -3*(-Γ[3]*Δx[2] + Γ[2] * Δx[3]) * Δx[1]^2 / Δx5
@@ -329,7 +310,7 @@ g23 = -Γ[1]/norm(Δx)^3 - 3*(Γ[3]*Δx[1]-Γ[1]*Δx[3])*Δx[3]^2/Δx5
 g31 = -Γ[2]/norm(Δx)^3 - 3*(-Γ[2]*Δx[1]+Γ[1]*Δx[2])*Δx[1]^2 / Δx5
 g32 = Γ[1]/norm(Δx)^3 - 3*(-Γ[2]*Δx[1]+Γ[1]*Δx[2])*Δx[2]^2/Δx5
 g33 = -3*(-Γ[2]*Δx[1]+Γ[1]*Δx[2])*Δx[3]^2 / Δx5
-velocity_gradient = SMatrix{3,3}(g11,g12,g13,g21,g22,g23,g31,g32,g33)
+velocity_gradient = SMatrix{3,3}(g11,g21,g31,g12,g22,g32,g13,g23,g33) / (4*pi)
 
 @test isapprox(velocity, v; atol=1e-11)
 for i in 1:9

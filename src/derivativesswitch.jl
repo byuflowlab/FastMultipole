@@ -11,7 +11,7 @@ Constructs a tuple of [`DerivativesSwitch`](@ref) objects.
 
 """
 function DerivativesSwitch(scalar_potential, velocity, velocity_gradient)
-    return Tuple(DerivativesSwitch(ps,vps,vs,gs) for (ps,vps,vs,gs) in zip(scalar_potential, velocity, velocity_gradient))
+    return Tuple(DerivativesSwitch(ps,vs,gs) for (ps,vs,gs) in zip(scalar_potential, velocity, velocity_gradient))
 end
 
 """

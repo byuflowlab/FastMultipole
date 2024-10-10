@@ -311,6 +311,10 @@ function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, expansion_order:
     # n = 0 (no change in the monopole term)
     @inbounds rotated_weights[1,1,i_weight] = source_weights[1,1,i_weight]
     @inbounds rotated_weights[2,1,i_weight] = source_weights[2,1,i_weight]
+    if LH
+        @inbounds rotated_weights[1,2,i_weight] = source_weights[1,2,i_weight]
+        @inbounds rotated_weights[2,2,i_weight] = source_weights[2,2,i_weight]
+    end
     i_weight += 1
 
     # n > 0
@@ -342,8 +346,12 @@ function back_rotate_z!(rotated_weights, source_weights, eimϕs, expansion_order
     i_weight = 1
 
     # n = 0 (no change in the monopole term)
-    @inbounds rotated_weights[1,1,i_weight] = source_weights[1,1,i_weight]
-    @inbounds rotated_weights[2,1,i_weight] = source_weights[2,1,i_weight]
+    @inbounds rotated_weights[1,1,i_weight] += source_weights[1,1,i_weight]
+    @inbounds rotated_weights[2,1,i_weight] += source_weights[2,1,i_weight]
+    if LH
+        @inbounds rotated_weights[1,2,i_weight] += source_weights[1,2,i_weight]
+        @inbounds rotated_weights[2,2,i_weight] += source_weights[2,2,i_weight]
+    end
     i_weight += 1
 
     # n > 0

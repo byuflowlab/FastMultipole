@@ -3,11 +3,11 @@
 # Legendre polynomials
 P = 10
 θ = pi/7
-pnms = compute_Pnms(P, sin(θ), cos(θ))
+pnms = FastMultipole.compute_Pnms(P, sin(θ), cos(θ))
 
 for n in 0:P
     for m in 0:n
-        i = Pnm_index(n, m)
+        i = FastMultipole.Pnm_index(n, m)
         @test isapprox(pnms[i], Plm(cos(θ),n,m); rtol=1e-12)
     end
 end
@@ -21,7 +21,7 @@ end
 Hs_π2 = [1.0]
 
 expansion_order = 4
-update_Hs_π2!(Hs_π2, Val(10))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(10))
 
 H0 = [1.0;;;]
 H1 = [     -0.5+0.0im     0.707107+0.0im       0.5-0.0im
@@ -53,10 +53,10 @@ Hs_test = [H0,H1,H2,H3,H4]
 
 for n in 1:expansion_order
     H_test = Hs_test[n+1]
-    H = get_H(Hs_π2, n)
+    H = FastMultipole.get_H(Hs_π2, n)
     for m in 0:n
         for mp in 0:m
-            H_mp_m = H[H_index(mp,m)]
+            H_mp_m = H[FastMultipole.H_index(mp,m)]
             H_mp_m_test = H_test[n+mp+1,n+m+1]
             @test isapprox(H_mp_m, H_mp_m_test; atol=1e-6)
         end
@@ -71,10 +71,10 @@ end
 
 expansion_order = 5
 β = 3*pi/7
-Ts = zeros(length_Ts(expansion_order))
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-update_Ts!(Ts, Hs_π2, β, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Ts!(Ts, Hs_π2, β, Val(expansion_order))
 
 T0 = [1.0;;]
 T1 = [ -0.61126   0.689378   0.38874;
@@ -106,10 +106,10 @@ Ts_test = [T0,T1,T2,T3,T4]
 
 for n in 1:length(Ts_test)-1
     T_test = Ts_test[n+1]
-    T = get_T(Ts, n)
+    T = FastMultipole.get_T(Ts, n)
     for m in 0:n
         for mp in -m:m
-            T_mp_m = T[T_index(mp,m)]
+            T_mp_m = T[FastMultipole.T_index(mp,m)]
             T_mp_m_test = T_test[n+mp+1,n+m+1]
             @test isapprox(T_mp_m, T_mp_m_test; atol=1e-6)
         end
@@ -124,7 +124,7 @@ end
 expansion_order = 10
 eimϕs = zeros(2, expansion_order+1)
 ϕ = π/7
-update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
+FastMultipole.update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
 for m in 0:expansion_order
     eimϕ_test = exp(im*m*ϕ)
     @test isapprox(real(eimϕ_test), eimϕs[1,m+1]; atol=1e-12)
@@ -143,23 +143,23 @@ end
 expansion_order = 4
 for m in 0:expansion_order
     for mp in 0:expansion_order
-        r, i = ζ_sign(1.0, mp, m)
+        r, i = FastMultipole.ζ_sign(1.0, mp, m)
         check = (1.0im)^(1.0*mp-m)
         @test isapprox(r, real(check); atol=1e-12)
         @test isapprox(i, imag(check); atol=1e-12)
     end
 end
 
-ζs_test = zeros(length_ζs(expansion_order))
+ζs_test = zeros(FastMultipole.length_ζs(expansion_order))
 ζs_test[1] = 1.0
-update_ζs_mag!(ζs_test, 0, expansion_order)
+FastMultipole.update_ζs_mag!(ζs_test, 0, expansion_order)
 for n in 0:expansion_order
     i = 1
-    ζ = get_ζ(ζs_test,n)
+    ζ = FastMultipole.get_ζ(ζs_test,n)
     for m in 0:n
         for mp in 0:n
             ζ_check = (1.0im)^(1.0*(mp-m)) * sqrt(factorial(n-mp)*factorial(n+mp)/factorial(n-m)/factorial(n+m))
-            ζ_real, ζ_imag = ζ_sign(ζ[i], mp, m)
+            ζ_real, ζ_imag = FastMultipole.ζ_sign(ζ[i], mp, m)
             @test isapprox(ζ_real, real(ζ_check); atol=1e-12)
             @test isapprox(ζ_imag, imag(ζ_check); atol=1e-12)
             i += 1
@@ -314,10 +314,10 @@ rotated_weights_test = ComplexF64[0.6999999999999998 + 0.0im, -0.024500000000000
 # rotate about y axis
 expansion_order = 10
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-ζs_mag = zeros(length_ζs(expansion_order))
-update_ζs_mag!(ζs_mag, 0, expansion_order)
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
+FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
@@ -325,7 +325,7 @@ source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
 source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -485,10 +485,10 @@ unrotated_weights_test = unrotated_weights_real + im .* unrotated_weights_imag
 # rotate about y axis
 expansion_order = 10
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-ζs_mag = zeros(length_ζs(expansion_order))
-update_ζs_mag!(ζs_mag, 0, expansion_order)
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
+FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
@@ -497,8 +497,8 @@ source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 back_rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
-back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, Val(expansion_order), lamb_helmholtz)
 
 i_compressed = 1
 for n in 0:expansion_order
@@ -538,7 +538,7 @@ for n in 0:expansion_order
 end
 
 eimϕs = zeros(2,expansion_order+1)
-rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
 
 i_compressed = 1
 i = 1
@@ -582,8 +582,8 @@ end
 
 lamb_helmholtz = Val(false)
 eimϕs = zeros(2,expansion_order+1)
-rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
-back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, Val(expansion_order), lamb_helmholtz)
 
 i_compressed = 1
 i = 1
@@ -607,23 +607,23 @@ end
 expansion_order = 4
 for m in 0:expansion_order
     for mp in 0:expansion_order
-        r, i = η_sign(1.0, mp, m)
+        r, i = FastMultipole.η_sign(1.0, mp, m)
         check = (1.0im)^(1.0*m-mp)
         @test isapprox(r, real(check); atol=1e-12)
         @test isapprox(i, imag(check); atol=1e-12)
     end
 end
 
-ηs_test = zeros(length_ηs(expansion_order))
+ηs_test = zeros(FastMultipole.length_ηs(expansion_order))
 ηs_test[1] = 1.0
-update_ηs_mag!(ηs_test, 0, expansion_order)
+FastMultipole.update_ηs_mag!(ηs_test, 0, expansion_order)
 for n in 0:expansion_order
     i = 1
-    η = get_η(ηs_test,n)
+    η = FastMultipole.get_η(ηs_test,n)
     for m in 0:n
         for mp in 0:n
             η_check = (1.0im)^(1.0*(m-mp)) * sqrt(factorial(n-m)*factorial(n+m)/factorial(n-mp)/factorial(n+mp))
-            η_real, η_imag = η_sign(η[i], mp, m)
+            η_real, η_imag = FastMultipole.η_sign(η[i], mp, m)
             @test isapprox(η_real, real(η_check); atol=1e-12)
             @test isapprox(η_imag, imag(η_check); atol=1e-12)
             i += 1
@@ -657,14 +657,14 @@ for n in 0:expansion_order
 end
 
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-ηs_mag = zeros(length_ηs(expansion_order))
-update_ηs_mag!(ηs_mag, 0, expansion_order)
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
+FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 θ = 2.5010703409103683
 lamb_helmholtz = Val(false)
 
-rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -705,15 +705,15 @@ for n in 0:expansion_order
 end
 
 Hs_π2 = [1.0]
-update_Hs_π2!(Hs_π2, Val(expansion_order))
-ηs_mag = zeros(length_ηs(expansion_order))
-update_ηs_mag!(ηs_mag, 0, expansion_order)
-Ts = zeros(length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
+FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
+Ts = zeros(FastMultipole.length_Ts(expansion_order))
 
-update_Ts!(Ts, Hs_π2, θ, Val(expansion_order))
+FastMultipole.update_Ts!(Ts, Hs_π2, θ, Val(expansion_order))
 lamb_helmholtz = Val(false)
 
-back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, Val(expansion_order), lamb_helmholtz)
+FastMultipole.back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -757,7 +757,7 @@ end
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
 lamb_helmholtz = Val(false)
-rotate_z!(rotated_weights, weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_z!(rotated_weights, weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -799,9 +799,9 @@ end
 
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
-update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
+FastMultipole.update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
 lamb_helmholtz = Val(false)
-back_rotate_z!(back_rotated_weights, weights, eimϕs, Val(expansion_order), lamb_helmholtz)
+FastMultipole.back_rotate_z!(back_rotated_weights, weights, eimϕs, Val(expansion_order), lamb_helmholtz)
 
 i = 1
 i_compressed = 1
