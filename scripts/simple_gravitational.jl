@@ -333,9 +333,13 @@ println("===== nthreads: $(Threads.nthreads()) =====")
 # @show err
 
 n_bodies = 100_000
-#system = generate_gravitational(123, n_bodies)
-#bm_fmm_system(system)
+# system = generate_gravitational(123, n_bodies)
+# bm_fmm_system(system)
 # @time bm_fmm_system(system)
+
+
+
+
 
 # why is it spending so much time precompiling? Apparently because I am creating a new system in the benchmark function
 # using BenchmarkTools

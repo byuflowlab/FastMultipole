@@ -1,6 +1,5 @@
-#####
-##### dispatch for common interface for external packages
-#####
+#------- dispatch for common interface for external packages -------#
+
 abstract type Indexable end
 
 struct Body <: Indexable end
@@ -14,9 +13,6 @@ const RADIUS = Radius()
 
 struct ScalarPotential <: Indexable end
 const SCALAR_POTENTIAL = ScalarPotential()
-
-struct VectorPotential <: Indexable end
-const VECTOR_POTENTIAL = VectorPotential()
 
 struct Velocity <: Indexable end
 const VELOCITY = Velocity()
@@ -33,34 +29,25 @@ const NORMAL = Normal()
 struct Strength <: Indexable end
 const STRENGTH = Strength()
 
-#####
-##### dispatch on multipole dimension method
-#####
-abstract type AbstractMethod end
+#------- dispatch convenience functions for multipole creation definition -------#
 
-abstract type ScalarPlusVector <: AbstractMethod end
+abstract type AbstractKernel end
 
-abstract type LambHelmholtz <: AbstractMethod end
+abstract type Vortex <: AbstractKernel end
 
-#####
-##### dispatch convenience functions for multipole creation definition
-#####
-abstract type AbstractKernel{sign} end
+abstract type Source <: AbstractKernel end
 
-struct VortexPoint{sign} <: AbstractKernel{sign} end
-VortexPoint(sign=1) = VortexPoint{sign}()
-struct VortexLine{sign} <: AbstractKernel{sign} end # not yet derived
-VortexLine(sign=1) = VortexLine{sign}()
-struct VortexPanel{sign} <: AbstractKernel{sign} end # not yet derived
-VortexPanel(sign=1) = VortexPanel{sign}()
-struct SourcePoint{sign} <: AbstractKernel{sign} end
-SourcePoint(sign=1) = SourcePoint{sign}()
-struct UniformSourcePanel{sign} <: AbstractKernel{sign} end
-UniformSourcePanel(sign=1) = UniformSourcePanel{sign}()
-struct UniformNormalDipolePanel{sign} <: AbstractKernel{sign} end
-UniformNormalDipolePanel(sign=1) = UniformNormalDipolePanel{sign}()
-struct UniformSourceNormalDipolePanel{sign} <: AbstractKernel{sign} end
-UniformSourceNormalDipolePanel(sign=1) = UniformSourceNormalDipolePanel{sign}()
+abstract type Dipole <: AbstractKernel end
+
+abstract type SourceDipole <: AbstractKernel end
+
+abstract type AbstractElement{TK<:AbstractKernel} end
+
+abstract type Point{TK} <: AbstractElement{TK} end
+
+abstract type Filament{TK} <: AbstractElement{TK} end
+
+abstract type Panel{NS,TK} <: AbstractElement{TK} end
 
 #####
 ##### dispatch convenience functions to determine which derivatives are desired
@@ -70,69 +57,17 @@ UniformSourceNormalDipolePanel(sign=1) = UniformSourceNormalDipolePanel{sign}()
 
 Switch indicating whether the scalar potential, vector potential, velocity, and/or velocity gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
 """
-struct DerivativesSwitch{PS,VPS,VS,GS} end
+struct DerivativesSwitch{PS,VS,GS} end
 
 """
-    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
+    ExpansionSwitch
 
-Constructs a tuple of [`DerivativesSwitch`](@ref) objects.
+Switch indicating which expansions should be used:
 
-# Arguments
-
-- `scalar_potential::Vector{Bool}`: a vector of `::Bool` indicating whether the scalar potential should be computed for each target system
-- `vector_potential::Vector{Bool}`: a vector of `::Bool` indicating whether the vector potential should be computed for each target system
-- `velocity::Vector{Bool}`: a vector of `::Bool` indicating whether the velocity should be computed for each target system
-- `velocity_gradient::Vector{Bool}`: a vector of `::Bool` indicating whether the velocity gradient should be computed for each target system
-
+1. scalar potential (`SP`)
+2. vector potential via Lamb-Helmholtz decomposition (`VP`)
 """
-function DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
-    return Tuple(DerivativesSwitch(ps,vps,vs,gs) for (ps,vps,vs,gs) in zip(scalar_potential, vector_potential, velocity, velocity_gradient))
-end
-
-"""
-    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient)
-
-Constructs a single [`DerivativesSwitch`](@ref) object.
-
-# Arguments
-
-- `scalar_potential::Bool`: a `::Bool` indicating whether the scalar potential should be computed for the target system
-- `vector_potential::Bool`: a `::Bool` indicating whether the vector potential should be computed for the target system
-- `velocity::Bool`: a `::Bool` indicating whether the velocity should be computed for the target system
-- `velocity_gradient::Bool`: a `::Bool` indicating whether the velocity gradient should be computed for the target system
-
-"""
-function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool)
-    return DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}()
-end
-
-"""
-    DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems)
-
-Constructs a `::Tuple` of indentical [`DerivativesSwitch`](@ref) objects of the same length as `target_systems` (if it is a `::Tuple`), or a single [`DerivativesSwitch`](@ref) (if `target_system` is not a `::Tuple`)
-
-# Arguments
-
-- `scalar_potential::Bool`: a `::Bool` indicating whether the scalar potential should be computed for each target system
-- `vector_potential::Bool`: a `::Bool` indicating whether the vector potential should be computed for each target system
-- `velocity::Bool`: a `::Bool` indicating whether the velocity should be computed for each target system
-- `velocity_gradient::Bool`: a `::Bool` indicating whether the velocity gradient should be computed for each target system
-
-"""
-function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_systems::Tuple)
-    return Tuple(DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}() for _ in target_systems)
-end
-
-function DerivativesSwitch(scalar_potential, vector_potential, velocity, velocity_gradient, target_systems::Tuple)
-    @assert length(scalar_potential) == length(vector_potential) == length(velocity) == length(velocity_gradient) == length(target_systems) "length of inputs to DerivativesSwitch inconsistent"
-    return Tuple(DerivativesSwitch{scalar_potential[i], vector_potential[i], velocity[i], velocity_gradient[i]}() for i in eachindex(target_systems))
-end
-
-function DerivativesSwitch(scalar_potential::Bool, vector_potential::Bool, velocity::Bool, velocity_gradient::Bool, target_system)
-    return DerivativesSwitch{scalar_potential, vector_potential, velocity, velocity_gradient}()
-end
-
-DerivativesSwitch() = DerivativesSwitch{true, true, true, true}()
+struct ExpansionSwitch{SP,VP} end
 
 #####
 ##### cost parameters
@@ -208,7 +143,7 @@ struct MultiBranch{TF,N} <: Branch{TF}
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
-    harmonics::Array{TF,2}
+    harmonics::Array{TF,3}
     ML::Matrix{TF}
     lock::ReentrantLock
 end
@@ -225,7 +160,8 @@ struct SingleBranch{TF} <: Branch{TF}
     radius::TF              # side lengths of the cube encapsulating the branch
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
-    harmonics::Array{TF,2}
+    harmonics::Array{TF,3}
+    #expansion_storage::Array{TF,3}
     ML::Matrix{TF}
     lock::ReentrantLock
 end
@@ -285,23 +221,6 @@ struct SortWrapper{TS}
     system::TS
     index::Vector{Int}
 end
-
-"""
-    SortWrapper(system)
-
-Convenience wrapper for systems whose elements cannot be sorted in-place (e.g. structured grids). The resulting object is treated like any other `system`.
-"""
-function SortWrapper(system)
-    return SortWrapper(system,collect(1:get_n_bodies(system)))
-end
-
-@inline wrap_duplicates(target_systems::Tuple, source_systems::Tuple) = Tuple(target_system in source_systems ? SortWrapper(target_system) : target_system for target_system in target_systems)
-
-@inline wrap_duplicates(target_system, source_system) = target_system == source_system ? SortWrapper(target_system) : target_system
-
-@inline wrap_duplicates(target_system, source_systems::Tuple) = target_system in source_systems ? SortWrapper(target_system) : target_system
-
-@inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
 
 #####
 ##### when we desire to evaluate the potential at locations not coincident with source centers

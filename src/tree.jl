@@ -215,10 +215,11 @@ end
 
 function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
     return SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+    #return SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -787,17 +788,18 @@ end
 ##### helper function
 #####
 function initialize_expansion(expansion_order, type=Float64)
-    return zeros(type, 2, 4, ((expansion_order+1) * (expansion_order+2)) >> 1)
+    return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function initialize_harmonics(expansion_order, type=Float64)
-    root_n = expansion_order<<1 + 1
-    return zeros(type, 2, 2 * root_n * root_n)
+    p = expansion_order
+    n_harmonics = harmonic_index(p,p)
+    return zeros(type, 2, 2, n_harmonics)
 end
 
 function initialize_ML(expansion_order, type=Float64)
     # return MArray{Tuple{2,4}, type}(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
-    return zeros(type,2,4)
+    return zeros(type,2,2)
 end
 
 function reset_expansions!(tree)

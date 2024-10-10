@@ -65,7 +65,7 @@ end
 Base.getindex(probe_system::ProbeSystem, i, ::Position) = probe_system.position[i]
 Base.getindex(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}, i, ::Radius) where TF = zero(TF)
 Base.getindex(probe_system::ProbeSystem, i, ::ScalarPotential) = get_scalar_potential(probe_system, i)
-Base.getindex(probe_system::ProbeSystem, i, ::VectorPotential) = get_vector_potential(probe_system, i)
+#Base.getindex(probe_system::ProbeSystem, i, ::VectorPotential) = get_vector_potential(probe_system, i)
 Base.getindex(probe_system::ProbeSystem, i, ::Velocity) = get_velocity(probe_system, i)
 Base.getindex(probe_system::ProbeSystem, i, ::VelocityGradient) = get_velocity_gradient(probe_system, i)
 # Base.getindex(probe_system::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}, i, ::Strength) where TF = zero(TF)
@@ -84,9 +84,9 @@ end
 function Base.setindex!(probe_system::ProbeSystem, val, i, ::ScalarPotential)
     set_scalar_potential!(probe_system, val, i)
 end
-function Base.setindex!(probe_system::ProbeSystem, val, i, ::VectorPotential)
-    set_vector_potential!(probe_system, val, i)
-end
+#function Base.setindex!(probe_system::ProbeSystem, val, i, ::VectorPotential)
+#    set_vector_potential!(probe_system, val, i)
+#end
 function Base.setindex!(probe_system::ProbeSystem, val, i, ::Velocity)
     set_velocity!(probe_system, val, i)
 end
@@ -98,7 +98,7 @@ Base.eltype(::ProbeSystem{TF,<:Any,<:Any,<:Any,<:Any}) where TF = TF
 
 buffer_element(probe_system::ProbeSystem) = probe_system.position[1], get_scalar_potential(probe_system,1), get_vector_potential(probe_system,1), get_velocity(probe_system,1), get_velocity_gradient(probe_system,1)
 
-B2M!(system::ProbeSystem, args...) = nothing
+body_to_multipole!(system::ProbeSystem, args...) = nothing
 
 direct!(target_system, target_index, source_system::ProbeSystem, source_index) = nothing
 
