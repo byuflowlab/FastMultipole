@@ -212,7 +212,8 @@ end
 
 x = SVector{3}(0.1,0.2,-0.3)
 xs = x + SVector{3}(-0.2,0.07,-0.1)
-bodies = [xs[1]; xs[2]; xs[3]; 0.0; 0.7;;]
+bodies = zeros(5,1)
+bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
 expansion_order = 10
 branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, expansion_order)
