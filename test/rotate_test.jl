@@ -77,7 +77,7 @@ Hs_π2 = [1.0]
 FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
 FastMultipole.update_Ts!(Ts, Hs_π2, β, Val(expansion_order))
 
-T0 = [1.0;;]
+T0 = ones(1,1)
 T1 = [ -0.61126   0.689378   0.38874;
   0.689378  0.222521   0.689378;
   0.38874   0.689378  -0.61126;]
