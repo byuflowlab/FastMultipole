@@ -23,7 +23,8 @@ Hs_π2 = [1.0]
 expansion_order = 4
 FastMultipole.update_Hs_π2!(Hs_π2, Val(10))
 
-H0 = [1.0;;;]
+H0 = zeros(Complex{Float64},1,1)
+H0[1,1] = 1.0
 H1 = [     -0.5+0.0im     0.707107+0.0im       0.5-0.0im
  0.707107+0.0im  6.12323e-17+0.0im  0.707107+0.0im
  0.5-0.0im     0.707107+0.0im      -0.5+0.0im]
