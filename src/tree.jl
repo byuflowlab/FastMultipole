@@ -791,6 +791,12 @@ function initialize_expansion(expansion_order, type=Float64)
     return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
+function initialize_velocity_n_m(expansion_order, type=Float64)
+    p = expansion_order
+    n_harmonics = harmonic_index(p,p)
+    return zeros(type, 2, 3, n_harmonics)
+end
+
 function initialize_harmonics(expansion_order, type=Float64)
     p = expansion_order
     n_harmonics = harmonic_index(p,p)
