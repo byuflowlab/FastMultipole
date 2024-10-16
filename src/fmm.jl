@@ -276,7 +276,8 @@ end
 
 #------- horizontal pass -------#
 
-function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, source_branches, m2l_list, expansion_order::Val{P}, lamb_helmholtz) where {TF,P}
+function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, source_branches, m2l_list, expansion_order::Val{P}, lamb_helmholtz, relative_error) where {TF,P}
+
     # preallocate containers to be reused
     weights_tmp_1 = initialize_expansion(P, TF)
     weights_tmp_2 = initialize_expansion(P, TF)
@@ -288,7 +289,7 @@ function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, so
         source_branch = source_branches[j_source]
         #weights_tmp_1 = target_branch.expansion_storage
         #weights_tmp_2 = source_branch.expansion_storage
-        multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+        multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, relative_error)
     end
 
 end
@@ -641,24 +642,26 @@ function fmm!(target_systems, source_systems;
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
-    source_shrink_recenter::Bool=true, target_shrink_recenter::Bool=true,
-    save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree", gpu::Bool=false
+    source_shrink::Bool=true, source_recenter::Bool=true, target_shrink::Bool=true, target_recenter::Bool=true,
+    save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree",
+    gpu::Bool=false, relative_error=nothing
 )
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
+    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink=source_shrink, recenter=source_recenter)
+    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink=target_shrink, recenter=target_recenter)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
+        lamb_helmholtz,
         scalar_potential, velocity, velocity_gradient,
         multipole_threshold,
         reset_source_tree=false, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
-        unsort_source_bodies, unsort_target_bodies, gpu
+        unsort_source_bodies, unsort_target_bodies, gpu, relative_error
     )
 
     # visualize
@@ -707,19 +710,20 @@ function fmm!(systems;
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_bodies::Bool=true, shrink_recenter::Bool=true,
-    save_tree::Bool=false, save_name="tree", gpu::Bool=false
+    unsort_bodies::Bool=true, shrink::Bool=true, recenter::Bool=true,
+    save_tree::Bool=false, save_name="tree", gpu::Bool=false, relative_error=nothing
 )
     # create tree
-    tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
+    tree = Tree(systems; expansion_order, leaf_size, shrink, recenter)
 
     # perform fmm
     m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches = fmm!(tree, systems;
+        lamb_helmholtz,
         scalar_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
-        unsort_bodies, gpu
+        unsort_bodies, gpu, relative_error
     )
 
     # visualize
@@ -763,7 +767,7 @@ function fmm!(tree::Tree, systems;
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_bodies::Bool=true, gpu::Bool=false
+    unsort_bodies::Bool=true, gpu::Bool=false, relative_error=nothing
 )
 
     # assemble derivatives switch
@@ -777,7 +781,7 @@ function fmm!(tree::Tree, systems;
         lamb_helmholtz,
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_bodies, gpu
+        unsort_bodies, gpu, relative_error
     )
 
     return m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches
@@ -829,7 +833,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
-    gpu::Bool=false
+    gpu::Bool=false, relative_error=nothing
 )
 
     # assemble derivatives switch
@@ -843,7 +847,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         lamb_helmholtz,
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies, unsort_target_bodies, gpu
+        unsort_source_bodies, unsort_target_bodies, gpu, relative_error
     )
 
     return m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches
@@ -878,7 +882,7 @@ function fmm!(tree::Tree, systems, m2l_list, direct_target_bodies, direct_source
     lamb_helmholtz::Bool=false,
     reset_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    unsort_bodies::Bool=true, gpu::Bool=false
+    unsort_bodies::Bool=true, gpu::Bool=false, relative_error=nothing
 )
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_target_bodies, direct_source_bodies, derivatives_switches;
@@ -886,7 +890,7 @@ function fmm!(tree::Tree, systems, m2l_list, direct_target_bodies, direct_source
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false,
-        gpu
+        gpu, relative_error
     )
 
 end
@@ -940,8 +944,12 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     reset_source_tree::Bool=true, reset_target_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
-    gpu::Bool=false
+    gpu::Bool=false, relative_error=nothing
 )
+
+    # repack in Val
+    lamb_helmholtz = Val(lamb_helmholtz)
+
     # check if systems are empty
     n_sources = get_n_bodies(source_systems)
     n_targets = get_n_bodies(target_systems)
@@ -980,9 +988,9 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             if n_threads == 1 # && !gpu || gpu
 
                 nearfield_singlethread!(target_systems, direct_target_bodies, derivatives_switches, source_systems, direct_source_bodies, Val(gpu))
-                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order, Val(lamb_helmholtz))
-                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, Val(lamb_helmholtz))
-                downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order, Val(lamb_helmholtz), derivatives_switches)
+                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order, lamb_helmholtz)
+                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order, lamb_helmholtz, relative_error)
+                downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, target_tree.expansion_order, lamb_helmholtz, derivatives_switches)
 
             else # n_threads > 1 && !gpu
 

@@ -1,4 +1,4 @@
-function visualize_bodies(name, system, probe_indices=())
+function visualize_bodies(name, system)
     n_bodies = get_n_bodies(system)
     body_locations = zeros(3,n_bodies,1,1)
     body_radii = zeros(n_bodies,1,1)
@@ -8,22 +8,34 @@ function visualize_bodies(name, system, probe_indices=())
     vector_potential = zeros(3,n_bodies,1,1)
     velocity = zeros(3,n_bodies,1,1)
     for i in 1:n_bodies
-        body_locations[:,i,1,1] .= system[i,POSITION]
-        body_radii[i,1,1] = system[i,RADIUS]
-        scalar_strength[i,1,1] = system[i,SCALAR_STRENGTH]
-        vector_strength[:,i,1,1] .= system[i,VECTOR_STRENGTH]
-        scalar_potential[i,1,1] = system[i,SCALAR_POTENTIAL]
-        vector_potential[:,i,1,1] .= system[i,VECTOR_POTENTIAL]
-        velocity[:,i,1,1] .= system[i,VELOCITY]
+        body_locations[:,i,1,1] .= system[i,Position()]
+        body_radii[i,1,1] = system[i,Radius()]
+        if typeof(system[i,Strength()]) <: AbstractArray
+            vector_strength[:,i,1,1] .= system[i,Strength()]
+        else
+            scalar_strength[i,1,1] = system[i,Strength()]
+        end
+        scalar_potential[i,1,1] = system[i,ScalarPotential()]
+        velocity[:,i,1,1] .= system[i,Velocity()]
     end
     vtk_grid(name*"_bodies", body_locations) do vtk
         vtk["radius"] = body_radii
-        vtk["scalar strength"] = scalar_strength
-        vtk["vector strength"] = vector_strength
+        if typeof(system[1,Strength()]) <: AbstractArray
+            vtk["vector strength"] = vector_strength
+        else
+            vtk["scalar strength"] = scalar_strength
+        end
         vtk["scalar potential"] = scalar_potential
-        vtk["vector potential"] = vector_potential
         vtk["velocity"] = velocity
     end
+end
+
+function visualize_bodies(name, system, ::Nothing)
+    visualize_bodies(name, system)
+end
+
+function visualize_bodies(name, system, probe_indices)
+    visualize_bodies(name, system)
 
     #####
     ##### probes

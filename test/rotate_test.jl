@@ -75,7 +75,7 @@ expansion_order = 5
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 Hs_π2 = [1.0]
 FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
-FastMultipole.update_Ts!(Ts, Hs_π2, β, Val(expansion_order))
+FastMultipole.update_Ts!(Ts, Hs_π2, β, expansion_order)
 
 T0 = ones(1,1)
 T1 = [ -0.61126   0.689378   0.38874;
@@ -125,7 +125,7 @@ end
 expansion_order = 10
 eimϕs = zeros(2, expansion_order+1)
 ϕ = π/7
-FastMultipole.update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
+FastMultipole.update_eimϕs!(eimϕs, ϕ, expansion_order)
 for m in 0:expansion_order
     eimϕ_test = exp(im*m*ϕ)
     @test isapprox(real(eimϕ_test), eimϕs[1,m+1]; atol=1e-12)
@@ -326,7 +326,7 @@ source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
 source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -498,8 +498,8 @@ source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 back_rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
-FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, Val(expansion_order), lamb_helmholtz)
-FastMultipole.back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
+FastMultipole.back_rotate_multipole_y!(back_rotated_weights, rotated_weights, Ts, ζs_mag, expansion_order, lamb_helmholtz)
 
 i_compressed = 1
 for n in 0:expansion_order
@@ -539,7 +539,7 @@ for n in 0:expansion_order
 end
 
 eimϕs = zeros(2,expansion_order+1)
-FastMultipole.rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
 
 i_compressed = 1
 i = 1
@@ -583,8 +583,8 @@ end
 
 lamb_helmholtz = Val(false)
 eimϕs = zeros(2,expansion_order+1)
-FastMultipole.rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
-FastMultipole.back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_z!(rotated_weights, unrotated_weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
+FastMultipole.back_rotate_z!(back_rotated_weights, rotated_weights, eimϕs, expansion_order, lamb_helmholtz)
 
 i_compressed = 1
 i = 1
@@ -665,7 +665,7 @@ Ts = zeros(FastMultipole.length_Ts(expansion_order))
 θ = 2.5010703409103683
 lamb_helmholtz = Val(false)
 
-FastMultipole.rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_local_y!(rotated_weights, weights, Ts, Hs_π2, ηs_mag, θ, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -711,10 +711,10 @@ FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 
-FastMultipole.update_Ts!(Ts, Hs_π2, θ, Val(expansion_order))
+FastMultipole.update_Ts!(Ts, Hs_π2, θ, expansion_order)
 lamb_helmholtz = Val(false)
 
-FastMultipole.back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, Val(expansion_order), lamb_helmholtz)
+FastMultipole.back_rotate_local_y!(back_rotated_weights, rotated_weights, Ts, Hs_π2, ηs_mag, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -758,7 +758,7 @@ end
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
 lamb_helmholtz = Val(false)
-FastMultipole.rotate_z!(rotated_weights, weights, eimϕs, ϕ, Val(expansion_order), lamb_helmholtz)
+FastMultipole.rotate_z!(rotated_weights, weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1
@@ -800,9 +800,9 @@ end
 
 ϕ = 2.0344439357957027
 eimϕs = zeros(2, expansion_order+1)
-FastMultipole.update_eimϕs!(eimϕs, ϕ, Val(expansion_order))
+FastMultipole.update_eimϕs!(eimϕs, ϕ, expansion_order)
 lamb_helmholtz = Val(false)
-FastMultipole.back_rotate_z!(back_rotated_weights, weights, eimϕs, Val(expansion_order), lamb_helmholtz)
+FastMultipole.back_rotate_z!(back_rotated_weights, weights, eimϕs, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1

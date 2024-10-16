@@ -10,7 +10,7 @@ translated_weights_test = ComplexF64[0.6999999999999998 + 0.0im, -0.073566636459
 
 z_translated_weights = zero(original_weights)
 
-FastMultipole.translate_multipole_z!(z_translated_weights, original_weights, r, Val(expansion_order), Val(false))
+FastMultipole.translate_multipole_z!(z_translated_weights, original_weights, r, expansion_order, Val(false))
 
 i = 1
 i_compressed = 1
@@ -35,7 +35,8 @@ bodies = zeros(5,1)
 bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
 expansion_order = 7
-branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, box, expansion_order)
 
 body_to_multipole!(Point{Source}, masses, branch, 1:1, branch.harmonics, Val(expansion_order))
 
@@ -57,7 +58,8 @@ translated_weights = initialize_expansion(expansion_order, eltype(Ts))
 FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 
 # next multipole branch
-branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), 0.0, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), 0.0, box, expansion_order)
 expansion_switch = Val(false)
 
 FastMultipole.multipole_to_multipole!(branch_2, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, Val(expansion_order), expansion_switch)

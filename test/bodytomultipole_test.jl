@@ -216,7 +216,8 @@ bodies = zeros(5,1)
 bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
 expansion_order = 10
-branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, box, expansion_order)
 
 body_to_multipole!(Point{Source}, masses, branch, 1:1, branch.harmonics, Val(expansion_order))
 
@@ -257,7 +258,8 @@ v_analytic = r/rnorm^3/4/pi * masses.bodies[1].strength
 #--- evaluate local expansion ---#
 
 target_center = x_target + SVector{3}(0.05, -0.1, -0.2)
-target_branch = Branch(1:1, 0, 1:0, 0, 1, target_center, 0.0, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+target_branch = Branch(1:1, 0, 1:0, 0, 1, target_center, 0.0, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -274,7 +276,8 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+relative_error = nothing
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, relative_error)
 
 velocity_n_m = zeros(2,3,size(target_branch.multipole_expansion,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(x_target - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -302,7 +305,8 @@ system = DipolePoints([xs], [q])
 
 # create branch
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Dipole}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -310,7 +314,7 @@ test_expansion!(branch.multipole_expansion, -multipole_check_expansion, 1, expan
 
 # local branch
 target_center = xt + SVector{3}(0.1, 0.2, -0.3)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -327,7 +331,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -355,7 +359,8 @@ system = Vortons([xs], [q])
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = xs + SVector{3}(0.01, 0.02, -0.03)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Vortex}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -364,7 +369,7 @@ test_expansion!(branch.multipole_expansion, multipole_check_expansion, 2, expans
 
 xt = SVector{3}(6.8, 0.0, 0.0)
 target_center = xt + SVector{3}(0.1,-0.2,-0.3)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -382,7 +387,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(true)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
 
 # evaluate at target
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
@@ -500,7 +505,8 @@ expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = (x1+x2)/2 + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Filament{Source}, system, branch, 1:1, harmonics, Val(expansion_order))
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
@@ -590,7 +596,8 @@ expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = (x1+x2)/2 + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Filament{Dipole}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -651,7 +658,8 @@ expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = (x1+x2)/2 + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Filament{Vortex}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -660,7 +668,7 @@ body_to_multipole!(Filament{Vortex}, system, branch, 1:1, harmonics, Val(expansi
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -678,7 +686,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(true)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch())
@@ -709,7 +717,8 @@ expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = centroid + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Panel{Source}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -722,7 +731,7 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = SourcePoints([x_point], [q_point])
-branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Source}, system_point, branch_point, 1:1, harmonics_point, Val(expansion_order))
 #ϕ_point, v_point, g_point = evaluate_multipole(xt, branch_point.center, branch_point.multipole_expansion, DerivativesSwitch(true,true,true), Val(expansion_order))
@@ -732,8 +741,8 @@ body_to_multipole!(Point{Source}, system_point, branch_point, 1:1, harmonics_poi
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
-target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
+target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -751,8 +760,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
-FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -797,7 +806,8 @@ expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = centroid + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Panel{Dipole}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -810,7 +820,7 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = DipolePoints([x_point], [q_point])
-branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Dipole}, system_point, branch_point, 1:1, harmonics_point, Val(expansion_order))
 
@@ -819,8 +829,9 @@ body_to_multipole!(Point{Dipole}, system_point, branch_point, 1:1, harmonics_poi
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
-target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
+target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -838,8 +849,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
-FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -902,7 +913,8 @@ expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 center = centroid + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+box = SVector{3}(0.0,0.0,0.0)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Panel{Vortex}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -915,7 +927,7 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = Vortons([x_point], [q_point])
-branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, expansion_order)
+branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Vortex}, system_point, branch_point, 1:1, harmonics_point, Val(expansion_order))
 
@@ -924,8 +936,8 @@ body_to_multipole!(Point{Vortex}, system_point, branch_point, 1:1, harmonics_poi
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
-target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
+target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -943,8 +955,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(true)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
-FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())

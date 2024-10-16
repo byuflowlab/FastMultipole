@@ -2,10 +2,11 @@
 
 #--- z axis rotation matrices (diagonal) ---#
 
-function update_eimϕs!(eimϕs, ϕ, ::Val{expansion_order}) where expansion_order
+function update_eimϕs!(eimϕs, ϕ, P)
+#function update_eimϕs!(eimϕs, ϕ, ::Val{expansion_order}) where expansion_order
     eiϕ_imag, eiϕ_real = sincos(ϕ)
     eimϕ_real, eimϕ_imag = one(ϕ), zero(ϕ)
-    @inbounds for m in 0:expansion_order
+    @inbounds for m in 0:P
         eimϕs[1,m+1] = eimϕ_real
         eimϕs[2,m+1] = eimϕ_imag
         eimϕ_real_tmp = eimϕ_real
@@ -209,7 +210,8 @@ end
     end
 end
 
-function update_Ts!(Ts, Hs_π2, β::TF, ::Val{expansion_order}) where {TF,expansion_order}
+#function update_Ts!(Ts, Hs_π2, β::TF, ::Val{expansion_order}) where {TF,expansion_order}
+function update_Ts!(Ts, Hs_π2, β::TF, expansion_order) where TF
     p = expansion_order
 
     # initialize recursive indices
@@ -302,9 +304,10 @@ end
 """
 Performs a z-axis rotation of the supplied solid harmonic coefficients. Computes e^{imϕ} as well.
 """
-function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, expansion_order::Val{P}, ::Val{LH}) where {P,LH}
+function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, P, ::Val{LH}) where LH
+#function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, expansion_order::Val{P}, ::Val{LH}) where {P,LH}
 
-    update_eimϕs!(eimϕs, ϕ, expansion_order)
+    update_eimϕs!(eimϕs, ϕ, P)
 
     i_weight = 1
 
@@ -342,7 +345,8 @@ end
 """
 Assumes eimϕs have already been computed. DOES NOT overwrite rotated weights (unlike other rotate functions); rather, accumulates on top of it.
 """
-function back_rotate_z!(rotated_weights, source_weights, eimϕs, expansion_order::Val{P}, ::Val{LH}) where {P,LH}
+function back_rotate_z!(rotated_weights, source_weights, eimϕs, P, ::Val{LH}) where LH
+#function back_rotate_z!(rotated_weights, source_weights, eimϕs, expansion_order::Val{P}, ::Val{LH}) where {P,LH}
     i_weight = 1
 
     # n = 0 (no change in the monopole term)
@@ -383,6 +387,7 @@ function length_ζs(expansion_order)
     return div((p+1)*(p+2)*(2p+3),6)
 end
 
+#function update_ζs_mag!(ζs_mag, P)
 function update_ζs_mag!(ζs_mag, expansion_order::Val{P}) where P
     l = length(ζs_mag)
     l_desired = length_ζs(P)
@@ -457,7 +462,8 @@ end
 
 #--- functions to actually rotate ---#
 
-function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, ::Val{P}, ::Val{LH}) where {P,LH}
+#function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, ::Val{P}, ::Val{LH}) where {P,LH}
+function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, P, ::Val{LH}) where LH
     # reset container
     rotated_weights .= zero(eltype(rotated_weights))
 
@@ -566,19 +572,21 @@ end
 """
 Rotate solid harmonic weights about the y axis by θ. Note that Hs_π2 and ζs_mag must be updated a priori, but Ts is updated en situ. Resets rotated_weights before computing.
 """
-function rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
+function rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, P, lamb_helmholtz)
+#function rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
     # get y-axis Wigner rotation matrix
-    update_Ts!(Ts, Hs_π2, θ, expansion_order)
+    update_Ts!(Ts, Hs_π2, θ, P)
 
     # perform rotation
-    _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, expansion_order, lamb_helmholtz)
+    _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, P, lamb_helmholtz)
 end
 
 """
 Assumes Ts, Hs_π2, and ζs_mag have all been precomputed. Resets target_weights.
 """
-function back_rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, expansion_order, lamb_helmholtz)
-    _rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, expansion_order, lamb_helmholtz)
+function back_rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, P, lamb_helmholtz)
+#function back_rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, expansion_order, lamb_helmholtz)
+    _rotate_multipole_y!(target_weights, rotated_weights, Ts, ζs_mag, P, lamb_helmholtz)
 end
 
 #------- LOCAL ROTATIONS -------#
@@ -588,6 +596,7 @@ function length_ηs(expansion_order)
     return div((p+1)*(p+2)*(2p+3),6)
 end
 
+#function update_ηs_mag!(ηs_mag, P)
 function update_ηs_mag!(ηs_mag, expansion_order::Val{P}) where P
     l = length(ηs_mag)
     l_desired = length_ηs(P)
@@ -662,7 +671,8 @@ end
 
 #--- functions to actually rotate ---#
 
-function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, ::Val{P}, ::Val{LH}) where {P,LH}
+function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, P, ::Val{LH}) where LH
+#function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, ::Val{P}, ::Val{LH}) where {P,LH}
     # reset container
     rotated_weights .= zero(eltype(rotated_weights))
 

@@ -106,102 +106,108 @@ end
 
 #--- RUN TESTS ---#
 
+function solve_p_new(ε, ρ, am, al)
+    target = ε * (ρ - am - al)
+    f1 = al / (ρ-am)
+    f2 = am / (ρ-al)
+    t1 = al
+    t2 = am
+    for p in 0:50
+        (t1 + t2 < target) && (return p)
+        t1 *= f1
+        t2 *= f2
+    end
+    return 51
+end
 
+function solve_p_old(ε, ρ, am)
+    c = ρ/am - 1.0
+    p_old = Int(ceil(-log(c,ε)))
+    return p_old
+end
 
-function test_error(distance::Number, epsilon)
+function choose_p(epsilon::Number, dx=0.0, pmax=51)
     # define multipole (source)
     multipole_center = SVector{3}(0.0,0,0)
     ρs = [1.0]
     θs = [π/2]
     ϕs = [0.0]
     qs = [1.0]
-    multipole, system = generate_multipole(multipole_center, ρs, θs, ϕs, qs, expansion_order)
+    multipole, system = generate_multipole(multipole_center, ρs, θs, ϕs, qs, pmax)
 
     # define target
-    xt = SVector{3}(1.0+distance,0.0,0.0)
+    xt = SVector{3}(3.0+dx,0.0,0.0)
 
     # define local expansion
-    local_center = SVector{3}(7.0,0,0)
-    local_branch = generate_local(local_center, multipole, expansion_order)
+    local_center = SVector{3}(4.0,0,0)
+    local_branch = generate_local(local_center, multipole, pmax)
+
+    # determine expansion order
+    ρ = norm(local_center - multipole.center)
+    am = ρs[1]
+    p_old = solve_p_old(epsilon, ρ, am)
+
+    # use new error function
+    al = 1.0 - dx
+    p_new = solve_p_new(epsilon, ρ, am, al)
 
     # potential
-    u_multipole = evaluate_multipole(xt, multipole, expansion_order)
-    u_local = evaluate_local(xt, local_branch, expansion_order)
+    u_multipole = evaluate_multipole(xt, multipole, p_old)
+    u_local = evaluate_local(xt, local_branch, p_old)
     u_direct = evaluate_direct(xt, system)
 
-    # upper bound (expected)
-    ub = upper_bound_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
-    old_ub = old_upper_bound_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
-    me, le = porter_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
+    # new potential
+    u_multipole_new = evaluate_multipole(xt, multipole, p_new)
+    u_local_new = evaluate_local(xt, local_branch, p_new)
 
-    return abs((u_multipole - u_direct)/u_direct), abs((u_local - u_direct)/u_direct), ub, old_ub, me, le
+    return abs((u_multipole - u_direct)/u_direct), abs((u_local - u_direct)/u_direct), p_old, abs((u_multipole_new - u_direct)/u_direct), abs((u_local_new - u_direct)/u_direct), p_new
 end
 
-function test_error(ds::Vector, expansion_order = 130)
-    multipole_error = zeros(length(ds))
-    local_error = zeros(length(ds))
-    upper_bounds = zeros(length(ds))
-    old_upper_bounds = zeros(length(ds))
-    multi_upper_bounds = zeros(length(ds))
-    local_upper_bounds = zeros(length(ds))
-    for (i,d) in enumerate(ds)
-        m, l, u, u_old, me, le = test_error(d, expansion_order)
+function choose_p(εs::Vector, dx=0.0, pmax=50)
+    multipole_error = zeros(length(εs))
+    local_error = zeros(length(εs))
+    new_multipole_error = zeros(length(εs))
+    new_local_error = zeros(length(εs))
+    old_ps = zeros(Int,length(εs))
+    new_ps = zeros(Int,length(εs))
+    for (i,ε) in enumerate(εs)
+        m, l, p_old, m_new, l_new, p_new = choose_p(ε, dx, pmax)
         multipole_error[i] = m
         local_error[i] = l
-        upper_bounds[i] = u
-        old_upper_bounds[i] = u_old
-        multi_upper_bounds[i] = me
-        local_upper_bounds[i] = le
+        old_ps[i] = p_old
+        new_multipole_error[i] = m_new
+        new_local_error[i] = l_new
+        new_ps[i] = p_new
     end
-    return multipole_error, local_error, upper_bounds, old_upper_bounds, multi_upper_bounds, local_upper_bounds
+    return multipole_error, local_error, old_ps, new_multipole_error, new_local_error, new_ps
 end
 
-#=
-ds = collect(range(-0.5,7,length=200))
-p = 130
-m, l, u = test_error(ds, p)
-
-fig = figure("test error")
+fig = figure("choose p")
 fig.clear()
-fig.add_subplot(111, xlabel="distance", ylabel="relative error")
-ax = fig.get_axes()[0]
-ax.plot(ds, m)
-ax.plot(ds, l)
-#ax.scatter([1.0],[0.0], "*")
-ax.set_yscale("log")
-#ax.set_ylim([1e-16,100])
-ax.legend(["multipole", "local"])
+fig.add_subplot(211, xlabel="relative error tolerance", ylabel="resulting error")
+fig.add_subplot(212, xlabel="relative error tolerance", ylabel="expansion order")
+ax1 = fig.get_axes()[0]
+ax0 = fig.get_axes()[1]
 
-BSON.@save "error_convergence_p$p.bson" ds m l
-savefig("error_convergence_p$p.png")
-=#
+distance = 0.5
+eps = [10.0^x for x in -12:0.005:0]
+m, l, old_ps, m_new, l_new, new_ps = choose_p(eps, distance)
 
-ds = collect(range(-0.5,6,length=200))
-p = 20
-m, l, u, old_u, me, le = test_error(ds, p)
+ax0.plot(eps, old_ps)
+ax0.plot(eps, new_ps)
+#ax1.plot(eps, m)
+ax1.plot(eps, l)
+ax1.plot(eps, l_new)
+ax1.plot(eps, eps, "red")
 
-fig = figure("test upper bound")
-fig.clear()
-fig.add_subplot(111, xlabel="distance", ylabel="relative error")
-ax = fig.get_axes()[0]
-#ax.plot(ds, m)
-ax.plot(ds, l)
-#ax.plot(ds, l .- m)
-#ax.plot(ds, me)
-#ax.plot(ds, le)
-#max_error = zeros(length(me))
-#for (i,(m,l)) in enumerate(zip(me,le))
-#    max_error[i] = max(m,l)
-#end
-#ax.plot(ds, max_error)
-ax.plot(ds, old_u)
-ax.plot(ds, me .+ le)
-#ax.plot(ds, u, "--")
-#ax.scatter([1.0],[0.0], "*")
-ax.set_yscale("log")
-#ax.set_ylim([1e-16,100])
-#ax.legend(["multipole", "local", "upper bound", "old upper bound", "multipole only", "local only", "combined"])
-ax.legend(["actual error", "literature", "novel formula"])
+ax0.set_xscale("log")
+ax0.legend(["Pringle", "novel"])
 
-BSON.@save "new_upper_bound_p$p.bson" ds m l
-savefig("new_upper_bound_p$p.png")
+ax1.set_xscale("log")
+ax1.set_yscale("log")
+ax1.legend(["Pringle", "novel", "tolerance"])
+
+tight_layout()
+
+BSON.@save "choose_p2_d$distance.bson" m l old_ps m_new l_new new_ps
+savefig("choose_p2_d$distance.png")

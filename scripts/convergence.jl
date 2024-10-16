@@ -122,10 +122,10 @@ function test_error(distance::Number, expansion_order = 130)
     multipole, system = generate_multipole(multipole_center, ρs, θs, ϕs, qs, expansion_order)
 
     # define target
-    xt = SVector{3}(1.0+distance,0.0,0.0)
+    xt = SVector{3}(distance,0.0,0.0)
 
     # define local expansion
-    local_center = SVector{3}(7.0,0,0)
+    local_center = SVector{3}(4.0,0,0)
     local_branch = generate_local(local_center, multipole, expansion_order)
 
     # potential
@@ -180,13 +180,13 @@ BSON.@save "error_convergence_p$p.bson" ds m l
 savefig("error_convergence_p$p.png")
 =#
 
-ds = collect(range(-0.5,6,length=200))
-p = 20
+ds = collect(range(1.0,4.0,length=200))
+p = 4
 m, l, u, old_u, me, le = test_error(ds, p)
 
 fig = figure("test upper bound")
 fig.clear()
-fig.add_subplot(111, xlabel="distance", ylabel="relative error")
+fig.add_subplot(111, xlabel="target location", ylabel="relative error")
 ax = fig.get_axes()[0]
 #ax.plot(ds, m)
 ax.plot(ds, l)
@@ -198,6 +198,7 @@ ax.plot(ds, l)
 #    max_error[i] = max(m,l)
 #end
 #ax.plot(ds, max_error)
+
 ax.plot(ds, old_u)
 ax.plot(ds, me .+ le)
 #ax.plot(ds, u, "--")
@@ -205,7 +206,7 @@ ax.plot(ds, me .+ le)
 ax.set_yscale("log")
 #ax.set_ylim([1e-16,100])
 #ax.legend(["multipole", "local", "upper bound", "old upper bound", "multipole only", "local only", "combined"])
-ax.legend(["actual error", "literature", "novel formula"])
+ax.legend(["actual error", "Pringle", "novel"])
 
-BSON.@save "new_upper_bound_p$p.bson" ds m l
-savefig("new_upper_bound_p$p.png")
+BSON.@save "compare_error_p$p.bson" ds m l
+savefig("compare_error_p$p.png")
