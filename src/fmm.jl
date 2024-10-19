@@ -187,7 +187,7 @@ end
 
 #------- UPWARD PASS -------#
 
-function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz) where {TF,P}
+function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz, leaf_index) where {TF,P}
 
     # try preallocating one container to be reused
     Ts = zeros(length_Ts(P))
@@ -195,12 +195,20 @@ function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, syste
     weights_tmp_1 = initialize_expansion(P, TF)
     weights_tmp_2 = initialize_expansion(P, TF)
 
+    # multipole expansions
+    for i_branch in leaf_index
+        branch = branches[i_branch]
+        body_to_multipole!(branch, systems, branch.harmonics, expansion_order)
+    end
+
+    # if predicting error, accumulate charge TODO
+
+
     # loop over branches
     for i_branch in length(branches):-1:1 # no need to create a multipole expansion at the very top level
         branch = branches[i_branch]
-        if branch.n_branches == 0 # branch is a leaf
-            body_to_multipole!(branch, systems, branch.harmonics, expansion_order)
-        else # not a leaf
+
+        if branch.n_branches !== 0 # branch is not a leaf
             # iterate over children
             for i_child in branch.branch_index
                 child_branch = branches[i_child]
@@ -347,7 +355,7 @@ function upward_pass_multithread!(branches, systems, expansion_order, lamb_helmh
     if n_threads == 1
 
         # single threaded version
-        upward_pass_singlethread!(branches, systems, expansion_order, lamb_helmholtz)
+        upward_pass_singlethread!(branches, systems, expansion_order, lamb_helmholtz, leaf_index)
 
     else
         # create multipole expansions

@@ -170,10 +170,18 @@ struct MultiBranch{TF,N} <: Branch{TF}
     target_radius::TF
     source_box::SVector{6,TF} # x, y, and z half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
+    charge::TF
+    error::Array{TF,0}
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,3}
     lock::ReentrantLock
+end
+
+function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF)) where TF
+    error = Array{TF,0}(undef)
+    error[] = zero(TF)
+    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
@@ -214,10 +222,18 @@ struct SingleBranch{TF} <: Branch{TF}
     target_radius::TF
     source_box::SVector{6,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
+    charge::TF
+    error::Array{TF,0}
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,3}
     lock::ReentrantLock
+end
+
+function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF)) where TF
+    error = Array{TF,0}(undef)
+    error[] = zero(TF)
+    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
