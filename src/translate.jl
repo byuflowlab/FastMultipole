@@ -264,7 +264,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     # choose expansion order
-    dynamic_expansion_order = get_dynamic_expansion_order(r, source_branch.radius, target_branch.radius, relative_error, expansion_order)
+    dynamic_expansion_order = get_dynamic_expansion_order(r, source_branch.source_radius, target_branch.target_radius, relative_error, expansion_order)
 
     #--- rotate coordinate system ---#
 

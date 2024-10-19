@@ -108,6 +108,39 @@ function porter_error(center_separation, am, al, expansion_order)
     return multi_err, local_err
 end
 
+function minimum_distance(dx, rx)
+    right = dx + rx
+    left = dx - rx
+    same_sign = right * left >= 0
+    return same_sign * min(right, left)
+end
+
+function minimum_distance_squared(center_1, center_2, box_2)
+    x_min = minimum_distance(center_2[1] - center_1[1], box_2[1])
+    y_min = minimum_distance(center_2[2] - center_1[2], box_2[2])
+    z_min = minimum_distance(center_2[3] - center_1[3], box_2[3])
+    return x_min * x_min + y_min * y_min + z_min * z_min
+end
+
+function box_error(multipole_center, multipole_box, local_center, local_box, am, al, expansion_order)
+    c_s = multipole_center
+    xs, ys, zs = multipole_box
+    c_t = local_center
+    xt, yt, zt = local_box
+    p = expansion_order
+
+    min_ρ = sqrt(minimum_distance_squared(c_t, c_s, multipole_box))
+    min_r = sqrt(minimum_distance_squared(c_s, c_t, local_box))
+
+    c̃ = min_ρ / al
+    m̃ = min_r / am
+
+    ε_l = 1/(al*(c̃-1.0)) * (1/c̃)^(p+1)
+    ε_m = 1/(am*(m̃-1.0)) * (1/m̃)^(p+1)
+
+    return ε_l + ε_m
+end
+
 #--- RUN TESTS ---#
 
 
@@ -137,6 +170,33 @@ function test_error(distance::Number, expansion_order = 130)
     ub = upper_bound_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
     old_ub = old_upper_bound_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
     me, le = porter_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
+
+    return abs((u_multipole - u_direct)/u_direct), abs((u_local - u_direct)/u_direct), ub, old_ub, me, le
+end
+
+function test_error_box(box_multipole, x_target, x_local, box_local, expansion_order, multipole_center = SVector{3}(0.0,0,0))
+    ρs = [1.0]
+    θs = [π/2]
+    ϕs = [0.0]
+    qs = [1.0]
+    multipole, system = generate_multipole(multipole_center, ρs, θs, ϕs, qs, expansion_order)
+
+    # define target
+    xt = SVector{3}(distance,0.0,0.0)
+
+    # define local expansion
+    local_center = SVector{3}(4.0,0,0)
+    local_branch = generate_local(local_center, multipole, expansion_order)
+
+    # potential
+    u_multipole = evaluate_multipole(xt, multipole, expansion_order)
+    u_local = evaluate_local(xt, local_branch, expansion_order)
+    u_direct = evaluate_direct(xt, system)
+
+    # upper bound (expected)
+    old_ub = old_upper_bound_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
+    me, le = porter_error(norm(multipole.center - local_center), norm(system.bodies[1].position-multipole.center), norm(xt-local_branch.center), expansion_order)
+    box = box_error(multipole.center, multipole_box, local_center, local_box, am, al, expansion_order)
 
     return abs((u_multipole - u_direct)/u_direct), abs((u_local - u_direct)/u_direct), ub, old_ub, me, le
 end

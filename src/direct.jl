@@ -82,22 +82,7 @@ function direct!(target_system, source_systems::Tuple; scalar_potential=true, ve
     end
 end
 
-#####
-##### private methods for dispatch
-#####
-function _direct!(target_system, target_index, derivatives_switch, source_system, source_index, ::Val{gpu}) where gpu
-    if gpu
-        direct_gpu!(target_system, target_index, derivatives_switch, source_system, source_index)
-    else
-        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
-    end
-end
-
-function _direct!(target_system, target_indices::AbstractVector{<:UnitRange}, derivatives_switch, source_system, source_indices::AbstractVector{<:UnitRange})
-    for (target_index, source_index) in zip(target_indices, source_indices)
-        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
-    end
-end
+#--- private methods for dispatch ---#
 
 function _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
     direct!(target_system, target_index, derivatives_switch, source_system, source_index)

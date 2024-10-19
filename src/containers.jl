@@ -133,6 +133,32 @@ struct ExpansionSwitch{SP,VP} end
 #####
 abstract type Branch{TF} end
 
+"""
+    MultiBranch{TF,N} <: Branch{TF}
+
+Branch object used to sort more than one system into an octree. Type parameters represent:
+
+* `TF`: the floating point type (would be a dual number if using algorithmic differentiation)
+* `N`: the number of systems represented
+
+**Fields**
+
+* `bodies_index::Vector{UnitRange}`: vector of unit ranges indicating the index of bodies in each represented system, respectively
+* `n_branches::Int`: number of child branches corresponding to this branch
+* `branch_index::UnitRange`: indices of this branch's child branches
+* `i_parent::Int`: index of this branch's parent
+* `i_leaf::Int`: if this branch is a leaf, what is its index in its parent `<:Tree`'s `leaf_index` field
+* `center::Vector{TF}`: center of this branch at which its multipole and local expansions are centered
+* `source_radius::TF`: if this branch is a leaf, distance from `center` to the outer edge of farthest body contained in this branch; otherwise, this is the distance from `center` to the corner of its `source_box`
+* `target_radius::TF`: distance from `center` to the farthest body center contained in this branch
+* `source_box::Vector{TF}`: vector of length 6 containing the distances from the center to faces of a rectangular prism completely enclosing all bodies with their finite radius in the negative x, positive x, negative y, positive y, negative z, and positive z directions, respectively
+* `target_box::Vector{TF}`: vector of length 3 containing the distances from the center to faces of a rectangular prism completely enclosing all body centers in the x, y, and z direction, respectively
+* multipole_expansion::Array{TF,3}`: array of size (2,2,) containing the multipole expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
+* local_expansion::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` containing the local expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
+* `harmonics::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` used as storage for regular harmonics, irregular harmonics, or whatever is needed, and is indexed as multipole and local expansions
+* `lock::ReentrantLock`: lock used to avoid data race conditions when modifying this branch or its corresponding bodies
+
+"""
 struct MultiBranch{TF,N} <: Branch{TF}
     bodies_index::SVector{N,UnitRange{Int64}}
     n_branches::Int64
@@ -140,8 +166,10 @@ struct MultiBranch{TF,N} <: Branch{TF}
     i_parent::Int64
     i_leaf::Int64
     center::SVector{3,TF}   # center of the branch
-    radius::TF              # side lengths of the cube encapsulating the branch
-    bounding_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
+    source_radius::TF
+    target_radius::TF
+    source_box::SVector{6,TF} # x, y, and z half widths of the box encapsulating all sources
+    target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,3}
@@ -150,6 +178,31 @@ end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
 
+"""
+    SingleBranch{TF} <: Branch{TF}
+
+Branch object used to sort a single system into an octree. Type parameters represent:
+
+* `TF`: the floating point type (would be a dual number if using algorithmic differentiation)
+
+**Fields**
+
+* `bodies_index::UnitRange`: unit range indicating the index of bodies in the represented system
+* `n_branches::Int`: number of child branches corresponding to this branch
+* `branch_index::UnitRange`: indices of this branch's child branches
+* `i_parent::Int`: index of this branch's parent
+* `i_leaf::Int`: if this branch is a leaf, what is its index in its parent `<:Tree`'s `leaf_index` field
+* `center::Vector{TF}`: center of this branch at which its multipole and local expansions are centered
+* `source_radius::TF`: if this branch is a leaf, distance from `center` to the outer edge of farthest body contained in this branch; otherwise, this is the distance from `center` to the corner of its `source_box`
+* `target_radius::TF`: distance from `center` to the farthest body center contained in this branch
+* `source_box::Vector{TF}`: vector of length 6 containing the distances from the center to faces of a rectangular prism completely enclosing all bodies with their finite radius in the negative x, positive x, negative y, positive y, negative z, and positive z directions, respectively
+* `target_box::Vector{TF}`: vector of length 3 containing the distances from the center to faces of a rectangular prism completely enclosing all body centers in the x, y, and z direction, respectively
+* multipole_expansion::Array{TF,3}`: array of size (2,2,) containing the multipole expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
+* local_expansion::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` containing the local expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
+* `harmonics::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` used as storage for regular harmonics, irregular harmonics, or whatever is needed, and is indexed as multipole and local expansions
+* `lock::ReentrantLock`: lock used to avoid data race conditions when modifying this branch or its corresponding bodies
+
+"""
 struct SingleBranch{TF} <: Branch{TF}
     bodies_index::UnitRange{Int64}
     n_branches::Int64
@@ -157,8 +210,10 @@ struct SingleBranch{TF} <: Branch{TF}
     i_parent::Int64
     i_leaf::Int64
     center::SVector{3,TF}   # center of the branch
-    radius::TF              # side lengths of the cube encapsulating the branch
-    bounding_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
+    source_radius::TF
+    target_radius::TF
+    source_box::SVector{6,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
+    target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
     harmonics::Array{TF,3}
