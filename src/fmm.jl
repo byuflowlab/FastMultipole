@@ -930,7 +930,6 @@ function fmm!(systems;
 )
     # create tree
     tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
-
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;
         scalar_potential, vector_potential, velocity, velocity_gradient,
@@ -940,7 +939,6 @@ function fmm!(systems;
         influence_matrices,
         unsort_bodies, concurrent_direct
     )
-
     # visualize
     save_tree && (visualize(save_name, systems, tree))
 
@@ -992,7 +990,6 @@ function fmm!(tree::Tree, systems;
     # create interaction lists
     m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, multipole_threshold, farfield, nearfield, self_induced)
     influence_matrices && ( direct_list = InteractionList(direct_list, systems, tree, systems, tree, derivatives_switches) )
-
     # run fmm
     fmm!(tree, systems, m2l_list, direct_list, derivatives_switches;
         reset_tree,
@@ -1161,7 +1158,6 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # check if systems are empty
     n_sources = get_n_bodies(source_systems)
     n_targets = get_n_bodies(target_systems)
-
     if n_sources > 0 && n_targets > 0
 
         # reset multipole/local expansions
@@ -1203,5 +1199,4 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
    # unsort bodies
     n_sources > 0 && unsort_source_bodies && unsort!(source_systems, source_tree)
     n_targets > 0 && unsort_target_bodies && unsort!(target_systems, target_tree)
-
 end

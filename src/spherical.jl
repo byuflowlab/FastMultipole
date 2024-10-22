@@ -166,6 +166,24 @@ function M2B!(target_potential, target, center, irregular_harmonics, multipole_e
     target_potential .+= d_potential
 end
 
+function M2B(target, center, irregular_harmonics, multipole_expansion, expansion_order)
+    dx = target[1:3] - center
+    r, theta, phi = cartesian_2_spherical(dx)
+    irregular_harmonic!(irregular_harmonics, r, theta, phi, expansion_order)
+    d_potential = zeros(4)
+    for l in 0:expansion_order
+        for m in 0:l
+            ip = l^2 + l + m + 1
+            i_compressed = 1 + (l * (l + 1)) >> 1 + m # only save half as Yl{-m} = conj(Ylm)
+            factor = m > 0 ? 2.0 : 1.0
+            for dim in 1:4
+                d_potential[dim] += factor*(multipole_expansion[1,dim,i_compressed] * irregular_harmonics[1,ip] - multipole_expansion[2,dim,i_compressed] * irregular_harmonics[2,ip])
+            end
+        end
+    end
+    return d_potential
+end
+
 function M2B!(target_potential, target, i_branch, tree::Tree{<:Any,P}) where P
     branch = tree.branches[i_branch]
     irregular_harmonics = Matrix{eltype(branch.multipole_expansion[1])}(undef, 2, (P+1)^2)
@@ -220,6 +238,62 @@ function M2M!(branch, child, harmonics, M, expansion_order::Val{P}) where P
     end
 end
 
+function get_radius(pos1, pos2)
+    return sqrt((pos1[1] - pos2[1])*(pos1[1] - pos2[1]) + (pos1[2] - pos2[2])*(pos1[2] - pos2[2]) + (pos1[3] - pos2[3])*(pos1[3] - pos2[3]))
+end
+
+function complex_mult(source_expansion, target_harmonic, n, m)
+    i = n * n + n + m + 1
+    i_compressed = 1 + (n * (n + 1)) >> 1 + m
+
+    real_harmonic = source_expansion[1, 1, i_compressed] * target_harmonic[1, i] - source_expansion[2, 1, i_compressed] * target_harmonic[2, i]
+    # @show real_harmonic
+    return abs(real_harmonic)
+end
+
+function get_error(target_branch, source_branch, expansion_order)
+    source_expansion = source_branch.multipole_expansion
+    irregular_harmonics = source_branch.harmonics
+
+    d = get_radius(target_branch.center, source_branch.center)
+    n = expansion_order
+    multipole_sum = 0.0
+    for m = 1:n
+        multipole_sum += complex_mult(source_expansion, irregular_harmonics, n, m)
+    end
+    multipole_sum *= 2
+    multipole_sum +=  complex_mult(source_expansion, irregular_harmonics, n, 0)
+
+    d = get_radius(source_branch.center, target_branch.center)
+    local_err = source_branch.multipole_expansion[1] / (d-source_branch.radius-target_branch.radius) * (target_branch.radius / (d-source_branch.radius))^(expansion_order + 1)
+    error = multipole_sum + local_err
+    return error
+end
+
+function get_lit_error(target_branch, source_branch, expansion_order)
+    d = get_radius(source_branch.center, target_branch.center)
+    multi_err = source_branch.multipole_expansion[1] / (d-source_branch.radius-source_branch.radius) * (source_branch.radius / (d-source_branch.radius))^(expansion_order + 1)
+    local_err = source_branch.multipole_expansion[1] / (d-source_branch.radius-source_branch.radius) * (source_branch.radius / (d-source_branch.radius))^(expansion_order + 1)
+    error = multi_err + local_err
+    return error
+end
+
+function get_old_error(target_branch, source_branch, expansion_order)
+    d = get_radius(source_branch.center, target_branch.center)
+    multi_err = source_branch.multipole_expansion[1] / (d-target_branch.radius-source_branch.radius) * (source_branch.radius / (d-target_branch.radius))^(expansion_order + 1)
+    local_err = source_branch.multipole_expansion[1] / (d-source_branch.radius-target_branch.radius) * (target_branch.radius / (d-source_branch.radius))^(expansion_order + 1)
+    error = multi_err + local_err
+    return error
+end
+
+function get_new_error(target_branch, source_branch, expansion_order)
+    d = get_radius(source_branch.center, target_branch.center)
+    multi_err = source_branch.multipole_expansion[1] / (d-target_branch.radius-source_branch.radius) * (source_branch.radius / (d-target_branch.radius))^(expansion_order + 1)
+    local_err = source_branch.multipole_expansion[1] / (d-source_branch.radius-target_branch.radius) * (target_branch.radius / (d-source_branch.radius))^(expansion_order + 1)
+    error = (2 / (2*expansion_order + 1))^(1/2) * multi_err + local_err
+    return error
+end
+
 function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order::Val{P}) where P
     for j in 0:P
         Cnm = odd_or_even(j)
@@ -260,6 +334,10 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
 end
 
 function M2L!(target_branch, source_branch, harmonics, L, expansion_order::Val{P}) where P
+    target_branch.error[] += get_lit_error(target_branch, source_branch, P)
+    target_branch.new_error[] += get_new_error(target_branch, source_branch, P)
+    target_branch.old_error[] += get_old_error(target_branch, source_branch, P)
+
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     irregular_harmonic!(harmonics, r, theta, phi, P<<1)
@@ -267,10 +345,15 @@ function M2L!(target_branch, source_branch, harmonics, L, expansion_order::Val{P
 end
 
 function M2L!(target_branch, source_branch, expansion_order::Val{P}) where P
+    target_branch.error[] += get_lit_error(target_branch, source_branch, P)
+    target_branch.new_error[] += get_new_error(target_branch, source_branch, P)
+    target_branch.old_error[] += get_old_error(target_branch, source_branch, P)
+
     dx, dy, dz = target_branch.center - source_branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-    irregular_harmonic!(target_branch.harmonics, r, theta, phi, P<<1)
-    M2L_loop!(target_branch.local_expansion, target_branch.ML, source_branch.multipole_expansion, target_branch.harmonics, expansion_order)
+    @elapsed irregular_harmonic!(target_branch.harmonics, r, theta, phi, P<<1)
+    time_2 = @elapsed M2L_loop!(target_branch.local_expansion, target_branch.ML, source_branch.multipole_expansion, target_branch.harmonics, expansion_order)
+    # @show time_1 / time_2
 end
 
 function B2L!(tree::Tree{<:Any,P}, i_branch, source_position, source_strength) where P
@@ -292,6 +375,7 @@ function B2L!(tree::Tree{<:Any,P}, i_branch, source_position, source_strength) w
 end
 
 function L2L!(branch, child, regular_harmonics, L, expansion_order::Val{P}) where P
+    child.error[] += branch.error[]
     dx, dy, dz = child.center - branch.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
     regular_harmonic!(regular_harmonics, r, theta, phi, P)
@@ -537,7 +621,6 @@ function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, de
     =#
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-
 	#--- the following is inspired by Salloum and Lakkis (2020) with some improvements ---#
 
     # initialization

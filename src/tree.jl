@@ -206,12 +206,18 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
     return Branch(bodies_index, n_branches, branch_index, i_parent, center, radius, expansion_order), n_children
 end
 
+function zero_array()
+    a = Array{Float64,0}(undef)
+    a[] = 0.0
+    return a
+end
+
 function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, center, radius, expansion_order)
-    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock(), zero_array(), zero_array(), zero_array(), zero_array(), radius, radius, radius)
 end
 
 function Branch(bodies_index, n_branches, branch_index, i_parent, center, radius, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock())
+    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, center, radius, initialize_expansion(expansion_order, typeof(radius)), initialize_expansion(expansion_order, typeof(radius)), initialize_harmonics(expansion_order, typeof(radius)), initialize_ML(expansion_order, typeof(radius)), ReentrantLock(), zero_array(), zero_array(), zero_array(), zero_array(), radius, radius, radius)
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -527,8 +533,8 @@ end
     return x_min, y_min, z_min, x_max, y_max, z_max
 end
 
-@inline get_radius(dx,dy,dz,scale_radius) = max(dx,dy,dz) * scale_radius # assume cubic cells
-# @inline get_radius(dx,dy,dz,scale_radius) = sqrt(dx*dx + dy*dy + dz*dz) * scale_radius # assume spherical cells
+# @inline get_radius(dx,dy,dz,scale_radius) = max(dx,dy,dz) * scale_radius # assume cubic cells
+@inline get_radius(dx,dy,dz,scale_radius) = sqrt(dx*dx + dy*dy + dz*dz) * scale_radius # assume spherical cells
 
 @inline function get_center_radius(x_min, y_min, z_min, x_max, y_max, z_max, scale_radius)
     center = SVector{3}((x_max+x_min)/2, (y_max+y_min)/2, (z_max+z_min)/2)
@@ -641,6 +647,7 @@ end
 end
 
 @inline function shrink_radius(radius, center, system, bodies_index)
+    x_max, y_max, z_max = 0.0, 0.0, 0.0
     for i_body in bodies_index
         x, y, z = system[i_body,POSITION]
         body_radius = system[i_body,RADIUS]
@@ -649,10 +656,13 @@ end
         #     system[i_body,POSITION] .+= 1e-6
         #     distance_2_body_center = get_distance(x, y, z, center)
         # end
+        x_max = max(abs(x - center[1]), x_max)
+        y_max = max(abs(y - center[2]), y_max)
+        z_max = max(abs(z - center[3]), z_max)
         radius = max(radius, distance_2_body_center + body_radius)
     end
 
-    return radius
+    return radius, x_max, y_max, z_max
 end
 
 @inline function away_from_center!(center, systems::Tuple, bodies_indices)
@@ -678,12 +688,12 @@ end
 
 @inline function shrink_radius(radius, center, systems::Tuple, bodies_indices)
     for (system, bodies_index) in zip(systems, bodies_indices)
-        radius = shrink_radius(radius, center, system, bodies_index)
+        radius, x_max, y_max, z_max = shrink_radius(radius, center, system, bodies_index)
     end
-    return radius
+    return radius, x_max, y_max, z_max
 end
 
-@inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius) where TB
+@inline function replace_branch!(branch::SubArray{TB,0,<:Any,<:Any,<:Any}, new_center, new_radius, x_max, y_max, z_max) where TB
     # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, ML, lock) = branch[]
     bodies_index = branch[].bodies_index
     n_branches = branch[].n_branches
@@ -696,7 +706,7 @@ end
     harmonics = branch[].harmonics
     ML = branch[].ML
     lock = branch[].lock
-    branch[] = TB(bodies_index, n_branches, branch_index, i_parent, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock)
+    branch[] = TB(bodies_index, n_branches, branch_index, i_parent, new_center, new_radius, multipole_expansion, local_expansion, harmonics, ML, lock, zero_array(), zero_array(), zero_array(), zero_array(), x_max, y_max, z_max)
 end
 
 function shrink_leaf!(branch, system)
@@ -710,10 +720,10 @@ function shrink_leaf!(branch, system)
 
     # shrink radius
     new_radius = zero(branch[].radius)
-    new_radius = shrink_radius(new_radius, new_center, system, bodies_index)
+    new_radius, x_max, y_max, z_max = shrink_radius(new_radius, new_center, system, bodies_index)
 
     # replace branch
-    replace_branch!(branch, new_center, new_radius)
+    replace_branch!(branch, new_center, new_radius, x_max, y_max, z_max)
 end
 
 @inline function max_xyz_nonzero_radius(x_min, y_min, z_min, x_max, y_max, z_max, branch::Branch, child_branches)
@@ -755,10 +765,10 @@ function shrink_branch!(branch, child_branches)
 
     # shrink radius
     new_radius = zero(branch[].radius)
-    new_radius = shrink_radius(new_radius, new_center, branch[], child_branches)
+    new_radius, x_max, y_max, z_max = shrink_radius(new_radius, new_center, branch[], child_branches)
 
     # replace branch
-    replace_branch!(branch, new_center, new_radius)
+    replace_branch!(branch, new_center, new_radius, x_max, y_max, z_max)
 end
 
 function shrink_recenter!(branches, levels_index, system)

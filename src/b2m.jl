@@ -39,6 +39,7 @@ end
         z = b_z - c_z
         y = b_y - c_y
         q = system[i_body,STRENGTH]
+        branch.charge[] += abs(q)
         r, theta, phi = cartesian_2_spherical(x,y,z)
         regular_harmonic!(harmonics, r, theta, -phi, P) # Ylm^* -> -dx[3]
         # update values

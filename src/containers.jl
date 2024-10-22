@@ -201,6 +201,13 @@ struct MultiBranch{TF,N} <: Branch{TF}
     harmonics::Array{TF,2}
     ML::Matrix{TF}
     lock::ReentrantLock
+    error::Array{TF,0}
+    new_error::Array{TF,0}
+    old_error::Array{TF,0}
+    charge::Array{TF,0}
+    x_rad::TF
+    y_rad::TF
+    z_rad::TF 
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
@@ -217,6 +224,13 @@ struct SingleBranch{TF} <: Branch{TF}
     harmonics::Array{TF,2}
     ML::Matrix{TF}
     lock::ReentrantLock
+    error::Array{TF,0}
+    new_error::Array{TF,0}
+    old_error::Array{TF,0}
+    charge::Array{TF,0}
+    x_rad::TF
+    y_rad::TF
+    z_rad::TF
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF

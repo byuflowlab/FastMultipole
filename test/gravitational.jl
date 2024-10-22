@@ -24,10 +24,10 @@ struct Gravitational{TF}
     potential::Matrix{TF}
 end
 
-function Gravitational(bodies::Matrix)
+function Gravitational(bodies::Matrix{TF}) where TF
     nbodies = size(bodies)[2]
     bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],bodies[5,i]) for i in 1:nbodies]
-    potential = zeros(52,nbodies)
+    potential = zeros(TF, 52,nbodies)
     return Gravitational(bodies2,potential)
 end
 
