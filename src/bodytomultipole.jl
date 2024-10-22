@@ -291,6 +291,10 @@ function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength,
             multipole_coefficients[1,1,i] += multiplier * _1_m * ((-vx * q_n_mm1_real + vy * q_n_mm1_imag) * nmmp1_2 + (vx * q_n_mp1_real + vy * q_n_mp1_imag) * npmp1_2 - vz * m * q_n_m_imag) * _1_np1
             multipole_coefficients[2,1,i] += multiplier * _1_m * ((vx * q_n_mm1_imag + vy * q_n_mm1_real) * nmmp1_2 + (-vx * q_n_mp1_imag + vy * q_n_mp1_real) * npmp1_2 - vz * m * q_n_m_real) * _1_np1
 
+            if n == 0 && m == 0 && (abs(multiplier * _1_m * ((-vx * q_n_mm1_real + vy * q_n_mm1_imag) * nmmp1_2 + (vx * q_n_mp1_real + vy * q_n_mp1_imag) * npmp1_2 - vz * m * q_n_m_imag) * _1_np1) > 0.0 || (multiplier * _1_m * ((vx * q_n_mm1_imag + vy * q_n_mm1_real) * nmmp1_2 + (-vx * q_n_mp1_imag + vy * q_n_mp1_real) * npmp1_2 - vz * m * q_n_m_real) * _1_np1) > 0.0)
+                throw("vortex element not zero for n=m=0")
+            end
+
             # recurse
             i += 1
             _1_m = -_1_m

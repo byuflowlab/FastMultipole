@@ -763,6 +763,7 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 
 """
 function fmm!(target_systems, source_systems;
+    error_method::ErrorMethod=UnequalBoxes(), overall_error::Val{OE}=Val(false), dynamic_expansion_order::Val{DEO}=Val(false),
     expansion_order=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
@@ -772,16 +773,17 @@ function fmm!(target_systems, source_systems;
     source_shrink::Bool=true, source_recenter::Bool=true, target_shrink::Bool=true, target_recenter::Bool=true,
     save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree",
     nearfield_user::Bool=false, relative_error=nothing
-)
+) where {OE,DEO}
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink=source_shrink, recenter=source_recenter)
-    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink=target_shrink, recenter=target_recenter)
+    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink=source_shrink, recenter=source_recenter, source_box= typeof(error_method) <: UnequalBoxes ? true : false)
+    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink=target_shrink, recenter=target_recenter, source_box= typeof(error_method) <: UnequalBoxes ? true : false)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
+        error_method, overall_error, dynamic_expansion_order,
         lamb_helmholtz,
         scalar_potential, velocity, velocity_gradient,
         multipole_threshold,
@@ -832,6 +834,7 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 
 """
 function fmm!(systems;
+    error_method::ErrorMethod=UnequalBoxes(), overall_error::Val{OE}=Val(false), dynamic_expansion_order::Val{DEO}=Val(false),
     expansion_order=5, leaf_size=50, multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
@@ -839,12 +842,14 @@ function fmm!(systems;
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, shrink::Bool=true, recenter::Bool=true,
     save_tree::Bool=false, save_name="tree", nearfield_user::Bool=false, relative_error=nothing
-)
+) where {OE,DEO}
+
     # create tree
-    tree = Tree(systems; expansion_order, leaf_size, shrink, recenter)
+    tree = Tree(systems; expansion_order, leaf_size, shrink, recenter, source_box= typeof(error_method) <: UnequalBoxes ? true : false)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;
+        error_method, overall_error, dynamic_expansion_order,
         lamb_helmholtz,
         scalar_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
@@ -889,13 +894,14 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 """
 function fmm!(tree::Tree, systems;
+    error_method::ErrorMethod=UnequalBoxes(), overall_error::Val{OE}=Val(false), dynamic_expansion_order::Val{DEO}=Val(false),
     multipole_threshold=0.4, reset_tree::Bool=true,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, nearfield_user::Bool=false, relative_error=nothing
-)
+) where {OE,DEO}
 
     # assemble derivatives switch
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, systems)
@@ -905,6 +911,7 @@ function fmm!(tree::Tree, systems;
 
     # run fmm
     fmm!(tree, systems, m2l_list, direct_list, derivatives_switches;
+        error_method, overall_error, dynamic_expansion_order,
         lamb_helmholtz,
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
@@ -953,6 +960,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
+    error_method::ErrorMethod=UnequalBoxes(), overall_error::Val{OE}=Val(false), dynamic_expansion_order::Val{DEO}=Val(false),
     multipole_threshold=0.4,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     lamb_helmholtz::Bool=false,
@@ -961,7 +969,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
     nearfield_user::Bool=false, relative_error=nothing
-)
+) where {OE,DEO}
 
     # assemble derivatives switch
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
@@ -971,6 +979,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
     # run fmm
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches;
+        error_method, overall_error, dynamic_expansion_order,
         lamb_helmholtz,
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
@@ -1006,13 +1015,15 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 """
 function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches;
+    error_method::ErrorMethod=UnequalBoxes(), overall_error::Val{OE}=Val(false), dynamic_expansion_order::Val{DEO}=Val(false),
     lamb_helmholtz::Bool=false,
     reset_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     unsort_bodies::Bool=true, nearfield_user::Bool=false, relative_error=nothing
-)
+) where {OE,DEO}
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches;
+        error_method, overall_error, dynamic_expansion_order,
         lamb_helmholtz,
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
@@ -1067,12 +1078,13 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_list, derivatives_switches;
+    error_method::ErrorMethod=UnequalBoxes(), overall_error::Val{OE}=Val(false), dynamic_expansion_order::Val{DEO}=Val(false),
     lamb_helmholtz::Bool=false,
     reset_source_tree::Bool=true, reset_target_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
     nearfield_user::Bool=false, relative_error=nothing
-)
+) where {OE,DEO}
 
     # repack in Val
     lamb_helmholtz = Val(lamb_helmholtz)

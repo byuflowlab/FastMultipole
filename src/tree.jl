@@ -7,7 +7,7 @@ WARNING_FLAG_LEAF_SIZE[] = true
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink=false, recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false)
+function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink=false, recenter=false, source_box=true, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false)
     # ensure `system` isn't empty; otherwise return an empty tree
     if get_n_bodies(system) > 0
         # initialize variables
@@ -16,14 +16,14 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink=f
         bodies_index = get_bodies_index(system)
         center, radius, target_box = center_radius_box(system)
         bx, by, bz = target_box
-        source_box = SVector{6}(bx, bx, by, by, bz, bz)
+        bounding_box = SVector{6}(bx, bx, by, by, bz, bz)
         i_first_branch = 2
         buffer = get_buffer(system)
         sort_index = get_sort_index(system)
         sort_index_buffer = get_sort_index_buffer(system)
 
         # grow root branch
-        root_branch, n_children, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, radius, source_box, target_box, 0, 1, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+        root_branch, n_children, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, radius, bounding_box, target_box, 0, 1, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
         branches = [root_branch] # this first branch will already have its child branches encoded
         # estimated_n_branches = estimate_n_branches(system, leaf_size, allocation_safety_factor)
         # sizehint!(branches, estimated_n_branches)
@@ -51,18 +51,13 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink=f
             end
         end
 
-        # # check depth
-        # if n_children > 0
-        #     error("leaf_size not reached; n_children = $n_children")
-        # end
-
         # invert index
         invert_index!(sort_index_buffer, sort_index)
         inverse_sort_index = sort_index_buffer # reuse the buffer as the inverse index
 
         # shrink and recenter branches to account for bodies of nonzero radius
         if shrink
-            shrink_recenter!(branches, levels_index, system, recenter)
+            shrink_recenter!(branches, levels_index, system, recenter, source_box)
         end
 
         # store leaves
@@ -656,15 +651,16 @@ end
     i_parent = branch.i_parent
     i_leaf = branch.i_leaf
     charge = branch.charge
+    dipole = branch.dipole
     error = branch.error
     multipole_expansion = branch.multipole_expansion
     local_expansion = branch.local_expansion
     harmonics = branch.harmonics
     lock = branch.lock
-    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box, charge, error, multipole_expansion, local_expansion, harmonics, lock)
+    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
-@inline function replace_branch!(branches::Vector{TB}, i_branch, new_charge) where TB
+@inline function replace_branch!(branches::Vector{TB}, i_branch, new_charge, new_dipole) where TB
     # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, lock) = branch[]
     branch = branches[i_branch]
     bodies_index = branch.bodies_index
@@ -682,7 +678,7 @@ end
     local_expansion = branch.local_expansion
     harmonics = branch.harmonics
     lock = branch.lock
-    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, new_charge, error, multipole_expansion, local_expansion, harmonics, lock)
+    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, new_charge, new_dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 function shrink_leaf!(branches, i_branch, system, recenter)
@@ -745,8 +741,9 @@ end
     return center, bounding_box
 end
 
-@inline function shrink_radius(radius, center, branch::Branch, branches, branch_index)
-    for i_branch in branch_index
+@inline function shrink_radius(center, branch::Branch{TF}, branches) where TF
+    radius = zero(TF)
+    for i_branch in branch.branch_index
         child_branch = branches[i_branch]
         x, y, z = child_branch.center
         body_radius = child_branch.radius
@@ -797,7 +794,7 @@ Computes the smallest bounding box to completely bound all child boxes.
 
 Shrunk radii are merely the distance from the center to the corner of the box.
 """
-function shrink_branch!(branches, i_branch, child_index, recenter)
+function shrink_branch!(branches, i_branch, child_index, recenter, source_box)
 
     # recenter about targets
     branch = branches[i_branch]
@@ -814,16 +811,24 @@ function shrink_branch!(branches, i_branch, child_index, recenter)
     # shrink source box
     new_source_box = center_box_source_branch(branch, branches, child_index)
     bx_max, bx_min, by_max, by_min, bz_max, bz_min = new_source_box
-    bx = max(bx_max, bx_min)
-    by = max(by_max, by_min)
-    bz = max(bz_max, bz_min)
-    new_source_radius = sqrt(bx*bx + by*by + bz*bz)
+    for i in 1:6
+        @assert new_source_box[i] >= 0.0
+    end
+
+    if source_box
+        bx = max(bx_max, bx_min)
+        by = max(by_max, by_min)
+        bz = max(bz_max, bz_min)
+        new_source_radius = sqrt(bx*bx + by*by + bz*bz)
+    else
+        new_source_radius = shrink_radius(new_center, branch, branches)
+    end
 
     # replace branch
     replace_branch!(branches, i_branch, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box)
 end
 
-function shrink_recenter!(branches, levels_index, system, recenter)
+function shrink_recenter!(branches, levels_index, system, recenter, source_box)
     for i_level in length(levels_index):-1:1 # start at the bottom level
         level_index = levels_index[i_level]
         for i_branch in level_index
@@ -831,7 +836,7 @@ function shrink_recenter!(branches, levels_index, system, recenter)
             if branch.n_branches == 0 # leaf
                 shrink_leaf!(branches, i_branch, system, recenter)
             else
-                shrink_branch!(branches, i_branch, branch.branch_index, recenter)
+                shrink_branch!(branches, i_branch, branch.branch_index, recenter, source_box)
             end
         end
     end

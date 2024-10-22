@@ -49,9 +49,8 @@ abstract type Filament{TK} <: AbstractElement{TK} end
 
 abstract type Panel{NS,TK} <: AbstractElement{TK} end
 
-#####
-##### dispatch convenience functions to determine which derivatives are desired
-#####
+#------- dispatch convenience functions to determine which derivatives are desired -------#
+
 """
     DerivativesSwitch
 
@@ -128,9 +127,18 @@ struct ExpansionSwitch{SP,VP} end
 # CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) =
 #     MultiCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
 
-#####
-##### octree creation
-#####
+#------- error predictors -------#
+
+abstract type ErrorMethod end
+
+struct EqualSpheres <: ErrorMethod end
+
+struct UnequalSpheres <: ErrorMethod end
+
+struct UnequalBoxes <: ErrorMethod end
+
+#------- octree creation -------#
+
 abstract type Branch{TF} end
 
 """
@@ -171,6 +179,7 @@ struct MultiBranch{TF,N} <: Branch{TF}
     source_box::SVector{6,TF} # x, y, and z half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     charge::TF
+    dipole::TF
     error::Array{TF,0}
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
@@ -178,10 +187,10 @@ struct MultiBranch{TF,N} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF)) where TF
+function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, error, multipole_expansion, local_expansion, harmonics, lock)
+    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
@@ -223,6 +232,7 @@ struct SingleBranch{TF} <: Branch{TF}
     source_box::SVector{6,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     charge::TF
+    dipole::TF
     error::Array{TF,0}
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
@@ -230,10 +240,10 @@ struct SingleBranch{TF} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF)) where TF
+function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, error, multipole_expansion, local_expansion, harmonics, lock)
+    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
