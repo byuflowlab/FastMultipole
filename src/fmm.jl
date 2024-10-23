@@ -588,14 +588,16 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
         summed_radii_squared = target_branch.target_radius + source_branch.source_radius
         summed_radii_squared *= summed_radii_squared
 
+        #=
         local_radius = target_branch.target_radius
         source_radius = source_branch.source_radius
-        min_ρ2 = minimum_distance_squared(target_branch.center, source_branch.center, source_branch.source_box)
+        min_ρ2 = minimum_distance_squared(target_branch.center, source_branch.center)
         min_r2 = minimum_distance_squared(source_branch.center, target_branch.center, target_branch.target_box)
         mac_multipole = source_radius / sqrt(min_r2)
         mac_local = local_radius / sqrt(min_ρ2)
         #@show mac_multipole mac_local sqrt(summed_radii_squared / center_spacing_squared) multipole_threshold
-    if multipole_acceptance==1 # inherited from ExaFMM
+        =#
+    if true #multipole_acceptance==1 # inherited from ExaFMM
         mac = center_spacing_squared * multipole_threshold * multipole_threshold >= summed_radii_squared # meet M2L criteria
     elseif multipole_acceptance == 2 # novel approach
         mac = max(mac_multipole, mac_local) <= multipole_threshold
@@ -770,7 +772,7 @@ function fmm!(target_systems, source_systems;
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_source_bodies=true, unsort_target_bodies=true,
-    source_shrink::Bool=true, source_recenter::Bool=true, target_shrink::Bool=true, target_recenter::Bool=true,
+    source_shrink_recenter::Bool=true, target_shrink_recenter::Bool=true,
     save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree",
     nearfield_user::Bool=false, relative_error=nothing
 ) where {OE,DEO}
@@ -778,8 +780,8 @@ function fmm!(target_systems, source_systems;
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink=source_shrink, recenter=source_recenter, source_box= typeof(error_method) <: UnequalBoxes ? true : false)
-    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink=target_shrink, recenter=target_recenter, source_box= typeof(error_method) <: UnequalBoxes ? true : false)
+    source_tree = Tree(source_systems; expansion_order, leaf_size=leaf_size_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order, leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
@@ -840,12 +842,12 @@ function fmm!(systems;
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_bodies::Bool=true, shrink::Bool=true, recenter::Bool=true,
+    unsort_bodies::Bool=true, shrink_recenter::Bool=true,
     save_tree::Bool=false, save_name="tree", nearfield_user::Bool=false, relative_error=nothing
 ) where {OE,DEO}
 
     # create tree
-    tree = Tree(systems; expansion_order, leaf_size, shrink, recenter, source_box= typeof(error_method) <: UnequalBoxes ? true : false)
+    tree = Tree(systems; expansion_order, leaf_size, shrink_recenter)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;

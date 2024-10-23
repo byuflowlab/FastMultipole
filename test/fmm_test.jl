@@ -328,7 +328,7 @@ vortex_particles.velocity_stretching .*= 0
 
 # run fmm
 multipole_threshold = 0.7
-tree, m2l_list, direct_list, derivatives_switches = fmm!((vortex_particles,); expansion_order, leaf_size, multipole_threshold, shrink=true, recenter=true, lamb_helmholtz=true)
+tree, m2l_list, direct_list, derivatives_switches = fmm!((vortex_particles,); expansion_order, leaf_size, multipole_threshold, shrink_recenter=true, lamb_helmholtz=true)
 update_velocity_stretching!(vortex_particles)
 
 # test velocity
@@ -407,7 +407,7 @@ vortex_particles.velocity_stretching .*= 0
 expansion_order = 30
 leaf_size = 1
 
-tree = FastMultipole.Tree((vortex_particles,); expansion_order, leaf_size, shrink=false, recenter=false)
+tree = FastMultipole.Tree((vortex_particles,); expansion_order, leaf_size, shrink_recenter=false)
 
 m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.8, lamb_helmholtz=true)
 
