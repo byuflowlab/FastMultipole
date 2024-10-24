@@ -136,10 +136,10 @@ function choose_p(epsilon::Number, dx=0.0, pmax=51)
     multipole, system = generate_multipole(multipole_center, ρs, θs, ϕs, qs, pmax)
 
     # define target
-    xt = SVector{3}(3.0+dx,0.0,0.0)
+    xt = SVector{3}(2.0+dx,0.0,0.0)
 
     # define local expansion
-    local_center = SVector{3}(4.0,0,0)
+    local_center = SVector{3}(3.0,0,0)
     local_branch = generate_local(local_center, multipole, pmax)
 
     # determine expansion order
