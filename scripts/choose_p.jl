@@ -30,7 +30,7 @@ function generate_multipole(center, ρs, θs, ϕs, qs, expansion_order)
     system = build_system(center, ρs, θs, ϕs, qs)
 
     # build branch
-    branch = Branch(1:1, 0, 1:0, 0, 1, center, 0.0, expansion_order)
+    branch = Branch(1:1, 0, 1:0, 0, 1, center, 0.0, 0.0, SVector{6}(0.0,0,0,0,0,0), SVector{3}(0.0,0,0), expansion_order)
 
     # multipole coefficients
     body_to_multipole!(branch, system, branch.harmonics, Val(expansion_order))
@@ -54,7 +54,7 @@ function evaluate_direct(xt, system::Gravitational)
 end
 
 function generate_local(center, multipole_branch::Branch, expansion_order)
-    local_branch = Branch(1:1, 0, 1:0, 0, 1, center, 0.0, expansion_order)
+    local_branch = Branch(1:1, 0, 1:0, 0, 1, center, 0.0, 0.0, SVector{6}(0.0,0,0,0,0,0), SVector{3}(0.0,0,0), expansion_order)
 
     # preallocate containers
     lamb_helmholtz = Val(false)
@@ -72,7 +72,7 @@ function generate_local(center, multipole_branch::Branch, expansion_order)
     FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
     # local coefficients
-    FastMultipole.multipole_to_local!(local_branch, multipole_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+    FastMultipole.multipole_to_local!(local_branch, multipole_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
     return local_branch
 end

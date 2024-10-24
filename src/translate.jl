@@ -255,7 +255,7 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order::Val, lamb_helmholtz::Val{LH}, relative_error) where LH
+function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
     # extract containers
     source_weights = source_branch.multipole_expansion
 
@@ -264,32 +264,32 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     # choose expansion order
-    dynamic_expansion_order = get_dynamic_expansion_order(r, source_branch.source_radius, target_branch.target_radius, relative_error, expansion_order)
+    # dynamic_expansion_order = get_dynamic_expansion_order(r, source_branch.source_radius, target_branch.target_radius, relative_error, expansion_order)
 
     #--- rotate coordinate system ---#
 
     # rotate about z axis
-    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, dynamic_expansion_order, lamb_helmholtz)
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
 
     # rotate about y axis
     # NOTE: the method used here results in an additional rotatation of π about the new z axis
-    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, dynamic_expansion_order, lamb_helmholtz)
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
 
     #--- translate along new z axis ---#
 
-    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, dynamic_expansion_order, lamb_helmholtz)
+    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order, lamb_helmholtz)
 
     #--- transform Lamb-Helmholtz decomposition for the new center ---#
 
-    LH && transform_lamb_helmholtz_local!(weights_tmp_1, r, dynamic_expansion_order)
+    LH && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order)
 
     #--- back rotate coordinate system ---#
 
     # back rotate about y axis
-    back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, dynamic_expansion_order, lamb_helmholtz)
+    back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order, lamb_helmholtz)
 
     # back rotate about z axis and accumulate on target branch
-    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, dynamic_expansion_order, lamb_helmholtz)
+    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
 end
 
