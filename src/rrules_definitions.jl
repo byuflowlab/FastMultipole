@@ -1,11 +1,16 @@
 # Defines rrules for ChainRules and registers them with ReverseDiff.
 tracked_type = Union{ReverseDiff.TrackedReal,ReverseDiff.TrackedArray} # tracked type used for registering ChainRulesCore rrules with ReverseDiff.
 
+ϵ(i::TI,j::TI,k::TI) where TI <: Int = (i == j || j == k || k == i) ? 0 : ((i + j) % 3 == 1 ? 1 : -1)
+
 """
 function regular_harmonic!(harmonics, rho, theta, phi, P)
 """
 
+# maybe a typo somewhere here?
 function ChainRulesCore.rrule(::typeof(regular_harmonic!), harmonics, rho, theta, phi, P)
+    #println("running regular harmonic in pullback:")
+    #@time regular_harmonic!(harmonics,rho,theta,phi,P)
     regular_harmonic!(harmonics,rho,theta,phi,P)
     function harmonics_pullback(h̄)
 
@@ -78,107 +83,9 @@ function ChainRulesCore.rrule(::typeof(regular_harmonic!), harmonics, rho, theta
     return harmonics, harmonics_pullback
 
 end
-ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::AbstractArray{<:ReverseDiff.TrackedReal}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
-#=
-# all correct except for an incredibly painful third derivative with respect to θ. also accounts for ~15% of tape entries, so it will need to be done eventually.
-# update: I think this works? It produces the right answer in practice but fails tests.
+#ReverseDiff.@grad_from_chainrules regular_harmonic!(harmonics::AbstractArray{<:ReverseDiff.TrackedReal}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
 
-function ChainRulesCore.rrule(::typeof(regular_harmonic_derivs!),harmonics,rho,theta,phi,P)
-    #@show typeof(harmonics)
-    #harmonics = regular_harmonic_derivs!(harmonics,rho,theta,phi,P)
-    #regular_harmonic_derivs!(harmonics,rho,theta,phi,P)
-    
-    function h_pullback(h̄)
-
-        # h̄[1,:] -> harmonics
-        # h̄[2,:] -> dhdθ
-        # h̄[3,:] -> d2hdθ2
-        h̄armonics = zeros(eltype(harmonics), size(harmonics)) # completely overwritten -> just set to zeros.
-        h̄armonics .= h̄ # for testing purposes
-        r̄ho = zero(eltype(rho))
-        t̄heta = zero(eltype(theta))
-        p̄hi = zero(eltype(phi))
-        
-        y,x = sincos(theta)
-        x2 = x^2
-        x3 = x^3
-        xdy = cot(theta)
-        #xdy2 = xdy^2
-        invY = y == 0 ? 0 : 1 / y
-        #invY2 = invY^2
-        #invY3 = invY^3
-        #y2 = y^2
-        pl = 1.0
-        a = 0.0
-        #rhom = 1.0
-        #ei = exp(im * phi)
-        #eim = 1.0
-        for m=0:P
-            p = pl
-            lpl = (m * (m + 1)) >> 1 + m + 1
-            #h̄armonics[1:3,lpl] .= zero(eltype(h̄armonics))
-            h̄armonics[1:2,1:3,lpl] .= zero(eltype(h̄armonics)) # explicitly setting this to zero avoids uninitialized memory showing up.# also this line should be redundant since I already initialize the harmonic cotangents to zero.
-            # derivatives of harmonics with respect to rho and phi do not depend on the first index
-            for σ=1:3
-                #r̄ho += real(h̄[σ,lpl]*conj(m/rho*harmonics[σ,lpl]))
-                #p̄hi += real(h̄[σ,lpl]*conj(im*m*harmonics[σ,lpl]))
-                r̄ho += m/rho*(h̄[1,σ,lpl]*harmonics[1,σ,lpl] + h̄[2,σ,lpl]*harmonics[2,σ,lpl])
-                p̄hi += m*(-h̄[1,σ,lpl]*harmonics[2,σ,lpl] + h̄[2,σ,lpl]*harmonics[1,σ,lpl])#real(h̄[σ,lpl]*conj(im*harmonics[σ,lpl]))
-            end
-            p1 = p
-            p = x * (2 * m + 1) * p1
-            #t̄heta += real(h̄[1,lpl]*conj(m*xdy*harmonics[1,lpl]))
-            #t̄heta += (-m*invY^2 + m^2*xdy^2)*real(h̄[2,lpl]*conj(harmonics[1,lpl]))
-            #t̄heta += (-m^2*xdy + m*(m-1)*(-2*xdy*invY^2 + m*xdy^3))*real(h̄[3,lpl]*conj(harmonics[1,lpl]))
-            t̄heta += m*xdy*(h̄[1,1,lpl]*harmonics[1,1,lpl] + h̄[2,1,lpl]*harmonics[2,1,lpl])
-            t̄heta += (-m*invY^2 + m^2*xdy^2)*(h̄[1,2,lpl]*harmonics[1,1,lpl] + h̄[2,2,lpl]*harmonics[2,1,lpl])
-            t̄heta += (-m^2*xdy + m*(m-1)*(-2*xdy*invY^2 + m*xdy^3))*(h̄[1,3,lpl]*harmonics[1,1,lpl] + h̄[2,3,lpl]*harmonics[2,1,lpl])
-            # lpl = m * m + 2 * m + 1
-            # lml = m * m + 1
-
-            for l=m+1:P
-                lpm = (l * (l + 1)) >> 1 + m + 1
-                h̄armonics[1:2,1:3,lpm] .= zero(eltype(h̄armonics))
-                # lpm = l * l + l + m + 1
-                # lmm = l * l + l - m + 1
-                for σ=1:3
-                    #r̄ho += real(h̄[σ,lpm]*conj(l/rho*harmonics[σ,lpm]))
-                    #p̄hi += real(h̄[σ,lpm]*conj(im*m*harmonics[σ,lpm]))
-                    r̄ho += l/rho*(h̄[1,σ,lpm]*harmonics[1,σ,lpm] + h̄[2,σ,lpm]*harmonics[2,σ,lpm])
-                    p̄hi += m*(-h̄[1,σ,lpm]*harmonics[2,σ,lpm] + h̄[2,σ,lpm]*harmonics[1,σ,lpm])
-                end
-                #harmonics[1,lpm] = rhol * p * eim
-                # harmonics[lmm] = conj(harmonics[lpm])
-                #t̄heta += real(h̄[1,lpm]*conj(harmonics[1,lpm]))*(l*xdy*p - (l+m)*invY*p1)/p
-                t̄heta += (h̄[1,1,lpm]*harmonics[1,1,lpm] + h̄[2,1,lpm]*harmonics[2,1,lpm])*(l*xdy*p - (l+m)*invY*p1)/p
-                p2 = p1
-                p1 = p
-                p = (x * (2 * l + 1) * p1 - (l + m) * p2) / (l - m + 1)
-                #harmonics[2,lpm] = rhol * ((l - m + 1) * p - (l + 1) * x * p1) * invY * eim
-                #harmonics[3,lpm] = rhol * ((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2 * eim
-                #t̄heta += real(h̄[2,lpm]*conj(harmonics[2,lpm]))*(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)/(((l - m + 1) * p - (l + 1) * x * p1) * invY) # not the most elegant solution but it works.
-                t̄heta += (h̄[1,2,lpm]*harmonics[1,2,lpm] + h̄[2,2,lpm]*harmonics[2,2,lpm])*(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)/(((l - m + 1) * p - (l + 1) * x * p1) * invY)
-                a = ((8*x + 9*l*x - 5*m^2*x - l^3*x + l*m^2*x - l*x3 + l^3*x3)*p + (3*l + 4*l^2 + 3*l*m - m^2 - 8*x2 + l^3 + l^2*m - l*m^2 - 11*l*x2 - m^3 - 8*m*x2 - 4*l^2*x2 - 3*l*m*x2 - l^3*x2 - l^2*m*x2)*p1)*(invY/(2*x2+1))
-                t̄heta += (h̄[1,3,lpm]*harmonics[1,3,lpm] + h̄[2,3,lpm]*harmonics[2,3,lpm])*a/(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)
-
-                #t̄heta += real(h̄[3,lpm]*conj(harmonics[3,lpm]))*a/(((m-l-1) * x * p + (m^2 - l*(l+1) + (l+1)^2 * x^2) * p1) * invY^2)
-            end
-            pl = -pl * (2m+1) * y
-    
-        end
-
-        return NoTangent(),h̄armonics,r̄ho,t̄heta,p̄hi,NoTangent()
-
-    end
-    #@show sum(harmonics)
-    return regular_harmonic_derivs!(harmonics,rho,theta,phi,P), h_pullback
-    #return harmonics, h_pullback
-    #return nothing, h_pullback
-
-end
-ReverseDiff.@grad_from_chainrules regular_harmonic_derivs!(harmonics::AbstractArray{<:ReverseDiff.TrackedReal}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
-#@grad_from_chainrules_extended (1,) regular_harmonic_derivs!(harmonics::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
-=#
+# nans show up here
 function ChainRulesCore.rrule(::typeof(irregular_harmonic!),harmonics, rho, theta, phi, P)
     function h_pullback(h̄)
         h̄armonics = zeros(eltype(harmonics),size(harmonics))
@@ -259,8 +166,9 @@ function ChainRulesCore.rrule(::typeof(irregular_harmonic!),harmonics, rho, thet
     return irregular_harmonic!(harmonics, rho, theta, phi, P), h_pullback
 
 end
-ReverseDiff.@grad_from_chainrules irregular_harmonic!(harmonics::AbstractArray{<:ReverseDiff.TrackedReal}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
+#ReverseDiff.@grad_from_chainrules irregular_harmonic!(harmonics::AbstractArray{<:ReverseDiff.TrackedReal}, rho::tracked_type, theta::tracked_type, phi::tracked_type, P)
 
+#=
 function get_drjdxi(rho,theta,phi)
     s_theta,c_theta = sincos(theta)
     s_phi,c_phi = sincos(phi)
@@ -294,564 +202,9 @@ function get_drkdxidxj(rho,theta,phi,k_coord)
     end
 
 end
-
-function get_RR(rho,theta,phi)
-
-    s_theta,c_theta = sincos(theta)
-    s_phi,c_phi = sincos(phi)
-    return cat(get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,1),
-               get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,2),
-               get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,3),
-               dims=3)
-
-end
-#=
-# finally passes tests.
-function ChainRulesCore.rrule(::typeof(s2c_hess!),potential_jacobian, potential_hessian, workspace, rho, theta, phi)
-    s_theta, c_theta = sincos(theta)
-    s_phi, c_phi = sincos(phi)
-
-    R = get_drjdxi(rho,s_theta,s_phi,c_theta,c_phi)
-    # we only need to evaluate these functions once instead of 4 times
-    RR = get_RR(rho,theta,phi)
-    #Rr = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,1)
-    #Rt = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,2)
-    #Rp = get_drkdxidxj(rho,s_theta,s_phi,c_theta,c_phi,3)
-    #hessian_out = copy(potential_hessian)
-    hessian_out = zeros(eltype(potential_hessian), size(potential_hessian))
-
-    # convert Hessian to cartesian coordinates
-    workspace3x3 = view(workspace,:,1:3)
-    for ind in 1:4
-        workspace3x3 .= potential_hessian[:,:,ind]
-        hessian_out[:,:,ind] .= R * workspace3x3 * transpose(R)
-        for ν in 1:3
-            hessian_out[:,:,ind] .+= RR[:,:,ν] * potential_jacobian[ν,ind]
-        end
-    end
-    #temp = 0.0
-    function H_pullback(H̄2)
-        
-        #R = get_drjdxi(rho,theta,phi)
-        # partial derivatives of drjdxi ≡ R:
-        dRdxν = cat(ForwardDiff.derivative((_rho)->get_drjdxi(_rho,theta,phi),rho),
-                    ForwardDiff.derivative((_theta)->get_drjdxi(rho,_theta,phi),theta),
-                    ForwardDiff.derivative((_phi)->get_drjdxi(rho,theta,_phi),phi),
-                    dims = 3)
-        
-        # partial derivatives of drkdxidxj
-        dRRσdxν = cat(ForwardDiff.derivative((_rho)->get_RR(_rho,theta,phi),rho),
-                     ForwardDiff.derivative((_theta)->get_RR(rho,_theta,phi),theta),
-                     ForwardDiff.derivative((_phi)->get_RR(rho,theta,_phi),phi),
-                     dims=4)
-        x̄ = zeros(eltype(rho),3) # rho, theta, and phi cotangents
-        H̄ = zeros(eltype(potential_hessian),size(potential_hessian))
-        J̄ = zeros(eltype(potential_jacobian),size(potential_jacobian))
-        for μ = 1:4 # μ ≡ ind
-            for i=1:3
-                for j = 1:3
-                    for k=1:3
-                        for l=1:3
-                            #H̄[j,l,μ] += H̄2[i,k,μ]*R[i,j]*R[k,l]
-                            #H̄[j,k,μ] += R[j,i]*H̄2[i,l,μ]*R[k,l]
-                            H̄[j,k,μ] += R[i,j]*H̄2[i,l,μ]*R[l,k]
-                        end
-                    end
-                end
-            end
-        end
-        for μ = 1:4
-            for σ = 1:3
-                #J̄[σ,μ] += H̄2[:,:,μ]*RR[:,:,σ]
-                for i = 1:3
-                    for k = 1:3
-                        J̄[σ,μ] += H̄2[i,k,μ]*RR[k,i,σ]
-                    end
-                end
-            end
-        end
-        for ν = 1:3
-            for i=1:3
-                for l=1:3
-                    for μ=1:4
-                        for j=1:3
-                            for k = 1:3
-                                #x̄[ν] += R[k,l]*potential_hessian[k,j,μ]*dRdxν[j,i,ν]*H̄2[i,l,μ]
-                                #x̄[ν] += dRdxν[k,l,ν]*potential_hessian[k,j,μ]*R[j,i]*H̄2[i,l,μ]
-                                x̄[ν] += R[l,k]*potential_hessian[k,j,μ]*dRdxν[i,j,ν]*H̄2[l,i,μ]
-                                x̄[ν] += dRdxν[l,k,ν]*potential_hessian[k,j,μ]*R[i,j]*H̄2[l,i,μ]
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        for ν = 1:3
-            for σ = 1:3
-                for μ = 1:4
-                    for i=1:3
-                        for k=1:3
-                            x̄[ν] += H̄2[i,k,μ]*dRRσdxν[k,i,σ,ν]*potential_jacobian[σ,μ]
-                            #x̄[ν] += H̄2[i,l,μ]*dRRσdxν[l,i,σ,ν]*potential_jacobian[σ,μ]
-                        end
-                    end
-                end
-            end
-        end
-        W̄ = zeros(size(workspace)) # just memory for storing calculations in.
-        s̄elf = NoTangent() # not a closure
-        
-        return s̄elf, J̄, H̄, W̄, x̄[1], x̄[2], x̄[3]
-    end
-    return hessian_out, H_pullback
-
-end
-ReverseDiff.@grad_from_chainrules s2c_hess!(potential_jacobian, potential_hessian, workspace, rho::tracked_type, theta::tracked_type, phi::tracked_type)
 =#
 
-#=
-# passes tests
-function ChainRulesCore.rrule(::typeof(s2c_jac!),potential_jacobian, workspace, rho, theta, phi)\
-    #println("initial call:")
-    #@show potential_jacobian
-    function J_pullback(J̄2)
-        #println("pullback call:")
-        #@show potential_jacobian
-
-        R = get_drjdxi(rho,theta,phi)
-        # partial derivatives of drjdxi ≡ R:
-        dRdr = ForwardDiff.derivative((_rho)->get_drjdxi(_rho,theta,phi),rho)
-        dRdt = ForwardDiff.derivative((_theta)->get_drjdxi(rho,_theta,phi),theta)
-        dRdp = ForwardDiff.derivative((_phi)->get_drjdxi(rho,theta,_phi),phi)
-        r̄ho = 0.0
-        t̄heta = 0.0
-        p̄hi = 0.0
-        C = 0.0
-        # r̄ho' = J2'[j,i]*dRdr[i,k]*J[k,j] (although in the end it's just a scalar so the transpose doesn't matter for r̄ho')
-        # and similarly for t̄heta and p̄hi
-        for i=1:size(potential_jacobian)[1]
-            for j=1:size(potential_jacobian)[2]
-                for k=1:size(potential_jacobian)[1]
-                    C = J̄2[i,j]*potential_jacobian[k,j]
-                    r̄ho += dRdr[i,k]*C
-                    t̄heta += dRdt[i,k]*C
-                    p̄hi += dRdp[i,k]*C
-                end
-            end
-        end
-        J̄ = R'*J̄2
-        W̄ = zeros(size(workspace)) # just memory for storing calculations in.
-        s̄elf = NoTangent() # not a closure
-        #@show J̄ sum(r̄ho) sum(t̄heta) sum(p̄hi)
-        
-        return s̄elf, J̄, W̄, sum(r̄ho), sum(t̄heta), sum(p̄hi)
-
-    end
-    return s2c_jac!(copy(potential_jacobian),workspace,rho,theta,phi), J_pullback
-    #potential_jacobian .= s2c_jac!(potential_jacobian,workspace,rho,theta,phi)
-    #return potential_jacobian, J_pullback
-
-end
-ReverseDiff.@grad_from_chainrules s2c_jac!(potential_jacobian, workspace, rho::tracked_type, theta::tracked_type, phi::tracked_type)
-=#
-
-#=
-function ChainRulesCore.rrule(::typeof(flatten_jacobian!),jacobian)
-
-    jacobian = flatten_jacobian!(jacobian)
-    
-    function j_pullback(J̄)
-
-        J̄_out = similar(jacobian)
-        J̄_out .= J̄
-        # column 1:
-        J̄_out[1:3,1] .*= -1
-        # column 2:
-        #J̄_out[1,2] += 0
-        J̄_out[2,2] -= J̄[3,1]
-        J̄_out[3,2] += J̄[2,1]
-        # column 3:
-        J̄_out[1,3] += J̄[3,1]
-        #J̄_out[2,3] += 0
-        J̄_out[3,3] -= J̄[1,1]
-        # column 4
-        J̄_out[1,4] -= J̄[2,1]
-        J̄_out[2,4] += J̄[1,1]
-        #J̄_out[3,4] += 0
-        #@show size(J̄_out)
-        return NoTangent(),J̄_out
-
-    end
-    return jacobian,j_pullback
-
-end
-ReverseDiff.@grad_from_chainrules flatten_jacobian!(jacobian::AbstractArray{<:ReverseDiff.TrackedReal})
-
-# not fully checked, but should work as long as there are no typos
-function ChainRulesCore.rrule(::typeof(flatten_hessian!),hessian)
-    flatten_hessian!(hessian)
-    
-    function h_pullback(H̄)
-
-        H̄_out = copy(H̄) # 3x3x4
-        H̄_out[1:3,1:3,1] .*= -1
-
-        H̄_out[2,1,4] += H̄[1,1,1]
-        H̄_out[3,1,3] -= H̄[1,1,1]
-        
-        H̄_out[3,1,2] += H̄[2,1,1]
-        H̄_out[1,1,4] -= H̄[2,1,1]
-        
-        H̄_out[1,1,3] += H̄[3,1,1]
-        H̄_out[2,1,2] -= H̄[3,1,1]
-        
-        H̄_out[2,2,4] += H̄[1,2,1]
-        H̄_out[3,2,3] -= H̄[1,2,1]
-        
-        H̄_out[3,2,2] += H̄[2,2,1]
-        H̄_out[1,2,4] -= H̄[2,2,1]
-        
-        H̄_out[1,2,3] += H̄[3,2,1]
-        H̄_out[2,2,2] -= H̄[3,2,1]
-        
-        H̄_out[2,3,4] += H̄[1,3,1]
-        H̄_out[3,3,3] -= H̄[1,3,1]
-        
-        H̄_out[3,3,2] += H̄[2,3,1]
-        H̄_out[1,3,4] -= H̄[2,3,1]
-        
-        H̄_out[1,3,3] += H̄[3,3,1]
-        H̄_out[2,3,2] -= H̄[3,3,1]
-        
-        return NoTangent(), H̄_out
-
-    end
-    return hessian,h_pullback
-
-end
-ReverseDiff.@grad_from_chainrules flatten_hessian!(hessian::AbstractArray{<:ReverseDiff.TrackedReal})
-=#
-
-#=
-# works
-function ChainRulesCore.rrule(::typeof(update_scalar_potential),scalar_potential,LE,h,expansion_order::Val{P}) where P
-    function potential_pullback(p̄)
-        s̄elf = NoTangent() # not a closure
-        p̄otential = p̄
-        L̄E = zeros(eltype(LE),size(LE))
-        h̄ = zeros(eltype(h),size(h))
-        P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
-
-        for n in 0:P
-            nms = (n * (n+1)) >> 1 + 1
-            #L̄E[1,nms] += p̄*conj(h[nms])
-            #h̄[nms] += p̄*conj(LE[1,nms])
-            L̄E[1,1,nms] += p̄*h[1,1,nms]
-            L̄E[2,1,nms] -= p̄*h[2,1,nms]
-            h̄[1,1,nms] += p̄*LE[1,1,nms]
-            h̄[2,1,nms] -= p̄*LE[2,1,nms]
-            for m in 1:n
-                nms = (n * (n + 1)) >> 1 + m + 1
-                #L̄E[1,nms] += 2*p̄*conj(h[nms])
-                #h̄[nms] += 2*p̄*conj(LE[1,nms])
-                L̄E[1,1,nms] += 2*p̄*h[1,1,nms]
-                L̄E[2,1,nms] -= 2*p̄*h[2,1,nms]
-                h̄[1,1,nms] += 2*p̄*LE[1,1,nms]
-                h̄[2,1,nms] -= 2*p̄*LE[2,1,nms]
-            end
-        end
-        return s̄elf, p̄otential, L̄E, h̄, P̄
-
-    end
-    return update_scalar_potential(scalar_potential,LE,h,expansion_order),potential_pullback
-
-end
-=#
-
-#=
-ReverseDiff.@grad_from_chainrules update_scalar_potential(scalar_potential,
-                                                           LE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           P::Val)
-                                                           
-
-function ChainRulesCore.rrule(::typeof(update_vector_potential!),vector_potential,LE,h,expansion_order::Val{P}) where P
-
-    vector_potential2 = update_vector_potential!(copy(vector_potential),LE,h,expansion_order)
-    function potential_pullback(p̄)
-        s̄elf = NoTangent() # not a closure
-        p̄otential = p̄
-        L̄E = zeros(eltype(LE),size(LE))
-        h̄ = zeros(eltype(h),size(h))
-        P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
-
-        for n in 0:P
-            nms = (n * (n+1)) >> 1 + 1
-            #=L̄E[2,nms] += p̄[1]*conj(h[nms])
-            L̄E[3,nms] += p̄[2]*conj(h[nms])
-            L̄E[4,nms] += p̄[3]*conj(h[nms])
-            h̄[nms] += p̄[1]*conj(LE[2,nms])
-            h̄[nms] += p̄[2]*conj(LE[3,nms])
-            h̄[nms] += p̄[3]*conj(LE[4,nms])=#
-            for ν=1:3 # this would be 12 lines fully expanded, but the structure is simple so I stuck it in some loops. ν loops over the entry of p̄ and σ is for real/imaginary parts.
-                for σ = 1:2
-                    s = (σ == 1 ? 1 : -1)
-                    L̄E[σ,ν+1,nms] += p̄[ν]*h[σ,1,nms]*s
-                    h̄[σ,1,nms] += p̄[ν]*LE[σ,ν+1,nms]*s
-                end
-            end
-
-            for m in 1:n
-                nms = (n * (n + 1)) >> 1 + m + 1
-                #=L̄E[2,nms] += 2*p̄[1]*conj(h[nms])
-                L̄E[3,nms] += 2*p̄[2]*conj(h[nms])
-                L̄E[4,nms] += 2*p̄[3]*conj(h[nms])
-                h̄[nms] += 2*p̄[1]*conj(LE[2,nms])
-                h̄[nms] += 2*p̄[2]*conj(LE[3,nms])
-                h̄[nms] += 2*p̄[3]*conj(LE[4,nms])=#
-                for ν=1:3 # this would be 12 lines fully expanded, but the structure is simple so I stuck it in some loops. ν loops over the entry of p̄ and σ is for real/imaginary parts.
-                    for σ = 1:2
-                        s = (σ == 1 ? 2 : -2)
-                        L̄E[σ,ν+1,nms] += p̄[ν]*h[σ,1,nms]*s
-                        h̄[σ,1,nms] += p̄[ν]*LE[σ,ν+1,nms]*s
-                    end
-                end
-                
-            end
-        end
-        return s̄elf, p̄otential, L̄E, h̄, P̄
-
-    end
-    return vector_potential2,potential_pullback
-
-end
-=#
-
-#=
-ReverseDiff.@grad_from_chainrules update_vector_potential!(vector_potential::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           LE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           expansion_order::Val)
-                                                           
-                                
-function ChainRulesCore.rrule(::typeof(update_potential_jacobian!),potential_jacobian,LE,h,expansion_order::Val{P},r) where P
-    potential_jacobian_out = update_potential_jacobian!(copy(potential_jacobian),LE,h,expansion_order,r)
-    function potential_pullback(p̄)
-        s̄elf = NoTangent() # not a closure
-        p̄otential = p̄
-        L̄E = zeros(eltype(LE),size(LE))
-        h̄ = zeros(eltype(h),size(h))
-        #h̄t = zeros(eltype(ht),size(ht))
-        r̄ = zero(eltype(r))
-        P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
-
-        # no need to loop for r̄, since it factors out of the loops.
-        #for ind in 1:4
-        #    r̄ += -potential_jacobian_out[1,ind]/r*p̄[1,ind]
-        #    r̄ += -2*potential_jacobian_out[1,ind]/r*p̄[1,ind]
-        #end
-
-        for n in 0:P
-            nms = (n * (n+1)) >> 1 + 1
-            for ind in 1:4
-
-                # contribution from J[1,ind]
-                #r̄ += -n/r^2*real(conj(h[nms]*LE[ind,nms]*p̄[1,ind]))
-                r̄ += -n/r^2*p̄[1,ind]*(h[1,1,nms]*LE[1,ind,nms] - h[2,1,nms]*LE[2,ind,nms])
-                #L̄E[ind,nms] += n/r*conj(h[nms])*p̄[1,ind]
-                #h̄[nms] += n/r*conj(LE[ind,nms])*p̄[1,ind]
-                L̄E[1,ind,nms] += n/r*h[1,1,nms]*p̄[1,ind]
-                L̄E[2,ind,nms] -= n/r*h[2,1,nms]*p̄[1,ind]
-                h̄[1,1,nms] += n/r*LE[1,ind,nms]*p̄[1,ind]
-                h̄[2,1,nms] -= n/r*LE[2,ind,nms]*p̄[1,ind]
-
-                # contribution from J[2,ind]
-                #L̄E[ind,nms] += conj(ht[nms])*p̄[2,ind]
-                #h̄t[nms] += conj(LE[ind,nms])*p̄[2,ind]
-                L̄E[1,ind,nms] += h[1,2,nms]*p̄[2,ind]
-                L̄E[2,ind,nms] -= h[2,2,nms]*p̄[2,ind]
-                h̄[1,2,nms] += LE[1,ind,nms]*p̄[2,ind]
-                h̄[2,2,nms] -= LE[2,ind,nms]*p̄[2,ind]
-            end
-            for m in 1:n
-                nms = (n * (n + 1)) >> 1 + m + 1
-                for ind in 1:4
-                    # contribution from J[1,ind]
-                    #r̄ += -2*n/r^2*real(conj(h[nms]*LE[ind,nms]*p̄[1,ind]))
-                    r̄ += -2*n/r^2*p̄[1,ind]*(h[1,1,nms]*LE[1,ind,nms] - h[2,1,nms]*LE[2,ind,nms])
-                    #L̄E[ind,nms] += 2*n/r*conj(h[nms])*p̄[1,ind]
-                    #h̄[nms] += 2*n/r*conj(LE[ind,nms])*p̄[1,ind]
-                    L̄E[1,ind,nms] += 2*n/r*h[1,1,nms]*p̄[1,ind]
-                    L̄E[2,ind,nms] -= 2*n/r*h[2,1,nms]*p̄[1,ind]
-                    h̄[1,1,nms] += 2*n/r*LE[1,ind,nms]*p̄[1,ind]
-                    h̄[2,1,nms] -= 2*n/r*LE[2,ind,nms]*p̄[1,ind]
-
-                    # contribution from J[2,ind]
-                    #L̄E[ind,nms] += 2*conj(ht[nms])*p̄[2,ind]
-                    #h̄t[nms] += 2*conj(LE[ind,nms])*p̄[2,ind]
-                    L̄E[1,ind,nms] += 2*h[1,2,nms]*p̄[2,ind]
-                    L̄E[2,ind,nms] -= 2*h[2,2,nms]*p̄[2,ind]
-                    h̄[1,2,nms] += 2*LE[1,ind,nms]*p̄[2,ind]
-                    h̄[2,2,nms] -= 2*LE[2,ind,nms]*p̄[2,ind]
-
-                    # contribution from J[3,ind]
-                    #L̄E[ind,nms] += 2*m*conj(h[nms]*im)*p̄[3,ind]
-                    #h̄[nms] += 2*m*conj(LE[ind,nms]*im)*p̄[3,ind]
-                    L̄E[1,ind,nms] -= 2*m*h[2,1,nms]*p̄[3,ind]
-                    L̄E[2,ind,nms] -= 2*m*h[1,1,nms]*p̄[3,ind]
-                    h̄[1,1,nms] -= 2*m*LE[2,ind,nms]*p̄[3,ind]
-                    h̄[2,1,nms] -= 2*m*LE[1,ind,nms]*p̄[3,ind]
-
-                end
-            end
-        end
-        return s̄elf, p̄otential, L̄E, h̄, P̄, r̄
-
-    end
-    return potential_jacobian_out,potential_pullback
-
-end
-=#
-
-#=
-ReverseDiff.@grad_from_chainrules update_potential_jacobian!(potential_jacobian::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           LE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           expansion_order::Val,
-                                                           r::ReverseDiff.TrackedReal)
-                                    
-function ChainRulesCore.rrule(::typeof(update_potential_hessian!),potential_hessian,LE,h,expansion_order::Val{P},r) where P
-    function potential_pullback(p̄)
-        s̄elf = NoTangent() # not a closure
-        p̄otential = p̄
-        L̄E = zeros(eltype(LE),size(LE))
-        h̄ = zeros(eltype(h),size(h))
-        #h̄t = zeros(eltype(ht),size(ht))
-        #h̄t2 = zeros(eltype(ht2),size(ht2))
-        r̄ = zero(eltype(r))
-        P̄ = NoTangent() # Order of the multipole expansion; non-differentiable integer.
-
-        # this appears to break, but I'm not sure why.
-        #=for ind in 1:4
-            r̄ += 2*potential_hessian[1,1,ind]*p̄[1,1,ind]
-            r̄ += potential_hessian[1,2,ind]*p̄[2,1,ind]
-            r̄ += potential_hessian[2,1,ind]*p̄[1,2,ind]
-            r̄ += potential_hessian[1,3,ind]*p̄[3,1,ind]
-            r̄ += potential_hessian[3,1,ind]*p̄[1,3,ind]
-        end
-        r̄ *= -1/r=#
-
-        # everything else still needs to be looped over.
-        for n in 0:P
-            nms = (n * (n+1)) >> 1 + 1
-            #c1 = n/r
-            #c2 = c1*(n-1)/r
-            for ind in 1:4
-                # contribution from H[1,1,ind]
-                #r̄ += -2*n*(n-1)/r^3*real(h[nms]*LE[ind,nms])*p̄[1,1,ind]
-                r̄ += -2*n*(n-1)/r^3*(h[1,1,nms]*LE[1,ind,nms] - h[2,1,nms]*LE[2,ind,nms])*p̄[1,1,ind]
-                #L̄E[ind,nms] += n*(n-1)/r^2*(real(h[nms]) - im*imag(h[nms]))*p̄[1,1,ind]
-                #h̄[nms] += n*(n-1)/r^2*(real(LE[ind,nms]) - im*imag(LE[ind,nms]))*p̄[1,1,ind]
-                L̄E[1,ind,nms] += n*(n-1)/r^2*h[1,1,nms]*p̄[1,1,ind]
-                L̄E[2,ind,nms] -= n*(n-1)/r^2*h[2,1,nms]*p̄[1,1,ind]
-                h̄[1,1,nms] += n*(n-1)/r^2*LE[1,ind,nms]*p̄[1,1,ind]
-                h̄[2,1,nms] -= n*(n-1)/r^2*LE[2,ind,nms]*p̄[1,1,ind]
-
-                # contribution from H[1,2,ind] and H[2,1,ind]
-                #r̄ += -n/r^2*real(ht[nms]*LE[ind,nms])*(p̄[1,2,ind] + p̄[2,1,ind])
-                r̄ += -n/r^2*(h[1,2,nms]*LE[1,ind,nms] - h[2,2,nms]*LE[2,ind,nms])*(p̄[1,2,ind] + p̄[2,1,ind])
-                #L̄E[ind,nms] += n/r*(real(ht[nms]) - im*imag(ht[nms]))*(p̄[1,2,ind] + p̄[2,1,ind])
-                #h̄t[nms] += n/r*(real(LE[ind,nms]) - im*imag(LE[ind,nms]))*(p̄[1,2,ind] + p̄[2,1,ind])
-                L̄E[1,ind,nms] += n/r*h[1,2,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-                L̄E[2,ind,nms] -= n/r*h[2,2,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-                h̄[1,2,nms] += n/r*LE[1,ind,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-                h̄[2,2,nms] -= n/r*LE[2,ind,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-
-                # contribution from H[2,2,ind]
-                #L̄E[ind,nms] += (real(ht2[nms]) - im*imag(ht2[nms]))*p̄[2,2,ind]
-                #h̄t2[nms] += (real(LE[ind,nms]) - im*imag(LE[ind,nms]))*p̄[2,2,ind]
-                L̄E[1,ind,nms] += h[1,3,nms]*p̄[2,2,ind]
-                L̄E[2,ind,nms] -= h[2,3,nms]*p̄[2,2,ind]
-                h̄[1,3,nms] += LE[1,ind,nms]*p̄[2,2,ind]
-                h̄[2,3,nms] -= LE[2,ind,nms]*p̄[2,2,ind]
-                #h̄t2[nms] += real(LE[ind,nms])*p̄[2,2,ind]
-            end
-            for m in 1:n
-                nms = (n * (n + 1)) >> 1 + m + 1
-                for ind in 1:4
-                    # H[1,1,ind]
-                    #r̄ += -2*2*n*(n-1)/r^3*real(h[nms]*LE[ind,nms])*p̄[1,1,ind]
-                    r̄ += -2*2*n*(n-1)/r^3*(h[1,1,nms]*LE[1,ind,nms] - h[2,1,nms]*LE[2,ind,nms])*p̄[1,1,ind]
-                    #L̄E[ind,nms] += 2*n*(n-1)/r^2*(real(h[nms]) - im*imag(h[nms]))*p̄[1,1,ind]
-                    #h̄[nms] += 2*n*(n-1)/r^2*(real(LE[ind,nms]) - im*imag(LE[ind,nms]))*p̄[1,1,ind]
-                    L̄E[1,ind,nms] += 2*n*(n-1)/r^2*h[1,1,nms]*p̄[1,1,ind]
-                    L̄E[2,ind,nms] -= 2*n*(n-1)/r^2*h[2,1,nms]*p̄[1,1,ind]
-                    h̄[1,1,nms] += 2*n*(n-1)/r^2*LE[1,ind,nms]*p̄[1,1,ind]
-                    h̄[2,1,nms] -= 2*n*(n-1)/r^2*LE[2,ind,nms]*p̄[1,1,ind]
-
-                    # H[1,2,ind] and H[2,1,ind]
-                    #r̄ += -2*n/r^2*real(ht[nms]*LE[ind,nms])*(p̄[1,2,ind] + p̄[2,1,ind])
-                    r̄ += -2*n/r^2*(h[1,2,nms]*LE[1,ind,nms] - h[2,2,nms]*LE[2,ind,nms])*(p̄[1,2,ind] + p̄[2,1,ind])
-                    #L̄E[ind,nms] += 2*n/r*(real(ht[nms]) - im*imag(ht[nms]))*(p̄[1,2,ind] + p̄[2,1,ind])
-                    #h̄t[nms] += 2*n/r*(real(LE[ind,nms]) - im*imag(LE[ind,nms]))*(p̄[1,2,ind] + p̄[2,1,ind])
-                    L̄E[1,ind,nms] += 2*n/r*h[1,2,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-                    L̄E[2,ind,nms] -= 2*n/r*h[2,2,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-                    h̄[1,2,nms] += 2*n/r*LE[1,ind,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-                    h̄[2,2,nms] -= 2*n/r*LE[2,ind,nms]*(p̄[1,2,ind] + p̄[2,1,ind])
-
-                    # H[2,2,ind]
-                    #L̄E[ind,nms] += 2*(real(ht2[nms]) - im*imag(ht2[nms]))*p̄[2,2,ind]
-                    #h̄t2[nms] += 2*(real(LE[ind,nms]) - im*imag(LE[ind,nms]))*p̄[2,2,ind]
-                    L̄E[1,ind,nms] += 2*h[1,3,nms]*p̄[2,2,ind]
-                    L̄E[2,ind,nms] -= 2*h[2,3,nms]*p̄[2,2,ind]
-                    h̄[1,3,nms] += 2*LE[1,ind,nms]*p̄[2,2,ind]
-                    h̄[2,3,nms] -= 2*LE[2,ind,nms]*p̄[2,2,ind]
-
-                    # H[1,3,ind] and H[3,1,ind]
-                    #r̄ += 2*m*n/r^2*imag(h[nms]*LE[ind,nms])*(p̄[1,3,ind] + p̄[3,1,ind])
-                    r̄ += 2*m*n/r^2*(h[1,1,nms]*LE[2,ind,nms] + h[2,1,nms]*LE[1,ind,nms])*(p̄[1,3,ind] + p̄[3,1,ind])
-                    #L̄E[ind,nms] += -2*m*n/r*(imag(h[nms]) + im*real(h[nms]))*(p̄[1,3,ind] + p̄[3,1,ind])
-                    #h̄[nms] += -2*m*n/r*(imag(LE[ind,nms]) + im*real(LE[ind,nms]))*(p̄[1,3,ind] + p̄[3,1,ind])
-                    L̄E[1,ind,nms] += -2*m*n/r*h[2,1,nms]*(p̄[1,3,ind] + p̄[3,1,ind])
-                    L̄E[2,ind,nms] += -2*m*n/r*h[1,1,nms]*(p̄[1,3,ind] + p̄[3,1,ind])
-                    h̄[1,1,nms] += -2*m*n/r*LE[2,ind,nms]*(p̄[1,3,ind] + p̄[3,1,ind])
-                    h̄[2,1,nms] += -2*m*n/r*LE[1,ind,nms]*(p̄[1,3,ind] + p̄[3,1,ind])
-
-                    # H[2,3,ind] and H[3,2,ind]
-                    #L̄E[ind,nms] += -2*m*(imag(ht[nms]) + im*real(ht[nms]))*(p̄[2,3,ind] + p̄[3,2,ind])
-                    #h̄t[nms] += -2*m*(imag(LE[ind,nms]) + im*real(LE[ind,nms]))*(p̄[2,3,ind] + p̄[3,2,ind])
-                    L̄E[1,ind,nms] += -2*m*h[2,2,nms]*(p̄[2,3,ind] + p̄[3,2,ind])
-                    L̄E[2,ind,nms] += -2*m*h[1,2,nms]*(p̄[2,3,ind] + p̄[3,2,ind])
-                    h̄[1,2,nms] += -2*m*LE[2,ind,nms]*(p̄[2,3,ind] + p̄[3,2,ind])
-                    h̄[2,2,nms] += -2*m*LE[1,ind,nms]*(p̄[2,3,ind] + p̄[3,2,ind])
-
-                    # H[3,3,ind]
-                    #L̄E[ind,nms] += -2*m^2*(real(h[nms]) - im*imag(h[nms]))*p̄[3,3,ind]
-                    #h̄[nms] += -2*m^2*(real(LE[ind,nms]) - im*imag(LE[ind,nms]))*p̄[3,3,ind]
-                    L̄E[1,ind,nms] += -2*m^2*h[1,1,nms]*p̄[3,3,ind]
-                    L̄E[2,ind,nms] -= -2*m^2*h[2,1,nms]*p̄[3,3,ind]
-                    h̄[1,1,nms] += -2*m^2*LE[1,ind,nms]*p̄[3,3,ind]
-                    h̄[2,1,nms] -= -2*m^2*LE[2,ind,nms]*p̄[3,3,ind]
-                end
-            end
-        end
-        return s̄elf, p̄otential, L̄E, h̄, P̄, r̄
-
-    end
-    return update_potential_hessian!(copy(potential_hessian),LE,h,expansion_order,r),potential_pullback
-
-end
-
-ReverseDiff.@grad_from_chainrules update_potential_hessian!(potential_hessian::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           LE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           #ht::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           #ht2::AbstractArray{<:ReverseDiff.TrackedReal},
-                                                           expansion_order::Val,
-                                                           r::ReverseDiff.TrackedReal)
-                                                           =#
-
-function ChainRulesCore.rrule(::typeof(M2L_loop!),LE,L,ME,h,expansion_order::Val{P}) where P
+#=function ChainRulesCore.rrule(::typeof(M2L_loop!),LE,L,ME,h,expansion_order::Val{P}) where P
 
     function LE_pullback(L̄E2)
         s̄elf = NoTangent()
@@ -906,16 +259,9 @@ ReverseDiff.@grad_from_chainrules M2L_loop!(LE::AbstractArray{<:ReverseDiff.Trac
                                             L::AbstractArray{<:ReverseDiff.TrackedReal},
                                             ME::AbstractArray{<:ReverseDiff.TrackedReal},
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            expansion_order::Val)
-
-#=@grad_from_chainrules_extended (1,) M2L_loop!(LE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            L::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            ME::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            expansion_order)=#
+                                            expansion_order::Val)=#
 
 function ChainRulesCore.rrule(::typeof(M2M_loop!),BM,CM,h,expansion_order::Val{P}) where P
-
     function BM_pullback(B̄M2)
         s̄elf = NoTangent()
         B̄M = B̄M2
@@ -962,7 +308,6 @@ function ChainRulesCore.rrule(::typeof(M2M_loop!),BM,CM,h,expansion_order::Val{P
         return s̄elf, B̄M, C̄M, h̄, P̄
         
     end
-    
     return M2M_loop!(copy(BM),CM,h,expansion_order),BM_pullback
 
 end
@@ -970,13 +315,8 @@ ReverseDiff.@grad_from_chainrules M2M_loop!(BM::AbstractArray{<:ReverseDiff.Trac
                                             CM::AbstractArray{<:ReverseDiff.TrackedReal},
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
                                             expansion_order::Val)
-#=@grad_from_chainrules_extended (1,) M2M_loop!(BM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
-                                            CM::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
-                                            h::AbstractArray{<:Complex{<:ReverseDiff.TrackedReal}},
-                                            P)=#
 
 function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,expansion_order::Val{P}) where P
-
     function CLE_pullback(C̄LE2)
         s̄elf = NoTangent()
         C̄LE = zeros(eltype(CLE),size(CLE))
@@ -1028,79 +368,20 @@ function ChainRulesCore.rrule(::typeof(L2L_loop!),CLE,BLE,h,L,expansion_order::V
 
     end
     return L2L_loop!(copy(CLE),BLE,h,L,expansion_order),CLE_pullback
-    #L2L_loop!(copyCLE,BLE,h,L,P)
-    #@show sum(CLE)
-    #return CLE, CLE_pullback
     
 end
-ReverseDiff.@grad_from_chainrules L2L_loop!(CLE::AbstractArray{<:ReverseDiff.TrackedReal},
+
+#=ReverseDiff.@grad_from_chainrules L2L_loop!(CLE::AbstractArray{<:ReverseDiff.TrackedReal},
                                             BLE::AbstractArray{<:ReverseDiff.TrackedReal},
                                             h::AbstractArray{<:ReverseDiff.TrackedReal},
                                             L::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            expansion_order::Val)
+                                            expansion_order::Val)=#
 
-#=@grad_from_chainrules_extended (1,) L2L_loop!(CLE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            BLE::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            h::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            L::AbstractArray{<:ReverseDiff.TrackedReal},
-                                            P)=#
-
-# TODO: Remove depreciated rrules.
-
-function L2B(body_position, expansion_center::SVector{3,TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF<:ReverseDiff.TrackedReal,PS,VPS,VS,GS,P}
-
-    return _L2B(body_position, expansion_center, local_expansion; derivatives_switch=derivatives_switch, expansion_order=expansion_order)
-
-end
-
-function _L2B(body_position, expansion_center::SVector{3,TF}, local_expansion; derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF<:ReverseDiff.TrackedReal,PS,VPS,VS,GS,P}
-    error("should not run?")
-end
-
-# forwarddiff implementation. Less efficient, but really easy to put together and test.
-function ChainRulesCore.rrule(::typeof(_L2B),body_position, expansion_center::SVector{3,TF}, local_expansion; derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
-    scalar_potential, vector_potential, velocity, gradient = L2B(body_position, expansion_center, local_expansion, derivatives_switch, expansion_order)
-    function pullbacks(ȳ)
-        println("pullback ran")
-        s̄p = view(ȳ[1],:)
-        v̄p = view(ȳ[2],:)
-        v̄ = view(ȳ[3],:)
-        ḡ = view(ȳ[4],:)
-        #sp_deriv = zero(TF)
-        #vp_derivs = zeros(TF,3)
-        #v_derivs = zeros(TF,3)
-        #g_derivs = zeros(TF,(3,3))
-
-        body_position_bar = zeros(length(body_position))
-        expansion_center_bar = zeros(length(expansion_center))
-        local_expansion_bar = zeros(length(local_expansion))
-        args = (body_position, expansion_center, local_expansion, derivatives_switch, expansion_order)
-
-        sp_deriv,vp_derivs,v_derivs,g_derivs = forwarddiff_jacobian(L2B,args,1)
-        for i=1:length(body_position_bar)
-            body_position_bar[i] = s̄p*sp_deriv[i] + sum(v̄p.*vp_derivs[3*(i-1)+1:3*(i-1)+3]) + sum(v̄.*v_derivs[3*(i-1)+1:3*(i-1)+3]) + sum(ḡ.*g_derivs[9*(i-1)+1:9*(i-1)*9])
-            expansion_center_bar[i] = -body_position_bar[i] # shortcut the calculation
-        end
-        sp_deriv,vp_derivs,v_derivs,g_derivs = forwarddiff_jacobian(L2B,args,3)
-        for i=1:length(local_expansion_bar)
-            local_expansion_bar[i] = s̄p*sp_deriv[i] + sum(v̄p.*vp_derivs[3*(i-1)+1:3*(i-1)+3]) + sum(v̄.*v_derivs[3*(i-1)+1:3*(i-1)+3]) + sum(ḡ.*g_derivs[9*(i-1)+1:9*(i-1)*9])
-        end
-
-        return NoTangent(),body_position_bar,expansion_center_bar,local_expansion_bar,NoTangent(),NoTangent()
-    end
-    return (scalar_potential, vector_potential, velocity, gradient), pullbacks
-end
-
-@grad_from_chainrules_multiple_returns L2B(::AbstractArray{<:ReverseDiff.TrackedReal},
-                                   ::AbstractArray{<:ReverseDiff.TrackedReal},
-                                   ::AbstractArray{<:ReverseDiff.TrackedReal})
-
-
-function rot(theta,phi)
+#=function rot(theta,phi)
     st, ct = sincos(theta)
     sp, cp = sincos(phi)
     return SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
-end
+end=#
 
 # take derivative with respect to an input. Not necessary to define, but it makes the code a lot more readable.
 @inline forwarddiff_deriv(f,args,idx) = ForwardDiff.derivative(_arg->f(args[1:idx-1]...,_arg,args[idx+1:length(args)]...),args[idx])
@@ -1109,52 +390,487 @@ end
 # and for the jacobian
 @inline forwarddiff_jacobian(f,args,idx) = ForwardDiff.jacobian(_arg->f(args[1:idx-1]...,_arg,args[idx+1:length(args)]...),args[idx])
 
-#=
-function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVector{3,TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+function _L2B(args...)
+    error("Dummy function _L2B was called. This function is only defined for the purposes of developing an L2B pullback and will be removed once that is done.")
+end
+
+# passes tests
+function scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, s̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=false)
+    
+    local_expansion_bar[1,1,index] += eimp_real*rn*Pnm*C_n_m*s̄p*(scale_by_two ? 2 : 1)
+    local_expansion_bar[2,1,index] -= eimp_imag*rn*Pnm*C_n_m*s̄p*(scale_by_two ? 2 : 1)
+    r_theta_phi_bar[1] += n/r*s̄p*L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)*(scale_by_two ? 2 : 1)
+    r_theta_phi_bar[2] += dPdt_n_m/Pnm*s̄p*L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)*(scale_by_two ? 2 : 1)
+    r_theta_phi_bar[3] += -m*s̄p*(local_expansion[2,1,index]*eimp_real + local_expansion[1,1,index]*eimp_imag)*rn*Pnm*C_n_m*(scale_by_two ? 2 : 1)
+    return nothing
+
+end
+
+# partially tested
+function vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, v̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=false)
+   
+    for i=1:3
+        local_expansion_bar[1,i+1,index] += eimp_real*rn*Pnm*C_n_m*v̄p[i]*(scale_by_two ? 2 : 1)
+        local_expansion_bar[2,i+1,index] -= eimp_imag*rn*Pnm*C_n_m*v̄p[i]*(scale_by_two ? 2 : 1)
+    end
+    r_theta_phi_bar[1] += n / r * sum(v̄p.*L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m))*(scale_by_two ? 2 : 1)
+    r_theta_phi_bar[2] += dPdt_n_m / Pnm * sum(v̄p.*L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m))*(scale_by_two ? 2 : 1)
+    for i=1:3
+        r_theta_phi_bar[3] -= m*rn*Pnm*C_n_m*(local_expansion[2,i+1,index]*eimp_real + local_expansion[1,i+1,index]*eimp_imag)*v̄p[i]*(scale_by_two ? 2 : 1)
+    end
+    return nothing
+end
+
+# something is wrong here...
+function velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real::TF, eimp_imag, rnm1, Pnm, dPdt, beta_n_m, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}, index, v̄, r, theta, phi, d2Pdt2, dbetadt_n_m, dRdt, dRdp, v; scale_by_two=false) where {TF, PS, VPS}
+    #Extra inputs: d2Pdt2, dbetadt_n_m, dRdt, dRdp
+    #TF = promote_type(TF1,TF2)
+
+    # initialize
+    #velocity = zero(SVector{3,TF})
+    
+    # intermediate quantities
+
+    vx_real = n * Pnm
+    vy_real = dPdt
+    vz_imag = m * beta_n_m
+    dvdt_x_real = n * dPdt
+    dvdt_y_real = d2Pdt2
+    dvdt_z_imag = m*dbetadt_n_m
+    #rnm2 = rnm1/r
+	
+    # rotate to cartesian
+    #=
+	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)
+    dudt_real_cartesian, dudt_imag_cartesian = complex_multiply(R, dudt_x_real, 0, dudt_y_real, 0, 0, dudt_z_imag)
+    dRdt_u_real, dRdt_u_imag = complex_multiply(dRdt, ux_real, 0, uy_real, 0, 0, uz_imag)
+    dRdp_u_real, dRdp_u_imag = complex_multiply(dRdp, ux_real, 0, uy_real, 0, 0, uz_imag)
+    =#
+    # these should probably be pre-allocated.
+    dRdt_v_real,dRdt_v_imag = complex_multiply(dRdt,vx_real,0,vy_real,0,0,vz_imag)
+    R_dvdt_real, R_dvdt_imag = complex_multiply(R,dvdt_x_real,0,dvdt_y_real,0,0,dvdt_z_imag)
+    R_v_real,R_v_imag = complex_multiply(R,vx_real,0,vy_real,0,0,vz_imag)
+    dRdp_v_real,dRdp_v_imag = complex_multiply(dRdp,vx_real,0,vy_real,0,0,vz_imag)
+
+    # takes care of r̄ contributions with one line.
+    for i=1:3
+        r_theta_phi_bar[1] += v̄[i]*(n-1)*v[i]/r#*(scale_by_two ? 2 : 1)
+    end
+    
+    # velocity due to scalar potential
+    if PS
+        Lnm_eimp_real, Lnm_eimp_imag = complex_multiply(eimp_real, eimp_imag, local_expansion[1,1,index], local_expansion[2,1,index])
+	
+        #velocity -= SVector{3}(
+		#	complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_eimp_real, Lnm_eimp_imag),
+		#	complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_eimp_real, Lnm_eimp_imag),
+		#	complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_eimp_real, Lnm_eimp_imag)
+        #) * rnm1 * C_n_m
+
+        for i=1:3
+            for j=1:3
+                r_theta_phi_bar[3] -= v̄[i]*rnm1*C_n_m*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdt_v_real[j] + R_dvdt_real[j], dRdt_v_imag[j] + R_dvdt_imag[j])*(scale_by_two ? 2 : 1)
+                r_theta_phi_bar[2] -= v̄[i]*rnm1*C_n_m*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdp_v_real[j] - m*R_v_imag[j], dRdp_v_imag[j] + m*R_v_real[j])*(scale_by_two ? 2 : 1)
+                local_expansion_bar[1,1,index] -= v̄[i]*rnm1*C_n_m*complex_multiply_real(R_v_real[j],R_v_imag[j],eimp_real,eimp_imag)*(scale_by_two ? 2 : 1)
+                local_expansion_bar[2,1,index] += v̄[i]*rnm1*C_n_m*complex_multiply_imag(R_v_real[j],R_v_imag[j],eimp_real,eimp_imag)*(scale_by_two ? 2 : 1)
+            end
+        end
+    end
+
+    # velocity due to vector potential
+    if VPS
+
+		#Lnm_x_eimp_real, Lnm_x_eimp_imag = complex_multiply(Lnm_x_real, Lnm_x_imag, eimp_real, eimp_imag)
+		#Lnm_y_eimp_real, Lnm_y_eimp_imag = complex_multiply(Lnm_y_real, Lnm_y_imag, eimp_real, eimp_imag)
+		#Lnm_z_eimp_real, Lnm_z_eimp_imag = complex_multiply(Lnm_z_real, Lnm_z_imag, eimp_real, eimp_imag)
+
+		#velocity += rnm1 * C_n_m * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_eimp_real, Lnm_x_eimp_imag, Lnm_y_eimp_real, Lnm_y_eimp_imag, Lnm_z_eimp_real, Lnm_z_eimp_imag)
+
+        for k=1:3
+            Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(eimp_real,eimp_imag,local_expansion[1,k+1,index],local_expansion[2,k+1,index])
+            for j=1:3
+                for i=1:3
+                    r_theta_phi_bar[3] += ϵ(i,j,k)*v̄[i]*rnm1*C_n_m*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdt_v_real[j] + R_dvdt_real[j], dRdt_v_imag[j] + R_dvdt_imag[j])*(scale_by_two ? 2 : 1)
+                    r_theta_phi_bar[2] += ϵ(i,j,k)*v̄[i]*rnm1*C_n_m*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdp_v_real[j] - m*R_v_imag[j], dRdp_v_imag[j] + m*R_v_real[j])*(scale_by_two ? 2 : 1)
+                    local_expansion_bar[1,k+1,index] += v̄[i]*rnm1*C_n_m*ϵ(i,j,k)*complex_multiply_real(eimp_real, eimp_imag, R_v_real[j],R_v_imag[j])*(scale_by_two ? 2 : 1)
+                    local_expansion_bar[2,k+1,index] -= v̄[i]*rnm1*C_n_m*ϵ(i,j,k)*complex_multiply_imag(eimp_real, eimp_imag, R_v_real[j],R_v_imag[j])*(scale_by_two ? 2 : 1)
+                end
+            end
+        end
+    end
+
+    return nothing
+end
+
+function gradient_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm2, Pnm, dPdt, d2Pdt2, ddt_Pnm_st, alpha, beta, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}, index, ḡ, r, dRdt, dRdp, dalphadt, dbetadt, d3Pdt3; scale_by_two=false) where {PS, VPS}
+    # extra inputs to pass in: M, dRdt, dRdp, dbetadt_n_m
+    # also duidrk = gradient*R
+
+    TF = eltype(local_expansion)
+
+    sb2 = (scale_by_two ? 2 : 1)
+
+    #Lnm_real, Lnm_imag = local_expansion[1,1,index], local_expansion[2,1,index]
+    #Lnm_x_real, Lnm_x_imag = local_expansion[1,2,index], local_expansion[2,2,index]
+    #Lnm_y_real, Lnm_y_imag = local_expansion[1,3,index], local_expansion[2,3,index]
+    #Lnm_z_real, Lnm_z_imag = local_expansion[1,4,index], local_expansion[2,4,index]
+
+    # initialize outputs
+    #dudr = zero(SVector{3,TF})
+    #dudt_r = zero(SVector{3,TF})
+    #dudp_r_st = zero(SVector{3,TF})
+
+    # intermediate values
+    rnm2Cnm = rnm2 * C_n_m
+    nm1 = n - 1
+    rnm3Cnm = rnm2Cnm/r
+    nm2_r = (n-2)/r # needed 9 times, so this saves some calculations.
+    
+    #####
+    ##### du/dr
+    #####
+    
+    # intermediate quantities
+    b_x_real = n*Pnm
+    b_y_real = dPdt
+    b_z_imag = m*beta
+
+    dbdt_x_real = n*dPdt
+    dbdt_y_real = d2Pdt2
+    dbdt_z_imag = m*dbetadt
+
+    R_b_real,R_b_imag = complex_multiply(R, b_x_real, zero(TF), b_y_real, zero(TF), zero(TF), b_z_imag)
+    dRdt_b_real,dRdt_b_imag = complex_multiply(dRdt, b_x_real, zero(TF), b_y_real, zero(TF), zero(TF), b_z_imag)
+    dRdp_b_real,dRdp_b_imag = complex_multiply(dRdp, b_x_real, zero(TF), b_y_real, zero(TF), zero(TF), b_z_imag)
+    R_dbdt_real,R_dbdt_imag = complex_multiply(R, dbdt_x_real, zero(TF), dbdt_y_real, zero(TF), zero(TF), dbdt_z_imag)
+
+    #u1x_real = n * Pnm
+    #u1y_real = dPdt
+    #u1z_imag = m * beta
+    #dudt1x_real = n*dPdt
+    #dudt1y_real = d2Pdt2
+    #dudt1z_imag = m*dbetadt
+    
+    #vx_real, vx_imag = eimp_real * u1x_real, eimp_imag * u1x_real
+    #vy_real, vy_imag = eimp_real * u1y_real, eimp_imag * u1y_real
+    #vz_real, vz_imag = -eimp_imag * u1z_imag, eimp_real * u1z_imag
+
+    #dvdt_x_real, dvdt_x_imag = eimp_real*dudt1x_real, eimp_imag*dudt1x_real 
+    #dvdt_y_real, dvdt_y_imag = eimp_real*dudt1y_real, eimp_imag*dudt1y_real 
+    #dvdt_z_real, dvdt_z_imag = eimp_real*dudt1z_imag, eimp_imag*dudt1z_imag
+
+    #dvdp_x_real, dvdp_x_imag = -m * eimp_imag * u1x_real, m * eimp_real * u1x_real
+    #dvdp_y_real, dvdp_y_imag = -m * eimp_imag * u1y_real, m * eimp_real * u1y_real
+    #dvdp_z_real, dvdp_z_imag = -m * eimp_real * u1z_imag, -m * eimp_imag * u1z_imag
+    
+    # u_cartesian = R*eimp*u
+    # dudt_cartesian = dRdt*eimp*u + R*eimp*dudt
+    # dudp_cartesian = dRdp*eimp*u + R*im*eimp*u
+
+	# transform to cartesian
+	#u_real_cartesian, u_imag_cartesian = complex_multiply(R, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
+    #Rdvdt_real, Rdvdt_imag = complex_multiply(R, dvdt_x_real, dvdt_x_imag, dvdt_y_real, dvdt_y_imag, dvdt_z_real, dvdt_z_imag)
+    #Rdvdp_real, Rdvdp_imag = complex_multiply(R, dvdp_x_real, dvdp_x_imag, dvdp_y_real, dvdp_y_imag, dvdp_z_real, dvdp_z_imag)
+    #dRdt_v_real, dRdt_v_imag = complex_multiply(dRdt, u1x_real, 0, u1y_real, 0, 0, u1z_imag)
+    #dRdp_v_real, dRdp_v_imag = complex_multiply(dRdp, u1x_real, 0, u1y_real, 0, 0, u1z_imag)
+    #dudt_real_cartesian = dRdt_v_real + Rdvdt_real
+    #dudt_imag_cartesian = dRdt_v_imag + Rdvdt_imag
+    #dudp_real_cartesian = dRdp_v_real - Rdvdp_imag
+    #dudp_imag_cartesian = dRdp_v_imag + Rdvdp_real
+    # u_cartesian = Rv = eimp R u
+    # dudt_cartesian = eimp (dRdt*u + R*dudt)
+    # dudp_cartesian = (im*eimp*R + eimp*dRdp)*u
+    # w = eimp*u3
+
+    # r derivatives are the same for all cases, so just handle them all in one line.
+    for i=1:3
+        for j=1:3
+            r_theta_phi_bar[j] += ḡ[j,i]*nm2_r*dudr[i]*R[i,j]
+        end
+    end
+
+    #j=1
+    
+    # due to scalar potential
+    # du/dr
+    if PS
+        Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(local_expansion[1,1,index],local_expansion[2,1,index],eimp_real,eimp_imag)
+        #dudr -= nm1 * rnm2Cnm * SVector{3}(
+		#	complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_real, Lnm_imag),
+		#	complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_real, Lnm_imag),
+		#	complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
+        #)
+        for i=1:3
+            r_theta_phi_bar[3] -= ḡ[1,i]*nm1*rnm2Cnm*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdt_b_real[i] + R_dbdt_real[i], dRdt_b_imag[i] + R_dbdt_imag[i])*sb2*R[i,1]
+            r_theta_phi_bar[2] -= ḡ[1,i]*nm1*rnm2Cnm*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdp_b_real[i] - m*R_b_imag[i], dRdp_b_imag[i] + m*R_b_real[i])*sb2*R[i,1]
+            local_expansion_bar[1,1,index] -= ḡ[1,i]*nm1*rnm2Cnm*complex_multiply_real(eimp_real,eimp_imag,R_b_real[i],R_b_imag[i])*sb2
+            local_expansion_bar[2,1,index] += ḡ[1,i]*nm1*rnm2Cnm*complex_multiply_imag(eimp_real,eimp_imag,R_b_real[i],R_b_imag[i])*sb2
+        end
+    end
+    
+    # due to vector potential
+    if VPS
+		#dudr += nm1 * rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+        for _p=1:3
+            Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(local_expansion[1,_p+1,index],local_expansion[2,_p+1,index],eimp_real,eimp_imag)
+            for k=1:3
+                for i = 1:3
+                    r_theta_phi_bar[3] += ḡ[1,i]*nm1*rnm2Cnm*ϵ(i,1,_p)*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdt_b_real[k] + R_dbdt_real[k], dRdt_b_imag[k] + R_dbdt_imag[k])*sb2*R[i,1]
+                    r_theta_phi_bar[2] == ḡ[1,i]*nm1*rnm2Cnm*ϵ(i,1,_p)*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdp_b_real[k] - m*R_b_imag[k], dRdp_b_imag[k] + m*R_b_real[k])*sb2*R[i,1]
+                    local_expansion_bar[1,_p+l,index] += ḡ[1,i]*nm1*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(eimp_real,eimp_imag,R_b_real[k],R_b_imag[k])*sb2
+                    local_expansion_bar[2,_p+l,index] -= ḡ[1,i]*nm1*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_imag(eimp_real,eimp_imag,R_b_real[k],R_b_imag[k])*sb2
+                end
+            end
+        end
+    end
+
+    #####
+    ##### du/dphi / r
+    #####
+    
+    # intermediate quantities
+
+    c_x_real = nm1*dPdt
+    c_y_real = d2Pdt2 + n*Pnm
+    c_z_imag = m*ddt_Pnm_st
+
+    dcdt_x_real = nm1*d2Pdt2
+    dcdt_y_real = d3Pdt3 + n*dPdt
+    dcdt_z_imag = m/st*(-ct/st*dPdt + d2Pdt2)
+
+    R_c_real,R_c_imag = complex_multiply(R,c_x_real,zero(TF),c_y_real,zero(TF),zero(TF),c_z_imag)
+    dRdt_c_real,dRdt_c_imag = complex_multiply(dRdt,c_x_real,zero(TF),c_y_real,zero(TF),zero(TF),c_z_imag)
+    dRdp_c_real,dRdp_c_imag = complex_multiply(dRdp,c_x_real,zero(TF),c_y_real,zero(TF),zero(TF),c_z_imag)
+    R_dcdt_real,R_dcdt_imag = complex_multiply(R,dcdt_x_real,zero(TF),dcdt_y_real,zero(TF),zero(TF),dcdt_z_imag)
+
+    #u2x_real = nm1 * dPdt
+    #u2y_real = d2Pdt2 + n * Pnm
+    #u2z_imag = m * ddt_Pnm_st # double check that this is (1/sin θ)*dP/dt and not d/dt (P/sin(θ))
+
+    #dudt2x_real = nm1*d2Pdt2
+    #dudt2y_real = d3Pdt3 + n*dPdt
+    #dudt2z_imag = m*(d2Pdt2/st - ct/st^2*dPdt)
+    
+    #vx_real, vx_imag = eimp_real * u2x_real, eimp_imag * u2x_real
+    #vy_real, vy_imag = eimp_real * u2y_real, eimp_imag * u2y_real
+    #vz_real, vz_imag = -eimp_imag * u2z_imag, eimp_real * u2z_imag
+
+    #dvdt_x_real, dvdt_x_imag = eimp_real * dudt2x_real, eimp_imag * dudt2x_real
+    #dvdt_y_real, dvdt_y_imag = eimp_real * dudt2y_real, eimp_imag * dudt2y_real
+    #dvdt_z_real, dvdt_z_imag = -eimp_imag * dudt2z_imag, eimp_real * dudt2z_imag
+
+    #dvdp_x_real, dvdp_x_imag = -m*eimp_imag * u2x_real, m*eimp_real * u2x_real
+    #dvdp_y_real, dvdp_y_imag = -m*eimp_imag * u2y_real, m*eimp_real * u2y_real
+    #dvdp_z_real, dvdp_z_imag = -m*eimp_real * u2z_imag, -m*eimp_imag * u2z_imag
+
+	#u_real_cartesian, u_imag_cartesian = complex_multiply(R, vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag)
+    #Rdvdt_real, Rdvdt_imag = complex_multiply(R, dvdt_x_real, dvdt_x_imag, dvdt_y_real, dvdt_y_imag, dvdt_z_real, dvdt_z_imag)
+    #Rdvdp_real, Rdvdp_imag = complex_multiply(R, dvdp_x_real, dvdp_x_imag, dvdp_y_real, dvdp_y_imag, dvdp_z_real, dvdp_z_imag)
+    #dRdt_v_real, dRdt_v_imag = complex_multiply(dRdt, u2x_real, 0, u2y_real, 0, 0, u2z_imag)
+    #dRdp_v_real, dRdp_v_imag = complex_multiply(dRdp, u2x_real, 0, u2y_real, 0, 0, u2z_imag)
+    #dudt_real_cartesian = dRdt_v_real + Rdvdt_real
+    #dudt_imag_cartesian = dRdt_v_imag + Rdvdt_imag
+    #dudp_real_cartesian = dRdp_v_real - Rdvdp_imag
+    #dudp_imag_cartesian = dRdp_v_imag + Rdvdp_real
+
+    #u_cross_L = complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+    #dudt_cross_L = complex_cross_real(dudt_real_cartesian[1], dudt_imag_cartesian[1], dudt_real_cartesian[2], dudt_imag_cartesian[2], dudt_real_cartesian[3], dudt_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+    #dudp_cross_L = complex_cross_real(dudp_real_cartesian[1], dudp_imag_cartesian[1], dudp_real_cartesian[2], dudp_imag_cartesian[2], dudp_real_cartesian[3], dudp_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+
+    # du/dϕ / r
+
+    # due to scalar potential
+    if PS
+        #dudt_r -= rnm2Cnm * SVector{3}(
+		#	complex_multiply_real(u_real_cartesian[1], u_imag_cartesian[1], Lnm_real, Lnm_imag),
+		#	complex_multiply_real(u_real_cartesian[2], u_imag_cartesian[2], Lnm_real, Lnm_imag),
+		#	complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
+        #)
+        Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(local_expansion[1,1,index],local_expansion[2,1,index],eimp_real,eimp_imag)
+        for i=1:3
+            r_theta_phi_bar[3] -= ḡ[2,i]*rnm2Cnm*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdt_c_real[i] + R_dcdt_real[i], dRdt_c_imag[i] + R_dcdt_imag[i])*sb2*R[i,2]
+            r_theta_phi_bar[2] -= ḡ[2,i]*rnm2Cnm*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdp_c_real[i] - m*R_c_imag[i],dRdp_c_imag[i] + m*R_c_real[i])*sb2*R[i,2]
+            local_expansion_bar[1,1,index] -= ḡ[2,i]*rnm2Cnm*complex_multiply_real(R_b_real[i],R_b_imag[i],eimp_real,eimp_imag)*sb2
+            local_expansion_bar[2,1,index] += ḡ[2,i]*rnm2Cnm*complex_multiply_imag(R_b_real[i],R_b_imag[i],eimp_real,eimp_imag)*sb2
+        end
+    end
+    
+    # due to vector potential
+    if VPS
+		#dudt_r += rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+        for _p=1:3
+            Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(local_expansion[1,_p+1,index],local_expansion[2,_p+1,index],eimp_real,eimp_imag)
+            for k=1:3
+                for i=1:3
+                    r_theta_phi_bar[3] += ḡ[2,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdt_c_real[k] + R_dcdt_real[k],dRdt_c_imag[k] + R_dcdt_imag[k])*sb2*R[i,2]
+                    r_theta_phi_bar[2] += ḡ[2,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dRdp_c_real[k] - m*R_c_imag[k],dRdp_c_imag[k] + m*R_c_real[k])*sb2*R[i,2]
+                    local_expansion_bar[1,_p+1,index] += ḡ[2,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(eimp_real,eimp_imag,R_c_real[k],R_c_imag[k])*sb2
+                    local_expansion_bar[2,_p+1,index] -= ḡ[2,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_imag(eimp_real,eimp_imag,R_c_real[k],R_c_imag[k])*sb2
+                end
+            end
+        end
+    end
+    
+    #####
+    ##### du/dphi / r / sin(theta)
+    #####
+    
+    # intermediate quantities
+
+    Fnm = n * n * Pnm + d2Pdt2
+    dFnmdt = n * n * dPdt + d3Pdt3
+    m2m1 - m * m - 1
+
+    #d_x_real = sp * Fnm
+    #d_x_imag = m * cp * (alpha * m2m1 - Fnm)
+    #d_y_real = -cp * Fnm
+    #d_y_imag = m * sp * (alpha * m2m1 - Fnm)
+    #d_z_real = 0.0
+    #d_z_imag = m * (n * ct * beta - dPdt)
+
+    d_real = [sp * Fnm, -cp * Fnm, zero(TF)]
+    d_imag = [m * cp * (alpha * m2m1 - Fnm), m * sp * (alpha * m2m1 - Fnm), m * (n * ct * beta - dPdt)]
+
+    #dddt_x_real = dFnmdt * st
+    #dddt_x_imag = m * ct * (dalphadt * m2m1 - dFnmdt)
+    #dddt_y_real = -dFnmdt * ct
+    #dddt_y_imag = m * st * (dalphadt * m2m1 - dFnmdt)
+    #dddt_z_real = 0.0
+    #dddt_z_imag = m * (n * (dbetadt * ct - beta * st) - d2Pdt2)
+
+    dddt_real = [dFnmdt * st, -dFnmdt * ct, zero(TF)]
+    dddt_imag = [m * ct * (dalphadt * m2m1 - dFnmdt), m * st * (dalphadt * m2m1 - dFnmdt), m * (n * (dbetadt * ct - beta * st) - d2Pdt2)]
+
+    #dddp_x_real = Fnm * ct
+    #dddp_x_imag = -m * st * (alpha * m2m1 - Fnm)
+    #dddp_y_real = Fnm * st
+    #dddp_y_imag = m * ct * (alpha * m2m1 - Fnm)
+    #dddp_z_real = 0.0
+    #dddp_z_imag = 0.0
+
+    dddp_real = [Fnm * ct, Fnm * st, zero(TF)]
+    dddp_imag = [-m * st * (alpha * m2m1 - Fnm), m * ct * (alpha * m2m1 - Fnm), zero(TF)]
+
+    #R_d_real,R_d_imag = complex_multiply(R,d_x_real,d_x_imag,d_y_real,d_y_imag,0.0,d_z_imag)
+    #dRdt_d_real,dRdt_d_imag = complex_multiply(dRdt,d_x_real,d_x_imag,d_y_real,d_y_imag,0.0,d_z_imag)
+    #dRdp_d_real,dRdp_d_imag = complex_multiply(dRdp,d_x_real,d_x_imag,d_y_real,d_y_imag,0.0,d_z_imag)
+    #R_dddt_real,R_dddt_imag = complex_multiply(R,dddt_x_real,dddt_x_imag,dddt_y_real,dddt_y_imag,0.0,dddt_z_imag)
+    #R_dddp_real,R_dddp_imag = complex_multiply(R,dddp_x_real,dddp_x_imag,dddp_y_real,dddp_y_imag,0.0,0.0)
+
+    # du/dϕ / r / sin(θ)
+
+    # due to scalar potential
+    if PS
+        #dudp_r_st -= SVector{3}(
+        #    complex_multiply_real(vx_real, vx_imag, Lnm_real, Lnm_imag),
+        #    complex_multiply_real(vy_real, vy_imag, Lnm_real, Lnm_imag),
+		#	complex_multiply_real(vz_real, vz_imag, Lnm_real, Lnm_imag)
+        #) * rnm2Cnm
+        Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(local_expansion[1,1,index],local_expansion[2,1,index],eimp_real,eimp_imag)
+        for i=1:3
+            r_theta_phi_bar[3] -= ḡ[3,i]*rnm2Cnm*complex_multiply_real(Lnm_eimp_real, Lnm_eimp_imag, dddt_real[i],dddt_imag[i])*sb2*R[i,3]
+            r_theta_phi_bar[2] -= ḡ[3,i]*rnm2Cnm*complex_multiply_real(Lnm_eimp_real, Lnm_eimp_imag, dddp_real[i] - m*d_imag[i],dddp_imag[i] + m*d_real[i])*sb2*R[i,3]
+            local_expansion_bar[1,1,index] -= ḡ[3,i]*rnm2Cnm*complex_multiply_real(eimp_real,eimp_imag,eimp_imag,d_real[i],d_imag[i])*sb2
+            local_expansion_bar[2,1,index] += ḡ[3,i]*rnm2Cnm*complex_multiply_imag(eimp_real,eimp_imag,eimp_imag,d_real[i],d_imag[i])*sb2
+        end
+    end
+
+    # due to vector potential
+    if VPS
+        #dudp_r_st += rnm2Cnm * complex_cross_real(vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
+        for i=1:3
+            for j=1:3
+                r_theta_phi_bar[1] += ḡ[j,i]*(n-2)*rnm3Cnm*v_cross_L[i]*R[j,k]*sb2
+                r_theta_phi_bar[2] += ḡ[j,i]*rnm2Cnm*dvdt_cross_L[i]*R[j,k]*sb2
+                r_theta_phi_bar[3] += ḡ[j,i]*rnm2Cnm*dvdp_cross_L[i]*R[j,k]*sb2
+            end
+        end
+        for _p=1:3
+            Lnm_eimp_real,Lnm_eimp_imag = complex_multiply(local_expansion[1,_p+1,index],local_expansion[2,_p+1,index],eimp_real,eimp_imag)
+            for k=1:3
+                for i=1:3
+                    r_theta_phi_bar[3] += ḡ[3,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dddt_real[k],dddt_imag[k])*sb2*R[i,3]
+                    r_theta_phi_bar[2] += ḡ[3,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(Lnm_eimp_real,Lnm_eimp_imag,dddp_real[k] - m*d_imag[k], ddp_imag[k] + m*d_real[k])*sb2*R[i,3]
+                    local_expansion_bar[1,_p+1,index] += ḡ[3,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_real(eimp_real,eimp_imag,d_real[k],d_imag[k])*sb2
+                    local_expansion_bar[2,_p+1,index] -= ḡ[3,i]*rnm2Cnm*ϵ(i,k,_p)*complex_multiply_imag(eimp_real,eimp_imag,d_real[k],d_imag[k])*sb2
+                end
+            end
+        end
+    end
+
+	#return dudr, dudt_r, dudp_r_st
+    # updated in-place by the end: local_expansion_bar, r_theta_phi_bar
+    return nothing
+end
+
+function C2S_pullback!(body_position_bar, expansion_center_bar, r_theta_phi_bar, dx, dy, dz, r, theta, phi)
+
+    dC2S = [dx/r dy/r dz/r; dx*cot(theta)/r^2 dy*cot(theta)/r^2 -1/(r*sin(theta)) + dz*cot(theta)/r^2; -sin(phi)*(cos(phi)/dx) cos(phi)^2/dx 0]
+    for j=1:3
+        body_position_bar[j] = dC2S[1,j]*r_theta_phi_bar[1] + dC2S[2,j]*r_theta_phi_bar[2] + dC2S[3,j]*r_theta_phi_bar[3]
+        expansion_center_bar[j] = -body_position_bar[j]
+    end
+
+    return nothing
+end
+
+# TODO: Make the rho/phi/theta order consistent, if possible. This might be a change in spherical.jl.
+# TODO: Double-check the recursion relations; something might be wrong for higher expansion orders
+function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::AbstractArray{TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+
+    scalar_potential, vector_potential, velocity, gradient = L2B(body_position, expansion_center, local_expansion, derivatives_switch, expansion_order)
 
     function pullbacks(ȳ)
+        #println("running L2B pullback:")
+        #@time begin
         #s̄p,v̄p,v̄,ḡ = ȳ # I don't actually want to allocate here... would a view be better?
-        s̄p = view(ȳ[1],:)
+        s̄p = ȳ[1] # scalar, so no view
         v̄p = view(ȳ[2],:)
         v̄ = view(ȳ[3],:)
-        ḡ = view(ȳ[4],:)
+        ḡ = reshape(view(ȳ[4],:),(3,3))
 
         # initialize cotangent vectors
         body_position_bar = zeros(length(body_position))
         expansion_center_bar = zeros(length(expansion_center))
-        local_expansion_bar = zeros(length(local_expansion))
+        local_expansion_bar = zeros(size(local_expansion))
 
-        # polar coordinate coordinates
-        r_bar = zero(TF)
-        theta_bar = zero(TF)
-        phi_bar = zero(TF)
+        # polar coordinate cotangents
+        r_theta_phi_bar = zeros(TF,3) # [r, theta, phi] cotangents
+        #duidrk_bar = zeros(TF,(3,3)) # spare memory for calculations
 
-        # precompute some of the same things as the original function.
-
+        #=
+        R_n^m(\rho, \theta, \phi) &= (-1)^n \frac{\rho^n}{(n+\|m\|)!} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
+        I_n^m(\rho, \theta, \phi) &= (-1)^n \frac{(n-\|m\|)!}{\rho^{n+1}} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
+        phi = \sum \limits_{n=0}^P \sum \limits_{m=-n}^n L_n^m R_n^m
+        =#
+        # still need these intermediate polar coordinates
         dx, dy, dz = body_position - expansion_center
         r, theta, phi = cartesian_2_spherical(dx, dy, dz)
+        
+        #--- the following is inspired by Salloum and Lakkis (2020) with some improvements ---#
 
-        scalar_potential = zero(TF)
-        vector_potential = zero(SVector{3,TF})
-        velocity = zero(SVector{3,TF})
-        gradient = zero(SMatrix{3,3,TF,9})
-        dudr = zero(SVector{3,TF})
-        dudt_r = zero(SVector{3,TF})
-        dudp_r_st = zero(SVector{3,TF})
-        dudr_bar = zero(SVector{3,TF})
-        dudt_r_bar = zero(SVector{3,TF})
-        dudp_r_st_bar = zero(SVector{3,TF})
+        # initialization # not needed - we already have scalar_potential, vector_potential, velocity, and gradient.
+        #scalar_potential = zero(TF)
+        #vector_potential = zero(SVector{3,TF})
+        #velocity = zero(SVector{3,TF})
+        #gradient = zero(SMatrix{3,3,TF,9})
+        #dudr = zero(SVector{3,TF})
+        #dudt_r = zero(SVector{3,TF})
+        #dudp_r_st = zero(SVector{3,TF})
 
+        # more intermediate values
         st, ct = sincos(theta)
         sp, cp = sincos(phi)
 
         if VS || GS
-            R = rot(theta,phi) # need this as a function for later.
-            # these next two derivatives are also needed
-            dRdtheta = forwarddiff_deriv(rot,(theta,phi),1) # 3x3
-            dRdphi = forwarddiff_deriv(rot,(theta,phi),2) # 3x3
+            R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
+            # define two derivative matrices (dR/dθ and dR/dϕ) that will be needed later
+            dRdt = SMatrix{3,3}(ct*cp,ct*sp,-st,-st*cp,-st*sp,-ct,0,0,0)
+            dRdp = SMatrix{3,3}(-st*sp,st*cp,0,-ct*sp,ct*cp,0,-cp,-sp,0)
         end
 
+        # note that by definition beta_n^m=0 for m<1 and alpha_n^m=0 for m<2
+        
         # m = 0, n = 0
         n = m = 0
         rn = 1.0            # r^n
@@ -1166,43 +882,25 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
         Pnm = 1.0           # associated legendre polynomial of degree n, order m
         alpha_n_m = 0.0     # alpha = Pnm / sin^2(theta)
         beta_n_m = 0.0      # beta = Pnm / sin(theta)
-        dbetadt_n_m = 0.0
         dPdt_n_m = 0.0      # derivative w.r.t. theta of P_n_m
         d2Pdt2_n_m = 0.0    # second derivative w.r.t. theta of P_n_m
         index = 1           # index of the local expansion corresponding to n and m
 
         if PS
             #scalar_potential += L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-            # the sign change for the second term is because the adjoint of a complex number is the complex conjugate
-            args = (local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-            local_expansion_bar[1,1,index] += s̄p*forwarddiff_deriv(L2B_scalar_potential,args,1)
-            local_expansion_bar[1,2,index] -= s̄p*forwarddiff_deriv(L2B_scalar_potential,args,2)
-            #local_expansion_bar[1,1,index] += ForwardDiff.derivative(LE_real->L2B_scalar_potential(LE_real, local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[1,1,index])
-            #local_expansion_bar[1,2,index] -= ForwardDiff.derivative(LE_imag->L2B_scalar_potential(local_expansion[1,1,index], LE_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[1,2,index])
-            # for this case r, θ, ϕ are fixed so derivatives that depend on them are zero.
-            # We only need the real part here. The m^2*cos(mϕ) term comes from two applications of the chain rule. TODO: double check this is correct.
-            #phi_bar -= m^2*cos(m*phi)*ForwardDiff.derivative(_eimp_imag->L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, _eimp_imag, rn, Pnm, C_n_m),eimp_imag)
-            #theta_bar += 0.0 # dPdθ is zero for this case, so there is no theta bar contribution.
-            # r_bar += 0.0 # dfdr is zero for this case since r = 1.0 for n=m=0
+            # I'm building the pullback functions with signatures of the form f!(cotangents,original inputs, other required inputs)
+            scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, s̄p, r, theta, phi, n, m, dPdt_n_m)
+            # scalar_potential += local_expansion[1,1,index]
         end
 
         if VPS
             #vector_potential += L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-            #local_expansion_bar[1,2,index] += ForwardDiff.derivative(LE2_real->L2B_vector_potential(LE2_real, local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[1,2,index])
-            #local_expansion_bar[2,2,index] -= ForwardDiff.derivative(LE2_imag->L2B_vector_potential(local_expansion[1,2,index], LE2_imag, local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[2,2,index])
-            #local_expansion_bar[1,3,index] += ForwardDiff.derivative(LE3_real->L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], LE3_real, local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[1,3,index])
-            #local_expansion_bar[2,3,index] -= ForwardDiff.derivative(LE3_imag->L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], LE3_imag, local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[2,3,index])
-            #local_expansion_bar[1,4,index] += ForwardDiff.derivative(LE4_real->L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], LE4_real, local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[1,4,index])
-            #local_expansion_bar[2,4,index] -= ForwardDiff.derivative(LE4_imag->L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], LE4_imag, eimp_real, eimp_imag, rn, Pnm, C_n_m),local_expansion[2,4,index])
-            args = (local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-            for i=2:4
-                # Using sum is easier to write than looping over indices of v̄p. A lower-allocation implementation would allocate space to evaluate the gradients in-place. 
-                # Also, a lower-allocation version would evaluate analytic derivatives but that's a lot of work.
-                local_expansion_bar[1,i,index] += sum(v̄p .* forwarddiff_grad(L2B_vector_potential,args,2*i-1))
-                local_expansion_bar[2,i,index] -= sum(v̄p .* forwarddiff_grad(L2B_vector_potential,args,2*i))
-            end
-
-            #phi_bar -= m^2*cos(m*phi)*ForwardDiff.derivative(_eimp_imag->L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, _eimp_imag, rn, Pnm, C_n_m), eimp_imag)
+            vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, v̄p, r, theta, phi, n, m, dPdt_n_m)
+            # vector_potential += SVector{3}(
+            #     local_expansion[1,2,1],
+            #     local_expansion[1,3,1],
+            #     local_expansion[1,4,1]
+            # )
         end
 
         #--- m = 0, n = 1 ---#
@@ -1231,6 +929,7 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
             # eimp is unchanged
             # alpha = 0
             beta_n_m = zero(TF)
+            dbetadt_n_m = zero(TF)
             
             # index
             index += 1
@@ -1240,63 +939,18 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
             #####
 
             if PS
-                # scalar_potential += L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                args = (local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                local_expansion_bar[1,1,index] += s̄p*forwarddiff_deriv(L2B_scalar_potential,args,1)
-                local_expansion_bar[2,1,index] -= s̄p*forwarddiff_deriv(L2B_scalar_potential,args,2)
-                # e^imϕ is still 1, so no derivative for ϕ
-                # however, r and θ are nonzero now.
-
-                r_bar += s̄p*forwarddiff_deriv(L2B_scalar_potential,args,5)#*n*r^(n-1) n=1 -> n*r^(n-1) = 1
-                theta_bar += s̄p*dPdt_n_m*forwarddiff_deriv(L2B_scalar_potential,args,6)
-
+                #scalar_potential += L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
+                scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, s̄p, r, theta, phi, n, m, dPdt_n_m)
             end
 
             if VPS
                 #vector_potential += L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                args = (local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                for i=2:4
-                    local_expansion_bar[1,i,index] += sum(v̄p .* forwarddiff_deriv(L2B_vector_potential,args,2*i-1))
-                    local_expansion_bar[2,i,index] -= sum(v̄p .* forwarddiff_deriv(L2B_vector_potential,args,2*i))
-                end
-                #phi, r, theta:
-                #phi_bar += 0.0
-                r_bar += sum(v̄p .* forwarddiff_deriv(L2B_vector_potential,args,9))#*n*r^(n-1) n=1 -> n*r^(n-1) = 1)
-                theta_bar += dPdt_n_m*sum(v̄p .* forwarddiff_deriv(L2B_vector_potential,args,10))
+                vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, v̄p, r, theta, phi, n, m, dPdt_n_m)
             end
 
             if VS
                 #velocity += L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
-                args = (local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
-                for i=1:4
-                    local_expansion_bar[1,i,index] += sum(v̄ .* forwarddiff_deriv(L2B_velocity,args,2*i-1))
-                    local_expansion_bar[1,i,index] -= sum(v̄ .* forwarddiff_deriv(L2B_velocity,args,2*i))
-                end
-                #phi_bar += 0.0 # e^imϕ is still 1.0 for this case since m=0
-                #r_bar += sum(v̄ .* forwarddiff_deriv(L2B_velocity,args,11))*(n-1)*rnm2 # n-1 = 0 for this case
-                theta_bar += dPdt_n_m*sum(v̄ .* forwarddiff_deriv(L2B_velocity,args,12))
-
-                # also need contributions from R, dPdt_n_m, and beta_n_m to theta/phi:
-                # R contribution:
-                # theta_bar += ((d L2B / dR)(dR/dtheta)) v̄
-                # phi_bar += ((d L2B / dR)(dR/dphi)) v̄
-                dL2BdR = forwarddiff_jacobian(L2B_velocity,args,16) # 3x3x3, squashed to 3x27.
-                # dRdtheta and dRdphi only need to be calculated once per function call
-                #dRdtheta = forwarddiff_deriv(rot,(theta,phi),1) # 3x3
-                #dRdphi = forwarddiff_deriv(rot,(theta,phi),2) # 3x3
-                for i=1:3
-                    # j is actually two indices squished into one linear index.
-                    for j=1:9
-                        theta_bar += v̄[i]*dL2BdR[i,j]*dRdtheta[j]
-                        phi_bar += v̄[i]*dL2BdR[i,j]*dRdphi[j]
-                    end
-                end
-                # theta_bar += (d L2B / d(dPdt_n_m)) d2Pdt2_n_m v̄
-                theta_bar += sum(forwarddiff_deriv(L2B_velocity,args,13) .* v̄) * d2Pdt2_n_m
-                # theta_bar += (d L2B / d(beta_n_m)) d(beta_n_m)/dtheta v̄
-                # theta_bar += 0.0
-                # beta is zero for this case.
-                
+                velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, index, v̄, r, theta, phi, d2Pdt2_n_m, dbetadt_n_m, dRdt, dRdp, velocity)
             end
             
             #--- m = 1, n = 1 ---#
@@ -1312,10 +966,9 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
             beta_nm1_m = 0.0
             beta_nm2_m = 0.0
 
-            # we also need dbeta/dtheta:
-            dbetadt_nm2_m = zero(TF)
-            dbetadt_nm1_m = zero(TF)
-            dbetadt_n_m = 3*st
+            dbetadt_n_m = 0.0
+            dbetadt_nm1_m = 0.0
+            dbetadt_nm2_m = 0.0
 
             # Pnm
             Pnm = -st
@@ -1338,57 +991,23 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
             ##### evaluate
             #####
 
-            # same things as before, but now phi derivatives matter. beta is still zero though.
-
             if PS
                 #scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                args  = (local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                local_expansion_bar[1,1,index] += 2*s̄p*forwarddiff_deriv(L2B_scalar_potential,args,1)
-                local_expansion_bar[2,1,index] -= 2*s̄p*forwarddiff_deriv(L2B_scalar_potential,args,2)
-                phi_bar += 2*s̄p*(-forwarddiff_deriv(L2B_scalar_potential,args,3)*eimp_imag + forwarddiff_deriv(L2B_scalar_potential,args,4)*eimp_real)*m
-                r_bar += 2*s̄p*forwarddiff_deriv(L2B_scalar_potential,args,5) # n = 1, so d(rn)/dr = 1
-                theta_bar += 2*s̄p*forwarddiff_deriv(L2B_scalar_potential,args,6) * dPdt_n_m
-                
+                scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, s̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
             end
 
             if VPS
                 #vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                args = (local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                for i=1:3
-                    local_expansion_bar[1,i,index] += 2*sum(v̄p.*forwarddiff_deriv(L2B_vector_potential,args,2*i-1))
-                    local_expansion_bar[2,i,index] -= 2*sum(v̄p.*forwarddiff_deriv(L2B_vector_potential,args,2*i))
-                end
-                phi_bar += 2*sum(-v̄p.*(forwarddiff_deriv(L2B_vector_potential,args,7)*eimp_imag .+ forwarddiff_deriv(L2B_vector_potential,args,8)*eimp_real))*m
-                r_bar += 2*sum(v̄p.*forwarddiff_deriv(L2B_vector_potential,args,9)) # n=1 -> r^n = r, so no extra chain rule terms for this case
-                theta_bar += 2*sum(v̄p.*forwarddiff_deriv(L2B_vector_potential,args,10))*dPdt_n_m
+                vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, v̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
             end
 
             if VS
                 #velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
-                args = (local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
-                for i=1:4
-                    local_expansion_bar[1,i,index] += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,2*i-1))
-                    local_expansion_bar[2,i,index] -= 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,2*i))
-                end
-                phi_bar += 2*sum(-v̄.*(forwarddiff_deriv(L2B_vector_potential,args,7)*eimp_imag .+ forwarddiff_deriv(L2B_vector_potential,args,8)*eimp_real))*m
-                #r_bar += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,11)) * 0 # rnm1 = 1 since m = 1, so there's no contribution from this term
-                theta_bar += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,12))*dPdt_n_m
-                theta_bar += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,13))*d2Pdt2_n_m
-                # no beta contribution since beta is still constant
-                # R contribution:
-                dL2BdR = forwarddiff_jacobian(L2B_velocity,args,16) # 3x3x3, squashed to 3x27.
-                # dRdtheta and dRdphi only need to be calculated once
-                #dRdtheta = forwarddiff_deriv(rot,(theta,phi),1) # 3x3
-                #dRdphi = forwarddiff_deriv(rot,(theta,phi),2) # 3x3
-                for i=1:3
-                    for j=1:9
-                        theta_bar += 2*v̄[i]*dL2BdR[i,j]*dRdtheta[j]
-                        phi_bar += 2*v̄[i]*dL2BdR[i,j]*dRdphi[j]
-                    end
-                end
+                velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, index, v̄, r, theta, phi, d2Pdt2_n_m, dbetadt_n_m, dRdt, dRdp, velocity; scale_by_two=true)
             end
-        end
 
+        end
+        
         #--- m = 0, m = 1, n > 1 ---#
 
         if P > 1
@@ -1396,6 +1015,7 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
             m = 1
             alpha_n_0 = zero(TF)        # n>1, m<2
             beta_n_0 = zero(TF)         # n>1, m<1
+            dbetadt_n_0 = zero(TF)      # n>1, m<1
             P_nm2_0 = 0.0               # n=-1,m=0
             P_nm1_0 = 1.0               # n=0, m=0
             P_n_0 = ct                  # n=1, m=0
@@ -1411,6 +1031,15 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
             dPdct_nm1_0 = 0.0           # n=0, m=0
             d2Pdct2_nm1_0 = 0.0         # n=0, m=0
             P_nm1_m = 0.0               # n=0, m=1
+
+            # additional tracked terms:
+            alpha_nm2_m = 0.0
+            alpha_nm1_m = 0.0
+            alpha_n_m = 3.0 # alpha_2_2 = 3.0
+            dalphadt_nm2_m = 0.0
+            dalphadt_nm1_m = 0.0
+            dalphadt_n_m = 0.0
+            dalphadt_n_0 = 0.0 # alpha_0_0 is zero, so all alpha_n_0 are zero
 
             for n in 2:P
 
@@ -1433,10 +1062,10 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
                 beta_nm1_m = beta_n_m
                 beta_n_m = ((2*n-1) * ct * beta_nm1_m - n * beta_nm2_m) / (n-1)
 
-                # we also need dbeta/dtheta:
+                # dbetadt
                 dbetadt_nm2_m = dbetadt_nm1_m
                 dbetadt_nm1_m = dbetadt_n_m
-                dbetadt_n_m = ((2*n-1)*(-st*beta_nm1_m + ct*dbetadt_nm1_m) - n*dbetaedt_nm2_m)/(n-1)
+                dbetadt_n_m = ((2*n-1)*(-st*beta_nm1_m + ct*dbetadt_nm1_m) - n*dbetadt_nm2_m)/(n-1)
                 
                 # Pnm, m=1
                 P_nm1_m = Pnm
@@ -1462,6 +1091,15 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
                 d3Pdt3_n_0 = d3Pdt3_nm2_0 - (2*n-1) * (st*d2Pdt2_nm1_0 + 2*ct*P_nm1_m - st*P_nm1_0)
                 d2Pdt2_n_m = d3Pdt3_n_0
 
+                # third derivative for m=1
+                alpha_nm2_m = alpha_nm1_m
+                alpha_nm1_m = alpha_n_m
+                alpha_n_m = ((2*n-1)*ct*alpha_nm1_m - (n+m-1)*alpha_nm2_m)/(n-m)
+                dalphadt_nm2_m = dalphadt_nm1_m
+                dalphadt_nm1_m = dalphadt_n_m
+                dalphadt_n_m = ((2*n-1)*(st*alpha_nm1_m + ct*dalphadt_nm1_m) - (n+m-1)*dalphadt_nm2_m)/(n-m)
+                d3Pdt3_n_m = (n+m)*(-st*alpha_nm1_m + ct*dalphadt_nm1_m) - 2*n*n*st*ct*alpha_n_m - (n*(n*st*st+1)-m*m)*dalphadt_n_m
+
                 # second derivatives over sin(theta)
                 dPdct_nm1_0 = dPdct_n_0
                 d2Pdct2_nm1_0 = d2Pdct2_n_0
@@ -1481,136 +1119,30 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
 
                 if PS
                     #scalar_potential += L2B_scalar_potential(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
-                    args = (local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
-
-                    local_expansion_bar[1,1,index_m0] += s̄*forwarddiff_deriv(L2B_scalar_potential,args,1)
-                    local_expansion_bar[2,1,index_m0] -= s̄*forwarddiff_deriv(L2B_scalar_potential,args,2)
-                    # next two entries are explicity constraints
-                    # n is now > 1
-                    r_bar += s̄*forwarddiff_deriv(scalar_potential,args,5) * n * rnm1
-                    # check to make sure initializations are consistent
-                    if abs(rnm1/r - rnm2) > 1e-12
-                        error("rnm1/r is not equal to rnm2: $(rnm1/r) ≠ $rnm2")
-                    end
-                    theta_bar += s̄*forwarddiff_deriv(scalar_potential,args,6) * dPdt_n_0
-
                     #scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                    args = (local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-
-                    local_expansion_bar[1,1,index_m0] += 2*s̄*forwarddiff_deriv(L2B_scalar_potential,args,1)
-                    local_expansion_bar[2,1,index_m0] -= 2*s̄*forwarddiff_deriv(L2B_scalar_potential,args,2)
-
-                    phi_bar += 2*s̄*(-forwarddiff_deriv(L2B_scalar_potential,args,3)*eimp_imag + forwarddiff_deriv(L2B_scalar_potential,args,4)*eimp_real)*m
-                    r_bar += 2*s̄*forwarddiff_deriv(scalar_potential,args,5) * n * rnm1
-                    theta_bar += 2*s̄*forwarddiff_deriv(scalar_potential,args,6) * dPdt_n_m
-
+                    scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, one(TF), zero(TF), rn, P_n_0, C_n_0, index_m0, s̄p, r, theta, phi, n, 0, dPdt_n_0)
+                    scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, s̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
                 end
         
                 if VPS
                     #vector_potential += L2B_vector_potential(local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
-                    args = (local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
-                    
-                    for i=2:4
-                        local_expansion_bar[1,i,index_m0] += sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,2*i-1))
-                        local_expansion_bar[2,i,index_m0] -= sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,2*i))
-                    end
-                    # no phi contribution for this case
-                    r_bar += sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,9))*n*rnm1
-                    theta_bar += sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,10))*dPdt_n_0
-
                     #vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-                    args = (local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
-
-                    for i=2:4
-                        local_expansion_bar[1,i,index_m0] += 2*sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,2*i-1))
-                        local_expansion_bar[2,i,index_m0] -= 2*sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,2*i))
-                    end
-                    phi_bar += 2*sum(v̄p.*(-forwarddiff_deriv(L2B_scalar_potential,args,3)*eimp_imag .+ forwarddiff_deriv(L2B_scalar_potential,args,4)*eimp_real))*m
-                    r_bar += 2*sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,9))*n*rnm1
-                    theta_bar += 2*sum(v̄p.*forwarddiff_deriv(L2B_velocity,args,10))*dPdt_n_m
-
+                    vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, one(TF), zero(TF), rn, P_n_0, C_n_0, index_m0, v̄p, r, theta, phi, n, 0, dPdt_n_0)
+                    vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, Pnm, C_n_m, index, v̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
                 end
         
                 if VS
                     #velocity += L2B_velocity(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch)
-                    args = (local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch)
-
-                    for i=1:4
-                        local_expansion_bar[1,i,index_m0] += sum(v̄.*forwarddiff_deriv(L2B_velocity,args,2*i-1))
-                        local_expansion_bar[2,i,index_m0] -= sum(v̄.*forwarddiff_deriv(L2B_velocity,args,2*i))
-                    end
-                    # no phi contribution in the normal spot... but it will contribute to R
-                    r_bar += sum(v̄.*forwarddiff_deriv(L2B_velocity,args,11))*(n-1)*rnm2
-                    if abs(rnm1/r - rnm2) > 1e-12
-                        error("rnm1/r is not equal to rnm2: $(rnm1/r) ≠ $rnm2")
-                    end
-                    theta_bar += sum(v̄.*forwarddiff_deriv(L2B_velocity,args,12))*dPdt_n_0
-                    theta_bar += sum(v̄.*forwarddiff_deriv(L2B_velocity,args,13))*d2Pdt2_n_0
-                    #theta_bar += sum(v̄.*forwarddiff_deriv(L2B_velocity,args,14))*dbetadt_n_0 # need to calculuate dbetadt_n_m. However, beta_n_0 is zero so this term can be ignored the first time.
-                    dL2BdR = forwarddiff_jacobian(L2B_velocity,args,16)
-                    for i=1:3
-                        for j=1:9
-                            theta_bar += v̄[i]*dL2BdR[i,j]*dRdtheta[j]
-                            phi_bar += v̄[i]*dL2BdR[i,j]*dRdphi[j]
-                        end
-                    end
-                    
                     #velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
-                    args = (local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
-                    for i=1:4
-                        local_expansion_bar[1,i,index_m0] += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,2*i-1))
-                        local_expansion_bar[2,i,index_m0] -= 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,2*i))
-                    end
-                    phi_bar += 2*sum(v̄.*(-forwarddiff_deriv(L2B_scalar_potential,args,3)*eimp_imag .+ forwarddiff_deriv(L2B_scalar_potential,args,4)*eimp_real))*m
-                    r_bar += 2*sum(v̄.(forwarddiff_deriv(L2B_velocity,args,11)))*(n-1)*rnm2
-                    theta_bar += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,12))*dPdt_n_0
-                    theta_bar += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,13))*d2Pdt2_n_0
-                    theta_bar += 2*sum(v̄.*forwarddiff_deriv(L2B_velocity,args,14))*dbetadt_n_m
-
-                    dL2BdR = forwarddiff_jacobian(L2B_velocity,args,16)
-                    for i=1:3
-                        for j=1:9
-                            theta_bar += 2*v̄[i]*dL2BdR[i,j]*dRdtheta[j]
-                            phi_bar += 2*v̄[i]*dL2BdR[i,j]*dRdphi[j]
-                        end
-                    end
-
+                    velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch, index_m0, v̄, r, theta, phi, d2Pdt2_n_0, dbetadt_n_0, dRdt, dRdp, velocity)
+                    velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, index, v̄, r, theta, phi, d2Pdt2_n_m, dbetadt_n_m, dRdt, dRdp, velocity; scale_by_two=true)
                 end
 
                 if GS
                     # m = 0
                     ddt_Pn0_st = zero(TF)
                     #this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm2, P_n_0, dPdt_n_0, d2Pdt2_n_0, ddt_Pn0_st, alpha_n_0, beta_n_0, st, ct, sp, cp, C_n_0, R, n, 0, derivatives_switch)
-                    args = (local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm2, P_n_0, dPdt_n_0, d2Pdt2_n_0, ddt_Pn0_st, alpha_n_0, beta_n_0, st, ct, sp, cp, C_n_0, R, n, 0, derivatives_switch)
-                    _f(_args) = hcat(L2B_velocity_gradient(_args)...)
-                    # for the local_expansion cotangents, the extra contribution from the rotation matrix disappears since dR/d(local expansion) = 0
-                    for i=1:4
-                        local_expansion_bar[1,i,index_m0] += sum(ḡ'*R*forwarddiff_deriv(_f,args,2*i-1))
-                        local_expansion_bar[1,i,index_m0] -= sum(ḡ'*R*forwarddiff_deriv(_f,args,2*i))
-                    end
-                    # first ϕ contributions are zero due to fixed ϕ
-                    dghatdr = forwarddiff_deriv(_f,args,11)
-                    dghatdPn0 = forwarddiff_deriv(_f,args,12)
-                    dghatddPdtn0 = forwarddiff_deriv(_f,args,13)
-                    dghatd2Pdt2n0 = forwarddiff_deriv(_f,args,14)
-                    #dghatdddtPn0 = forwarddiff_deriv(_f,args,15) # ddt_Pn0_st is zero
-                    #dghatdalphan0 = forwarddiff_deriv(_f,args,16) # alpha_n_0 is zero
-                    #dghatdbetan0 = forwarddiff_deriv(_f,args,17) # beta_n_0 is zer0
-                    dghatdst = forwarddiff_deriv(_f,args,18)
-                    dghatdct = forwarddiff_deriv(_f,args,19)
-                    dghatdsp = forwarddiff_deriv(_f,args,20)
-                    dghatdcp = forwarddiff_deriv(_f,args,21)
-                    dghatdR = forwarddiff_jacobian(_f,args,23) # 81 entries in a 3x3x3x3 tensor, but indexed in a 9x9 array.
-                    for i=1:3
-                        for j=1:3
-                            for k=1:3
-                                r_bar += ḡ[k,i]*R[j,i]*dghatdr[j,k]*(n-2)*rnm2/r
-                                theta_bar += ḡ[k,i]*R[j,i]*(dghatdPn0[j,k]*dPdt_n_0 + dghatddPdtn0[j,k]*d2Pdt2_n_0 + dghatd2Pdt2n0[j,k]*d3Pdt3_n_0 + dghatdst[j,k]*ct - dghatdct[j,k]*st + dghatdsp[j,k]*cp - dghatdcp[j,k]*sp + sum(dghatdR[27*(j-1)+9*(k-1)+1:27*(j-1)+9*(k-1)+9].*dRdtheta[1:end]))
-                                phi_bar += ḡ[k,i]*R[j,i]*(sum(dghatdR[27*(j-1)+9*(k-1)+1:27*(j-1)+9*(k-1)+9].*dRdphi[1:end]))
-                            end
-                        end
-                    end
-                    
+                    gradient_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, one(TF), zero(TF), rnm2, P_n_0, dPdt_n_0, d2Pdt2_n_0, ddt_Pn0_st, alpha_n_0, beta_n_0, st, ct, sp, cp, C_n_0, R, n, 0, derivatives_switch, index_m0, ḡ, r, dRdt, dRdp, dalphadt_n_0, dbetadt_n_0, d3Pdt3_n_0)
                     #dudr += this_dudr
                     #dudt_r += this_dudt_r
                     #dudp_r_st += this_dudp_r_st
@@ -1618,44 +1150,10 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
                     # m = 1
 
                     #this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, Pnm, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_0, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
-                    
+                    gradient_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm2, Pnm, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_0, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch, index, ḡ, r, dRdt, dRdp, dalphadt_n_m, dbetadt_n_m, d3Pdt3_n_m; scale_by_two=true)
                     #dudr += 2 * this_dudr
                     #dudt_r += 2 * this_dudt_r
                     #dudp_r_st += 2 * this_dudp_r_st
-
-                    args = (local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, Pnm, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_0, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
-                    _f(_args) = hcat(L2B_velocity_gradient(_args)...)
-                    # for the local_expansion cotangents, the extra contribution from the rotation matrix disappears since dR/d(local expansion) = 0
-                    for i=1:4
-                        local_expansion_bar[1,i,index_m0] += 2*sum(ḡ'*R*forwarddiff_deriv(_f,args,2*i-1))
-                        local_expansion_bar[1,i,index_m0] -= 2*sum(ḡ'*R*forwarddiff_deriv(_f,args,2*i))
-                    end
-                    dghatdeimp_real = forwarddiff_deriv(_f,args,9)
-                    dghatdeimp_imag = forwarddiff_deriv(_f,args,10)
-                    dghatdr = forwarddiff_deriv(_f,args,11)
-                    dghatdPnm = forwarddiff_deriv(_f,args,12)
-                    dghatddPdtnm = forwarddiff_deriv(_f,args,13)
-                    dghatd2Pdt2nm = forwarddiff_deriv(_f,args,14)
-                    # alpha_n_1 = zero(TF) # this goes to zero, so the alpha contribution ends up not mattering. This makes the third-derivative term of Pnm also go to zero... I think. I'll have to double check that this is correct.
-                    #d3Pdt3_n_m = 2*n^2*st*ct*alpha_n_m - (n*(n*st^2 + 1) - 1) * dalphadt_n_1
-                    dghatdddtPnmst = forwarddiff_deriv(_f,args,15)
-                    dddt_Pnm_stdt = (dPdt_n_m - ct/st*Pnm)/st
-                    # dghatdalphan0 = forwarddiff_deriv(_f,args,16) # alpha_n_0 is zero
-                    dghatdbetanm = forwarddiff_deriv(_f,args,17)
-                    dghatdst = forwarddiff_deriv(_f,args,18)
-                    dghatdct = forwarddiff_deriv(_f,args,19)
-                    dghatdsp = forwarddiff_deriv(_f,args,20)
-                    dghatdcp = forwarddiff_deriv(_f,args,21)
-                    dghatdR = forwarddiff_jacobian(_f,args,23) # 81 entries in a 3x3x3x3 tensor, but indexed in a 9x27 array.
-                    for i=1:3
-                        for j=1:3
-                            for k=1:3
-                                r_bar += 2*ḡ[k,i]*R[j,i]*dghatdr[j,k]*(n-2)*rnm2/r
-                                theta_bar += 2*ḡ[k,i]*R[j,i]*(dghatdPnm[j,k]*dPdt_n_m + dghatddPdtnm[j,k]*d2Pdt2_n_m + dghatdddtPnmst[j,k]*dddt_Pnm_stdt + dghatdbetanm[j,k]*dbetadt_n_m + dghatdst[j,k]*ct - dghatdct[j,k]*st + dghatdsp[j,k]*cp - dghatdcp[j,k]*sp + sum(dghatdR[27*(j-1)+9*(k-1)+1:27*(j-1)+9*(k-1)+9].*dRdtheta[1:end]))
-                                phi_bar += 2*ḡ[k,i]*R[j,i]*(-m*forwarddiff_deriv(_f,args,9)*dghatdeimp_imag + m*forwarddiff_deriv(_f,args,10)*dghatdeimp_real + sum(dghatdR[27*(j-1)+9*(k-1)+1:27*(j-1)+9*(k-1)+9].*dRdphi[1:end]))
-                            end
-                        end
-                    end
                 end
 
             end
@@ -1670,6 +1168,7 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
 
             # alpha_n_n
             alpha_n_n = TF(3.0) # sin(theta)^(n-2) (2*n-1)!! for n=2
+            dalphadt_n_n = TF(0.0)
 
             # rn
             rnm2 = zero(TF) # n=-1...
@@ -1727,6 +1226,19 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
 
                 # index
                 index = (n * (n + 1)) >> 1 + m + 1
+
+                # dalphadt
+                dalphadt_n_m = dalphadt_n_n
+                dalphadt_nm1_m = 0.0
+                dalphadt_nm2_m = 0.0
+
+                # dbetadt
+
+                dbetadt_n_m = dalphadt_n_m*st + alpha_n_m*ct
+                #dbetadt_nm1_m = 0.0 # not actually needed.
+
+                # third derivative
+                d3Pdt3_n_m = (n+m)*(-st*alpha_nm1_m + ct*dalphadt_nm1_m) - 2*n^2*st*ct*alpha_n_m - (n*(n*st^2+1) - m^2) * dalphadt_n_m
                 
                 #####
                 ##### evaluate
@@ -1734,30 +1246,25 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
 
                 if PS
                     #scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
-                    args = (local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
-                    local_expansion_bar[1,1,index] += s̄*forwarddiff_deriv(L2B_scalar_potential,args,1)
-                    local_expansion_bar[2,1,index] -= s̄*forwarddiff_deriv(L2B_scalar_potential,args,2)
-                    phi_bar += s̄*(-forwarddiff_deriv(L2B_scalar_potential,args,3)*eimp_imag + forwarddiff_deriv(L2B_scalar_potential,args,4)*eimp_real)*m
-                    r_bar += s̄*forwarddiff_deriv(L2B_scalar_potential,args,5)*m*rnm1 # rn is actually rm here -_-
-                    theta_bar += s̄*forwarddiff_deriv(L2B_scalar_potential,args,6)*dPdt_n_m
-                    
+                    scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, P_n_m, C_n_m, index, s̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
                 end
         
                 if VPS
-                    vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
-                    
+                    #vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
+                    vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn, P_n_m, C_n_m, index, v̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
                 end
         
                 if VS
-                    velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
+                    #velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
+                    velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch, index, v̄, r, theta, phi, d2Pdt2_n_m, dbetadt_n_m, dRdt, dRdp, velocity; scale_by_two=true)
                 end
 
                 if GS
-                    this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
-                    
-                    dudr += 2 * this_dudr
-                    dudt_r += 2 * this_dudt_r
-                    dudp_r_st += 2 * this_dudp_r_st
+                    #this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
+                    gradient_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm2, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch, index, ḡ, r, dRdt, dRdp, dalphadt_n_m, dbetadt_n_m, d3Pdt3_n_m; scale_by_two=true)
+                    #dudr += 2 * this_dudr
+                    #dudt_r += 2 * this_dudt_r
+                    #dudp_r_st += 2 * this_dudp_r_st
                 end
                 
                 # prepare to recurse C_n_m
@@ -1806,31 +1313,49 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
                     # index
                     index = (n * (n + 1)) >> 1 + m + 1
 
+                    # dalphadt
+
+                    dalphadt_nm2_m = dalphadt_nm1_m
+                    dalphadt_nm1_m = dalphadt_n_m
+                    dalphadt_n_m = ((2*n-1)*(st*alpha_nm1_m + ct*dalphadt_nm1_m) - (n+m-1)*dalphadt_nm2_m)/(n-m)
+
+                    # dbetadt
+
+                    dbetadt_n_m = dalphadt_n_m*st + alpha_n_m*ct
+                    
+                    # third derivative
+
+                    d3Pdt3_n_m = (n+m)*(-st*alpha_nm1_m + ct*dalphadt_nm1_m) - 2 * n^2 * st * ct * alpha_n_m - (n*(n*st^2 + 1) - m^2) * dalphadt_n_m
+
                     #####
                     ##### evaluate
                     #####
                     if PS
-                        scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop)
+                        #scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop)
+                        scalar_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop, index, s̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
                     end
             
                     if VPS
-                        vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop)
+                        #vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop)
+                        vector_potential_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop, index, v̄p, r, theta, phi, n, m, dPdt_n_m; scale_by_two=true)
                     end
             
                     if VS
-                        velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch)
+                        #velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch)
+                        velocity_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch, index, v̄, r, theta, phi, d2Pdt2_n_m, dbetadt_n_m, dRdt, dRdp, velocity; scale_by_two=true)
                     end
         
                     if GS
-                        this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2_loop, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m_loop, R, n, m, derivatives_switch)
-                        
-                        dudr += 2 * this_dudr
-                        dudt_r += 2 * this_dudt_r
-                        dudp_r_st += 2 * this_dudp_r_st
+                        #this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2_loop, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m_loop, R, n, m, derivatives_switch)
+                        gradient_pullback!(local_expansion_bar, r_theta_phi_bar, local_expansion, eimp_real, eimp_imag, rnm2_loop, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m_loop, R, n, m, derivatives_switch, index, ḡ, r, dRdt, dRdp, dalphadt_n_m, dbetadt_n_m, d3Pdt3_n_m; scale_by_two=true)
+                        #dudr += 2 * this_dudr
+                        #dudt_r += 2 * this_dudt_r
+                        #dudp_r_st += 2 * this_dudp_r_st
                     end
                 end
 
                 # tail recursion
+                dalphadt_n_n = -(2*n+1)*(ct*alpha_n_n + st*dalphadt_n_n)
                 alpha_n_n *= -st * (2*n+1)
                 # double_factorial *= 2*n+1
                 # st_nm2 *= -st
@@ -1841,15 +1366,39 @@ function ChainRulesCore.rrule(::typeof(L2B),body_position, expansion_center::SVe
 
         # rotate to cartesian
         # R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
-        duidrk = hcat(dudr, dudt_r, dudp_r_st)
-        gradient = duidrk * R'
-    
+        #duidrk = hcat(dudr, dudt_r, dudp_r_st)
+        #gradient = duidrk * R'
 
-        # return input cotangents
-
+        # extra term from product rule due to rotation:
+        # r_theta_phi_bar[l] += duidrk[i,k]*dRd(r[l])[j,k]
+        # also note that duidrk = gradient * R (since R' = R^-1)
+        # so: r_theta_phi_bar[l] += gradient[i,ii]*R[ii,k]*dRd(r[l])[j,k]
+        # manually iterate over l, since that corresponds to iterating over specific polar coordinates.
+        # dRdt and dRdp are previously calculated. dRdr = 0.
+        if VS || GS
+            for i=1:3
+                for j=1:3
+                    # no contribution to r̄ since dRdr = 0
+                    r_theta_phi_bar[3] += ḡ[j,i]*gradient[i,j]*R[j,i]*dRdt[i,j]
+                    r_theta_phi_bar[2] += ḡ[j,i]*gradient[i,j]*R[j,i]*dRdp[i,j]
+                end
+            end
+        end
+        
+        #return scalar_potential, vector_potential, velocity, gradient
+        # account for cartesian coordinate inputs
+        C2S_pullback!(body_position_bar, expansion_center_bar, r_theta_phi_bar, dx, dy, dz, r, theta, phi)
+        #end
+        #@show body_position_bar expansion_center_bar local_expansion_bar
+        #@show r_theta_phi_bar
         return NoTangent(),body_position_bar,expansion_center_bar,local_expansion_bar,NoTangent(),NoTangent()
     end
 
-    return (scalar_potential, vector_potential, velocity, gradient), pullbacks
+    return (scalar_potential, vector_potential[1:3], velocity[1:3], gradient[1:3,1:3]), pullbacks
 end
-=#
+#=
+@grad_from_chainrules_multiple_returns L2B(body_position::AbstractArray{<:ReverseDiff.TrackedReal},
+                                   expansion_center::AbstractArray{<:ReverseDiff.TrackedReal},
+                                   local_expansion::AbstractArray{<:ReverseDiff.TrackedReal},
+                                   derivatives_switch::DerivativesSwitch,
+                                   expansion_order::Val)=#

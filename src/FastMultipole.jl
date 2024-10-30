@@ -23,6 +23,8 @@ for file in ["containers", "complex", "derivatives", "element", "tree", "direct"
     include(file*".jl")
 end
 
+include("/home/eric/Research/VPM_derivatives/src/safe_accumulate.jl") # add for real after testing.
+
 export fmm!, direct!, Tree, SortWrapper, ProbeSystem, add_line!, reset!, DerivativesSwitch
 
 end # module

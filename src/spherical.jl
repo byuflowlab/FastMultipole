@@ -178,7 +178,11 @@ function M2M!(branch, child, harmonics, M, expansion_order::Val{P}) where P
     # get distance vector
     dx, dy, dz = branch.center - child.center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
+    #println("regular_harmonic:")
+    #@time harmonics = regular_harmonic!(harmonics, r, theta, phi, P)
     harmonics = regular_harmonic!(harmonics, r, theta, phi, P)
+    #println("M2M loop:")
+    #@time branch.multipole_expansion .= M2M_loop!(branch.multipole_expansion,child.multipole_expansion,harmonics,expansion_order)
     branch.multipole_expansion .= M2M_loop!(branch.multipole_expansion,child.multipole_expansion,harmonics,expansion_order)
 end
 
@@ -228,7 +232,7 @@ function M2M_loop!(branch_multipole_expansion,child_multipole_expansion,harmonic
     return branch_multipole_expansion
 end
 
-function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order::Val{P}) where P
+function M2L_loop_slow!(local_expansion, L, multipole_expansion, harmonics, expansion_order::Val{P}) where P
     for j in 0:P
         Cnm = odd_or_even(j)
         for k in 0:j
@@ -263,6 +267,52 @@ function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion
                 end
             end
             view(local_expansion,:,:,jks) .+= L
+        end
+    end
+    return local_expansion
+end
+
+
+function M2L_loop!(local_expansion, L, multipole_expansion, harmonics, expansion_order::Val{P}) where P
+    for j in 0:P
+        Cnm = odd_or_even(j)
+        for k in 0:j
+            jks = (j * (j + 1)) >> 1 + k + 1
+            L .= zero(eltype(L))
+            for n in 0:P
+                for m in -n:-1
+                    nms = (n * (n+1)) >> 1 - m + 1
+                    jnkm = (j + n)^2 + j + n + m - k + 1
+                    # jnkm_max = (P + P)^2 + P + P + -1 - 0 + 1 = (2P)^2 + 2P = 2P(2P+1)
+                    #Cnm_tmp = Cnm * harmonics[jnkm]
+                    Cnm_tmp1 = Cnm * harmonics[1,jnkm]
+                    Cnm_tmp2 = Cnm * harmonics[2,jnkm]
+                    for dim in 1:4
+                        #@inbounds L[dim] += conj(multipole_expansion[dim,nms]) * Cnm_tmp
+                        plusequals_accumulation_safe!(L[1,dim], multipole_expansion[1,dim,nms] * Cnm_tmp1 + multipole_expansion[2,dim,nms] * Cnm_tmp2)
+                        plusequals_accumulation_safe!(L[2,dim], multipole_expansion[1,dim,nms] * Cnm_tmp2 - multipole_expansion[2,dim,nms] * Cnm_tmp1)
+                        #@inbounds L[1,dim] += multipole_expansion[1,dim,nms] * Cnm_tmp1 + multipole_expansion[2,dim,nms] * Cnm_tmp2
+                        #@inbounds L[2,dim] += multipole_expansion[1,dim,nms] * Cnm_tmp2 - multipole_expansion[2,dim,nms] * Cnm_tmp1
+                    end
+                end
+                for m in 0:n
+                    nms = (n * (n+1)) >> 1 + m + 1
+                    jnkm = (j + n) * (j + n) + j + n + m - k + 1
+                    # jnkm_max = 2P * 2P + 2P + P + P - 0 + 1 = (2P)^2 + 2P + 2P + 1 = 4P^2 + 4P + 1 = (2P + 1)^2
+                    #Cnm_tmp = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m) * harmonics[jnkm]
+                    Cnm_tmp1 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m) * harmonics[1,jnkm]
+                    Cnm_tmp2 = Cnm * odd_or_even((k-m) * (1 >> (k>=m)) + m) * harmonics[2,jnkm]
+                    for dim in 1:4
+                        #@inbounds L[dim] += multipole_expansion[dim,nms] * Cnm_tmp
+                        plusequals_accumulation_safe!(L[1,dim], multipole_expansion[1,dim,nms] * Cnm_tmp1 - multipole_expansion[2,dim,nms] * Cnm_tmp2)
+                        plusequals_accumulation_safe!(L[2,dim], multipole_expansion[1,dim,nms] * Cnm_tmp2 + multipole_expansion[2,dim,nms] * Cnm_tmp1)
+                        #@inbounds L[1,dim] += multipole_expansion[1,dim,nms] * Cnm_tmp1 - multipole_expansion[2,dim,nms] * Cnm_tmp2
+                        #@inbounds L[2,dim] += multipole_expansion[1,dim,nms] * Cnm_tmp2 + multipole_expansion[2,dim,nms] * Cnm_tmp1
+                    end
+                end
+            end
+            plusequals_accumulation_safe!(view(local_expansion,:,:,jks), L)
+            #view(local_expansion,:,:,jks) .+= L
         end
     end
     return local_expansion
@@ -338,8 +388,11 @@ end
                     oddeven = odd_or_even(k)
                     C_tmp1 = regular_harmonics[1,jnkm] * oddeven
                     C_tmp2 = regular_harmonics[2,jnkm] * oddeven
+                    #plusequals_accumulation_safe!(L[1,:],branch_local_expansion[1,:,nms] .* C_tmp1 .+ branch_local_expansion[2,:,nms] .* C_tmp2)
+                    #plusequals_accumulation_safe!(L[2,:],branch_local_expansion[1,:,nms] .* C_tmp2 .- branch_local_expansion[2,:,nms] .* C_tmp1)
                     for dim in 1:4
                         #@inbounds L += conj(branch.local_expansion[dim,nms]) * C_tmp
+                        
                         @inbounds L[1,dim] += branch_local_expansion[1,dim,nms] * C_tmp1 + branch_local_expansion[2,dim,nms] * C_tmp2
                         @inbounds L[2,dim] += branch_local_expansion[1,dim,nms] * C_tmp2 - branch_local_expansion[2,dim,nms] * C_tmp1
                     end
@@ -351,6 +404,8 @@ end
                         oddeven = odd_or_even((m-k) * (1 >> (m >= k)))
                         C_tmp1 = regular_harmonics[1,jnkm] * oddeven
                         C_tmp2 = regular_harmonics[2,jnkm] * oddeven
+                        #plusequals_accumulation_safe!(L[1,:],branch_local_expansion[1,dim,nms] * C_tmp1 - branch_local_expansion[2,dim,nms] * C_tmp2)
+                        #plusequals_accumulation_safe!(L[2,:],branch_local_expansion[1,dim,nms] * C_tmp2 + branch_local_expansion[2,dim,nms] * C_tmp1)
                         for dim in 1:4
                             #@inbounds L += conj(branch.local_expansion[dim,nms]) * C_tmp
                             @inbounds L[1,dim] += branch_local_expansion[1,dim,nms] * C_tmp1 - branch_local_expansion[2,dim,nms] * C_tmp2
@@ -359,6 +414,8 @@ end
                     end
                 end
             end
+            #plusequals_accumulation_safe!(child_local_expansion[:,:,jks],L)
+            #plusequals_accumulation_safe!(view(child_local_expansion,:,:,jks), L)
             view(child_local_expansion,:,:,jks) .+= L
         end
     end
@@ -376,20 +433,12 @@ function L2B!(system, branch::SingleBranch, derivatives_switch, expansion_order)
 end
 
 function L2B!(system, bodies_index, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order, expansion_center) where {PS,VPS,VS,GS}
-    #l = length(ReverseDiff.tape(system[1][1].radius))
-    #println("initial tape entries: $l")
     for i_body in bodies_index
-        #l = length(ReverseDiff.tape(system[1][1].radius))
-		scalar_potential, vector_potential, velocity, gradient = L2B(system[i_body,POSITION], expansion_center[1:3], local_expansion, derivatives_switch, expansion_order)
-        #if length(ReverseDiff.tape(system[1][1].radius)) > 1
-        #    @show ReverseDiff.tape(system[1][1].radius)[end]
-        #end
-        #println("$(length(ReverseDiff.tape(system[1][1].radius)) - l) entries from L2B")
-        #l = length(ReverseDiff.tape(system[1][1].radius))
+		scalar_potential, vector_potential, velocity, gradient = L2B(system[i_body,POSITION], expansion_center, local_expansion, derivatives_switch, expansion_order)
         if PS
             system[i_body,SCALAR_POTENTIAL] += scalar_potential
         end
-        if VPS
+        if VPS 
             # note: system[i,VECTOR_POTENTIAL], system[i,VELOCITY], and system[i,VELOCITY_GRADIENT] must be mutable
             vpx, vpy, vpz = system[i_body,VECTOR_POTENTIAL]
             system[i_body,VECTOR_POTENTIAL] = SVector{3}(vpx+vector_potential[1],vpy+vector_potential[2],vpz+vector_potential[3])
@@ -412,7 +461,6 @@ function L2B!(system, bodies_index, local_expansion, derivatives_switch::Derivat
                 gradient[9] + v9
             )
         end
-        #println("$(length(ReverseDiff.tape(system[1][1].radius)) - l) other entries")
     end
 end
 
@@ -431,19 +479,19 @@ end
 
 "Does not include the rotation matrix R yet. Eq 28 in S&L"
 @inline function L2B_velocity(Lnm_real::TF1, Lnm_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag, eimp_real::TF2, eimp_imag, rnm1, Pnm, dPdt, beta, C_n_m, R, n, m, derivatives_switch::DerivativesSwitch{PS,VPS,<:Any,<:Any}) where {TF1,TF2,PS,VPS}
-	TF = promote_type(TF1,TF2)
+    TF = promote_type(TF1,TF2)
 
     # initialize
     velocity = zero(SVector{3,TF})
-
+    
     # intermediate quantities
     ux_real = n * Pnm
     uy_real = dPdt
     uz_imag = m * beta
-
+	
     # rotate to cartesian
-	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)
-
+	u_real_cartesian, u_imag_cartesian = complex_multiply(R, ux_real, 0, uy_real, 0, 0, uz_imag)	
+    
     # velocity due to scalar potential
     if PS
         Lnm_eimp_real, Lnm_eimp_imag = complex_multiply(eimp_real, eimp_imag, Lnm_real, Lnm_imag)
@@ -464,7 +512,6 @@ end
 
 		velocity += rnm1 * C_n_m * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_eimp_real, Lnm_x_eimp_imag, Lnm_y_eimp_real, Lnm_y_eimp_imag, Lnm_z_eimp_real, Lnm_z_eimp_imag)
     end
-
     return velocity
 end
 
@@ -480,16 +527,16 @@ end
     # intermediate values
     rnm2Cnm = rnm2 * C_n_m
     nm1 = n - 1
-
+    
     #####
     ##### du/dr
     #####
-
+    
     # intermediate quantities
     u1x_real = n * Pnm
     u1y_real = dPdt
     u1z_imag = m * beta
-
+    
     vx_real, vx_imag = eimp_real * u1x_real, eimp_imag * u1x_real
     vy_real, vy_imag = eimp_real * u1y_real, eimp_imag * u1y_real
     vz_real, vz_imag = -eimp_imag * u1z_imag, eimp_real * u1z_imag
@@ -505,7 +552,7 @@ end
 			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
         )
     end
-
+    
     # due to vector potential
     if VPS
 		dudr += nm1 * rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
@@ -514,12 +561,12 @@ end
     #####
     ##### du/dphi / r
     #####
-
+    
     # intermediate quantities
     u2x_real = nm1 * dPdt
     u2y_real = d2Pdt2 + n * Pnm
     u2z_imag = m * ddt_Pnm_st
-
+    
     vx_real, vx_imag = eimp_real * u2x_real, eimp_imag * u2x_real
     vy_real, vy_imag = eimp_real * u2y_real, eimp_imag * u2y_real
     vz_real, vz_imag = -eimp_imag * u2z_imag, eimp_real * u2z_imag
@@ -534,16 +581,16 @@ end
 			complex_multiply_real(u_real_cartesian[3], u_imag_cartesian[3], Lnm_real, Lnm_imag)
         )
     end
-
+    
     # due to vector potential
     if VPS
 		dudt_r += rnm2Cnm * complex_cross_real(u_real_cartesian[1], u_imag_cartesian[1], u_real_cartesian[2], u_imag_cartesian[2], u_real_cartesian[3], u_imag_cartesian[3], Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
     end
-
+    
     #####
     ##### du/dphi / r / sin(theta)
     #####
-
+    
     # intermediate quantities
     Fnm = n * n * Pnm + d2Pdt2
     u3x_real = sp * Fnm
@@ -552,11 +599,11 @@ end
     u3y_imag = m * sp * (alpha * (m * m - 1) - Fnm)
     u3z_real = zero(TF)
     u3z_imag = m * (n * ct * beta - dPdt)
-
+   
     vx_real, vx_imag = complex_multiply(eimp_real, eimp_imag, u3x_real, u3x_imag)
     vy_real, vy_imag = complex_multiply(eimp_real, eimp_imag, u3y_real, u3y_imag)
     vz_real, vz_imag = -eimp_imag * u3z_imag, eimp_real * u3z_imag
-
+    
     # due to scalar potential
     if PS
         dudp_r_st -= SVector{3}(
@@ -570,11 +617,12 @@ end
     if VPS
         dudp_r_st += rnm2Cnm * complex_cross_real(vx_real, vx_imag, vy_real, vy_imag, vz_real, vz_imag, Lnm_x_real, Lnm_x_imag, Lnm_y_real, Lnm_y_imag, Lnm_z_real, Lnm_z_imag)
     end
-
+    
 	return dudr, dudt_r, dudp_r_st
 end
 
-function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+function L2B(body_position, expansion_center::AbstractArray{TF}, local_expansion, derivatives_switch::DerivativesSwitch{PS,VPS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VPS,VS,GS,P}
+    
     #=
     R_n^m(\rho, \theta, \phi) &= (-1)^n \frac{\rho^n}{(n+\|m\|)!} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
     I_n^m(\rho, \theta, \phi) &= (-1)^n \frac{(n-\|m\|)!}{\rho^{n+1}} P_n^{\|m\|}(\cos \theta) e^{i m \phi}\\
@@ -582,7 +630,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
     =#
     dx, dy, dz = body_position - expansion_center
     r, theta, phi = cartesian_2_spherical(dx, dy, dz)
-
+    
 	#--- the following is inspired by Salloum and Lakkis (2020) with some improvements ---#
 
     # initialization
@@ -602,7 +650,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
 	end
 
     # note that by definition beta_n^m=0 for m<1 and alpha_n^m=0 for m<2
-
+    
     # m = 0, n = 0
     n = m = 0
     rn = 1.0            # r^n
@@ -637,7 +685,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
     if P > 0
         n = 1
         m = 0
-
+        
         #####
         ##### recurse
         #####
@@ -646,7 +694,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
         rnm2 = rnm1
         rnm1 = rn
         rn *= r
-
+        
         # Pnm
         Pnm = ct
         dPdt_n_m = -st
@@ -658,7 +706,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
         # eimp is unchanged
         # alpha = 0
         beta_n_m = zero(TF)
-
+        
         # index
         index += 1
 
@@ -677,7 +725,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
         if VS
             velocity += L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
         end
-
+        
         #--- m = 1, n = 1 ---#
 
         #####
@@ -725,11 +773,11 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
         end
 
     end
-
+    
     #--- m = 0, m = 1, n > 1 ---#
 
     if P > 1
-
+        
         m = 1
         alpha_n_0 = zero(TF)        # n>1, m<2
         beta_n_0 = zero(TF)         # n>1, m<1
@@ -754,22 +802,22 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
             #####
             ##### recurse
             #####
-
+            
             # rn
             rnm2 = rnm1
             rnm1 = rn
             rn *= r
-
+            
             # C_n_m
             n_plus_m += 1
             C_n_0 = -C_n_m
             C_n_m /= -n_plus_m
-
+            
             # beta
             beta_nm2_m = beta_nm1_m
             beta_nm1_m = beta_n_m
             beta_n_m = ((2*n-1) * ct * beta_nm1_m - n * beta_nm2_m) / (n-1)
-
+            
             # Pnm, m=1
             P_nm1_m = Pnm
             Pnm = beta_n_m * st
@@ -778,14 +826,14 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
             P_nm2_0 = P_nm1_0
             P_nm1_0 = P_n_0
             P_n_0 = 1/n*((2*n-1) * ct * P_nm1_0 - (n-1) * P_nm2_0)
-
+            
             # first derivatives, m=1
             dPdt_n_m = n * ct * beta_n_m - (n + m) * beta_nm1_m
-
+            
             # first derivatives, m=0
             dPdt_nm1_0 = dPdt_n_0
             dPdt_n_0 = ct * dPdt_nm1_0 - n * st * P_nm1_0
-
+            
             # second derivatives
             d2Pdt2_nm1_0 = d2Pdt2_n_0
             d2Pdt2_n_0 = dPdt_n_m
@@ -815,12 +863,12 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
 				scalar_potential += L2B_scalar_potential(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
                 scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
             end
-
+    
             if VPS
 				vector_potential += L2B_vector_potential(local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rn, P_n_0, C_n_0)
                 vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, Pnm, C_n_m)
             end
-
+    
             if VS
                 velocity += L2B_velocity(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm1, P_n_0, dPdt_n_0, beta_n_0, C_n_0, R, n, 0, derivatives_switch)
                 velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, Pnm, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
@@ -830,15 +878,15 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
                 # m = 0
                 ddt_Pn0_st = zero(TF)
                 this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index_m0], local_expansion[2,1,index_m0], local_expansion[1,2,index_m0], local_expansion[2,2,index_m0], local_expansion[1,3,index_m0], local_expansion[2,3,index_m0], local_expansion[1,4,index_m0], local_expansion[2,4,index_m0], one(TF), zero(TF), rnm2, P_n_0, dPdt_n_0, d2Pdt2_n_0, ddt_Pn0_st, alpha_n_0, beta_n_0, st, ct, sp, cp, C_n_0, R, n, 0, derivatives_switch)
-
+                
                 dudr += this_dudr
                 dudt_r += this_dudt_r
                 dudp_r_st += this_dudp_r_st
-
+                
                 # m = 1
 
                 this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, Pnm, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_0, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
-
+                
 				dudr += 2 * this_dudr
                 dudt_r += 2 * this_dudt_r
                 dudp_r_st += 2 * this_dudp_r_st
@@ -878,7 +926,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
             rnm2 = rnm1
             rnm1 = rn
             rn *= r
-
+            
             # C_n_m: increment n
             n_plus_m += 1
             C_n_m /= -n_plus_m
@@ -913,7 +961,7 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
 
             # index
             index = (n * (n + 1)) >> 1 + m + 1
-
+            
             #####
             ##### evaluate
             #####
@@ -921,23 +969,23 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
             if PS
 				scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
 			end
-
+    
             if VPS
                 vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn, P_n_m, C_n_m)
             end
-
+    
             if VS
                 velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1, P_n_m, dPdt_n_m, beta_n_m, C_n_m, R, n, m, derivatives_switch)
             end
 
             if GS
                 this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m, R, n, m, derivatives_switch)
-
+                
 				dudr += 2 * this_dudr
                 dudt_r += 2 * this_dudt_r
                 dudp_r_st += 2 * this_dudp_r_st
             end
-
+			
 			# prepare to recurse C_n_m
 			C_n_m_loop = C_n_m
 			n_plus_m_loop = n_plus_m
@@ -990,18 +1038,18 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
                 if PS
                     scalar_potential += 2 * L2B_scalar_potential(local_expansion[1,1,index], local_expansion[2,1,index], eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop)
                 end
-
+        
                 if VPS
                     vector_potential += 2 * L2B_vector_potential(local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rn_loop, P_n_m, C_n_m_loop)
                 end
-
+        
                 if VS
                     velocity += 2 * L2B_velocity(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm1_loop, P_n_m, dPdt_n_m, beta_n_m, C_n_m_loop, R, n, m, derivatives_switch)
                 end
-
+    
                 if GS
                     this_dudr, this_dudt_r, this_dudp_r_st = L2B_velocity_gradient(local_expansion[1,1,index], local_expansion[2,1,index], local_expansion[1,2,index], local_expansion[2,2,index], local_expansion[1,3,index], local_expansion[2,3,index], local_expansion[1,4,index], local_expansion[2,4,index], eimp_real, eimp_imag, rnm2_loop, P_n_m, dPdt_n_m, d2Pdt2_n_m, ddt_Pnm_st, alpha_n_m, beta_n_m, st, ct, sp, cp, C_n_m_loop, R, n, m, derivatives_switch)
-
+                    
                     dudr += 2 * this_dudr
                     dudt_r += 2 * this_dudt_r
                     dudp_r_st += 2 * this_dudp_r_st
@@ -1019,8 +1067,10 @@ function L2B(body_position::SVector{3,TF}, expansion_center, local_expansion, de
 
     # rotate to cartesian
     # R = SMatrix{3,3}(st*cp,st*sp,ct,ct*cp,ct*sp,-st,-sp,cp,0)
-    duidrk = hcat(dudr, dudt_r, dudp_r_st)
-    gradient = duidrk * R'
-
+    if VS || GS
+        duidrk = hcat(dudr, dudt_r, dudp_r_st)
+        gradient = duidrk * R'
+    end
+    
 	return scalar_potential, vector_potential, velocity, gradient
 end

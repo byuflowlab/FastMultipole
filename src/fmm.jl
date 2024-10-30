@@ -43,10 +43,14 @@ function upward_pass_singlethread!(branches, systems, expansion_order::Val{P}) w
     # loop over branches
     for branch in view(branches,length(branches):-1:1) # no need to create a multipole expansion at the very top level
         if branch.n_branches == 0 # branch is a leaf
+            #println("B2M:")
+            #@time B2M!(branch, systems, branch.harmonics, expansion_order)
             B2M!(branch, systems, branch.harmonics, expansion_order)
         else # not a leaf
             # iterate over children
             for child_branch in view(branches, branch.branch_index)
+                #println("M2M:")
+                #@time M2M!(branch, child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
                 M2M!(branch, child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
             end
         end
@@ -747,9 +751,12 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         if Threads.nthreads() == 1
             nearfield && (nearfield_singlethread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
             if farfield
-                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
-                horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
-                downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order)
+                println("upward pass:")
+                @time upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, source_tree.expansion_order)
+                println("horizontal pass:")
+                @time horizontal_pass && horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, source_tree.expansion_order)
+                println("downward pass:")
+                @time downward_pass && downward_pass_singlethread!(target_tree.branches, target_systems, derivatives_switch, target_tree.expansion_order)
             end
         else # multithread
             nearfield && length(direct_list) > 0 && (nearfield_multithread!(target_systems, target_tree.branches, derivatives_switch, source_systems, source_tree.branches, direct_list))
