@@ -62,6 +62,10 @@ include("sortwrapper.jl")
 
 export SortWrapper
 
+include("interaction_list.jl")
+
+export build_interaction_lists
+
 include("fmm.jl")
 
 export InteractionList, fmm!

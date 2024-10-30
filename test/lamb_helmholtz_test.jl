@@ -188,8 +188,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(true)
 
 # translate expansion
-error = nothing
-FastMultipole.multipole_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, error)
+FastMultipole.multipole_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 # apply Lamb-Helmholtz
 i, i_compressed = 1, 1
@@ -299,8 +298,7 @@ lamb_helmholtz = Val(true)
 derivatives_switch = DerivativesSwitch(true,true,true)
 
 # translate expansion
-error = nothing
-FastMultipole.multipole_to_local!(local_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, error)
+FastMultipole.multipole_to_local!(local_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 # evaluate local expansion
 Δx = x_target - local_branch.center

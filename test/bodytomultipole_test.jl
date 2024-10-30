@@ -278,8 +278,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 lamb_helmholtz = Val(false)
-relative_error = nothing
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, relative_error)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(target_branch.multipole_expansion,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(x_target - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -334,7 +333,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -391,7 +390,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(true)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 # evaluate at target
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
@@ -694,7 +693,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(true)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch())
@@ -769,8 +768,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
-FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -859,8 +858,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
-FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
@@ -966,8 +965,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(true)
-FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
-FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, nothing)
+FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(target_branch_point, branch_point, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())

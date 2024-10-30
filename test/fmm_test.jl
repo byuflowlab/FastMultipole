@@ -183,9 +183,8 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-error = nothing
-FastMultipole.multipole_to_local!(tree.branches[2], tree.branches[3], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, error)
-FastMultipole.multipole_to_local!(tree.branches[3], tree.branches[2], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, error)
+FastMultipole.multipole_to_local!(tree.branches[2], tree.branches[3], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(tree.branches[3], tree.branches[2], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(tree.branches[1].multipole_expansion, 3))
 FastMultipole.evaluate_local!((vortexparticles,), tree.branches[2], tree.branches[2].harmonics, velocity_n_m, Val(expansion_order), lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
@@ -294,9 +293,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(true)
 
 # translate multipoles
-this_error = nothing
-FastMultipole.multipole_to_local!(branch_2, branch_3, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, this_error)
-FastMultipole.multipole_to_local!(branch_3, branch_2, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz, this_error)
+FastMultipole.multipole_to_local!(branch_2, branch_3, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(branch_3, branch_2, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 # evaluate multipoles
 velocity_n_m = zeros(2,3,size(branch_2.harmonics,3))
@@ -404,12 +402,12 @@ end
 vortex_particles.potential .*= 0
 vortex_particles.velocity_stretching .*= 0
 
-expansion_order = 30
+expansion_order = 35
 leaf_size = 1
 
 tree = FastMultipole.Tree((vortex_particles,); expansion_order, leaf_size, shrink_recenter=false)
 
-m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.8, lamb_helmholtz=true)
+m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(tree, (vortex_particles,); expansion_order, multipole_threshold=0.8, lamb_helmholtz=true)
 
 update_velocity_stretching!(vortex_particles)
 
@@ -430,37 +428,37 @@ end
 
 @testset "single/dual tree, single/multi branch" begin
 
-expansion_order, leaf_size, multipole_threshold = 14, 100, 0.3
+expansion_order, leaf_size, multipole_threshold = 24, 100, 0.3
 n_bodies = 5000
 
-shrink_recenter = true
+shrink_recenter = false
 seed = 123
 validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 FastMultipole.direct!(validation_system)
 validation_potential = validation_system.potential[1,:]
 
 system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system3; expansion_order, leaf_size, multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
+tree, m2l_list3, direct_list3, derivatives_switches3 = FastMultipole.fmm!(system3; expansion_order, leaf_size, multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter)
 potential3 = system3.potential[1,:]
 @test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-9)
 
 system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system4,); expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true)
+FastMultipole.fmm!((system4,); expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter)
 potential4 = system4.potential[1,:]
 @test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-9)
 
 system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+source_tree, target_tree, m2l_list5, direct_list5, derivatives_switches5 = FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
 potential5 = system5.potential[1,:]
 @test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-9)
 
 system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
 potential6 = system6.potential[1,:]
 @test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-9)
 
 system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
 potential7 = system7.potential[1,:]
 @test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-9)
 
@@ -469,7 +467,7 @@ end
 @testset "sortwrapper" begin
 
 Random.seed!(123)
-expansion_order, leaf_size, multipole_threshold = 14, 100, 0.31
+expansion_order, leaf_size, multipole_threshold = 18, 100, 0.31
 n_bodies = 5000
 shrink_recenter = true
 seed = 123

@@ -14,10 +14,18 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_r
         octant_container = get_octant_container(system) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
         cumulative_octant_census = get_octant_container(system) # for creating a cumsum of octant populations
         bodies_index = get_bodies_index(system)
+
+        # root branch
         center, target_box = center_box(system)
         bx, by, bz = target_box
-        radius = sqrt(bx*bx+by*by+bz*bz)
-        source_box = SVector{6}(-bx, bx, -by, by, -bz, bz)
+
+        # initial octree generation uses cubic cells
+        bmax = max(max(bx,by),bz)
+        radius = sqrt(bmax*bmax*3.0)
+        target_box = SVector{3}(bmax, bmax, bmax)
+        source_box = SVector{6}(-bmax, bmax, -bmax, bmax, -bmax, bmax)
+
+        # prepare to divide
         i_first_branch = 2
         buffer = get_buffer(system)
         sort_index = get_sort_index(system)
@@ -751,6 +759,7 @@ function shrink_leaf!(branches, i_branch, system)
 
     # replace branch
     replace_branch!(branches, i_branch, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box)
+
 end
 
 """

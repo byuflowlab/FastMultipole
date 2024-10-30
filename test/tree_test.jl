@@ -36,14 +36,17 @@
     expansion_order, leaf_size, multipole_threshold = 2, 1, 0.5
     tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=false)
 
+    r1 = max(max(tree.branches[1].target_box[1],tree.branches[1].target_box[2]),tree.branches[1].target_box[3])
+    r2 = max(max(tree.branches[2].target_box[1],tree.branches[2].target_box[2]),tree.branches[2].target_box[3])
+
     test_branches = [
-        5 0.65 0.65 0.55 norm(test_box);
-        2 0.65-tree.branches[1].target_box[1]/2 0.65-tree.branches[1].target_box[2]/2 0.55-tree.branches[1].target_box[3]/2 norm(tree.branches[2].target_box);
-        1 0.65+tree.branches[1].target_box[1]/2 0.65+tree.branches[1].target_box[2]/2 0.55-tree.branches[1].target_box[3]/2 norm(tree.branches[3].target_box);
-        1 0.65-tree.branches[1].target_box[1]/2 0.65-tree.branches[1].target_box[2]/2 0.55+tree.branches[1].target_box[3]/2 norm(tree.branches[4].target_box);
-        1 0.65+tree.branches[1].target_box[1]/2 0.65+tree.branches[1].target_box[2]/2 0.55+tree.branches[1].target_box[3]/2 norm(tree.branches[5].target_box);
-        1 0.375-tree.branches[2].target_box[1]/2 0.425-tree.branches[2].target_box[2]/2 0.375-tree.branches[2].target_box[3]/2 norm(tree.branches[6].target_box);
-        1 0.375-tree.branches[2].target_box[1]/2 0.425-tree.branches[2].target_box[2]/2 0.375+tree.branches[2].target_box[3]/2 norm(tree.branches[7].target_box);
+        5 0.65 0.65 0.55 sqrt(3)*r1;
+        2 0.65-r1/2 0.65-r1/2 0.55-r1/2 sqrt(3)*r2;
+        1 0.65+r1/2 0.65+r1/2 0.55-r1/2 sqrt(3)*r2;
+        1 0.65-r1/2 0.65-r1/2 0.55+r1/2 sqrt(3)*r2;
+        1 0.65+r1/2 0.65+r1/2 0.55+r1/2 sqrt(3)*r2;
+        1 tree.branches[2].center[1]-r2/2 tree.branches[2].center[2]-r2/2 tree.branches[2].center[3]-r2/2 sqrt(3)*r2/2;
+        1 tree.branches[2].center[1]-r2/2 tree.branches[2].center[2]-r2/2 tree.branches[2].center[3]+r2/2 sqrt(3)*r2/2
     ]
 
     @test length(tree.branches) == size(test_branches)[1]

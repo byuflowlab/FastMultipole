@@ -137,6 +137,12 @@ struct UnequalSpheres <: ErrorMethod end
 
 struct UnequalBoxes <: ErrorMethod end
 
+#------- expansion order -------#
+
+struct Dynamic{PMAX,RTOL} end
+
+Dynamic(PMAX,RTOL) = Dynamic{PMAX,RTOL}()
+
 #------- octree creation -------#
 
 abstract type Branch{TF} end
