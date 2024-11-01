@@ -85,7 +85,7 @@ function minimum_distance(center1, center2, box2::SVector{3,<:Any})
     return sqrt(Δx*Δx + Δy*Δy + Δz*Δz)
 end
 
-@inline function get_r_ρ(target_branch, source_branch, separation_distance, ::UnequalBoxes)
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UnequalBoxes)
     r_max = target_branch.target_radius
     r_min = minimum_distance(source_branch.center, target_branch.center, target_branch.target_box)
     ρ_max = source_branch.source_radius
@@ -94,7 +94,8 @@ end
     return r_min, r_max, ρ_min, ρ_max
 end
 
-@inline function get_r_ρ(target_branch, source_branch, separation_distance, ::UnequalSpheres)
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UnequalSpheres)
+    separation_distance = sqrt(separation_distance_squared)
     r_max = target_branch.target_radius
     r_min = separation_distance - r_max
     ρ_max = source_branch.source_radius
@@ -103,10 +104,11 @@ end
     return r_min, r_max, ρ_min, ρ_max
 end
 
-@inline function get_r_ρ(target_branch, source_branch, separation_distance, ::EqualSpheres)
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::EqualSpheres)
     # see Section 3.5.2, Pringle, 1994
     # but normalized by a different mean potential
     # to remove the singularity
+    separation_distance = sqrt(separation_distance_squared)
     r_max = source_branch.source_radius # should I use source or target radius?
     r_min = separation_distance - r_max
     ρ_max = r_max
@@ -122,17 +124,19 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
 
     # branch center separation distance
     Δx, Δy, Δz = source_branch.center - target_branch.center
-    separation_distance = sqrt(Δx*Δx + Δy*Δy + Δz*Δz)
+    separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
 
     # get r_min, r_max, ρ_min, ρ_max here, based on error method
-    r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance, error_method)
+    r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance_squared, error_method)
 
     #    # Barba's multipole acceptance test- slightly different than mine
     #    summed_radii = target_branch.target_radius + source_branch.source_radius
     #    mac = separation_distance * multipole_threshold >= summed_radii # meet M2L criteria
 
     # decide whether or not to accept the multipole expansion
-    if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min
+    summed_radii = r_max + ρ_max
+    if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
+    #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
         if ff
             P = get_P(r_min, r_max, ρ_min, ρ_max, expansion_order)
             push!(m2l_list, (i_target, j_source, P))

@@ -10,6 +10,9 @@ using WriteVTK
 #------- CONSTANTS -------#
 
 const ONE_OVER_4π = 1/4/pi
+const ONE_THIRD = 1/3
+const DEBUG = Array{Bool,0}(undef)
+DEBUG[] = false
 
 # multithreading parameters
 const MIN_NPT_B2M = 100
@@ -64,7 +67,7 @@ export SortWrapper
 
 include("interaction_list.jl")
 
-export build_interaction_lists
+export EqualSpheres, UnequalSpheres, UnequalBoxes, Dynamic, build_interaction_lists
 
 include("fmm.jl")
 

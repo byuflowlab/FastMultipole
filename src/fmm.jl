@@ -22,14 +22,14 @@ function nearfield_singlethread!(target_system, target_branches, derivatives_swi
     end
 end
 
-function nearfield_singlethread!(target_systems, target_indices::SVector, derivatives_switches::Tuple, source_system, source_index)
-    for (target_system, target_index, derivatives_switch) in zip(target_systems, target_indices, derivatives_switches)
-        nearfield_singlethread!(target_system, target_index, derivatives_switch, source_system, source_index)
-    end
-end
-
 function nearfield_singlethread!(target_system, target_index, derivatives_switch, source_system, source_index)
     _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+end
+
+function nearfield_singlethread!(target_systems, target_indices::SVector, derivatives_switches::Tuple, source_system, source_index)
+    for (target_system, target_index, derivatives_switch) in zip(target_systems, target_indices, derivatives_switches)
+        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+    end
 end
 
 function get_n_interactions(target_systems, target_branches, source_system, i_source_system, source_branches::Vector{<:MultiBranch}, direct_list)
@@ -440,7 +440,7 @@ function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, sys
             evaluate_local!(systems, branch, branch.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
         else
             for i_child_branch in branch.branch_index
-                local_to_local!(branch, branches[i_child_branch], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                local_to_local!(branches[i_child_branch], branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
@@ -472,8 +472,7 @@ function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion
             # loop over branches
             for i_child in level_index[i_start]:level_index[i_stop]
                 child_branch = branches[i_child]
-                # L2L!(branches[child_branch.i_parent], child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
-                local_to_local!(branches[child_branch.i_parent], child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                local_to_local!(child_branch, branches[child_branch.i_parent], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end

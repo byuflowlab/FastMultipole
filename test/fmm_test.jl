@@ -241,11 +241,11 @@ update_velocity_stretching!(vortex_particles)
 
 us_direct = vortex_particles.velocity_stretching[1:3,:]
 for i in 1:length(us)
-    @test isapprox(us_direct, us;atol=1e-10)
+    @test isapprox(us_direct, us;atol=1e-12)
 end
 ss_direct = vortex_particles.velocity_stretching[4:6,:]
 for i in 1:length(ss)
-    @test isapprox(ss_direct[i], ss[i];atol=1e-10)
+    @test isapprox(ss_direct[i], ss[i];atol=1e-12)
 end
 
 #--- fmm, manual tree ---#
@@ -311,11 +311,11 @@ update_velocity_stretching!(vortex_particles)
 # end
 us_fmm = vortex_particles.velocity_stretching[1:3,:]
 for i in eachindex(us_fmm)
-    @test isapprox(us_fmm[i], us[i];atol=1e-8)
+    @test isapprox(us_fmm[i], us[i];atol=1e-12)
 end
 ss_fmm = vortex_particles.velocity_stretching[4:6,:]
 for i in 1:length(ss)
-    @test isapprox(ss_fmm[i], ss[i];atol=1e-8)
+    @test isapprox(ss_fmm[i], ss[i];atol=1e-12)
 end
 
 #--- fmm, automated tree ---#
@@ -332,13 +332,13 @@ update_velocity_stretching!(vortex_particles)
 # test velocity
 us_fmm_2 = vortex_particles.velocity_stretching[1:3,:]
 for i in eachindex(us_fmm_2)
-    @test isapprox(us_fmm_2[i], us[i];atol=1e-8)
+    @test isapprox(us_fmm_2[i], us[i];atol=1e-12)
 end
 
 # test stretching
 ss_fmm_2 = vortex_particles.velocity_stretching[4:6,:]
 for i in 1:length(ss)
-    @test isapprox(ss_fmm_2[i], ss[i];atol=1e-8)
+    @test isapprox(ss_fmm_2[i], ss[i];atol=1e-12)
 end
 
 end
@@ -389,11 +389,11 @@ update_velocity_stretching!(vortex_particles)
 #end
 us_direct = deepcopy(vortex_particles.velocity_stretching[1:3,:])
 for i in 1:length(us)
-    @test isapprox(us_direct[i], us[i];atol=1e-10)
+    @test isapprox(us_direct[i], us[i];atol=1e-12)
 end
 ss_direct = deepcopy(vortex_particles.velocity_stretching[4:6,:])
 for i in 1:length(ss)
-    @test isapprox(ss_direct[i], ss[i];atol=1e-10)
+    @test isapprox(ss_direct[i], ss[i];atol=1e-12)
 end
 
 #--- use fmm ---#
@@ -402,7 +402,7 @@ end
 vortex_particles.potential .*= 0
 vortex_particles.velocity_stretching .*= 0
 
-expansion_order = 35
+expansion_order = 20
 leaf_size = 1
 
 tree = FastMultipole.Tree((vortex_particles,); expansion_order, leaf_size, shrink_recenter=false)
@@ -428,8 +428,8 @@ end
 
 @testset "single/dual tree, single/multi branch" begin
 
-expansion_order, leaf_size, multipole_threshold = 24, 100, 0.3
-n_bodies = 5000
+expansion_order, leaf_size, multipole_threshold = 20, 100, 0.5
+n_bodies = 10000
 
 shrink_recenter = false
 seed = 123
@@ -440,27 +440,27 @@ validation_potential = validation_system.potential[1,:]
 system3 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 tree, m2l_list3, direct_list3, derivatives_switches3 = FastMultipole.fmm!(system3; expansion_order, leaf_size, multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter)
 potential3 = system3.potential[1,:]
-@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-9)
+@test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-10)
 
 system4 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 FastMultipole.fmm!((system4,); expansion_order=expansion_order, leaf_size=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter)
 potential4 = system4.potential[1,:]
-@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-9)
+@test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-10)
 
 system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 source_tree, target_tree, m2l_list5, direct_list5, derivatives_switches5 = FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
 potential5 = system5.potential[1,:]
-@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-9)
+@test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-10)
 
 system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
 potential6 = system6.potential[1,:]
-@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-9)
+@test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-10)
 
 system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
 potential7 = system7.potential[1,:]
-@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-9)
+@test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-10)
 
 end
 

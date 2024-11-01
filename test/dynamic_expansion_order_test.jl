@@ -1,3 +1,6 @@
+const DEBUG = Array{Bool,0}(undef)
+DEBUG[] = false
+
 function spherical_to_cartesian(ρ,θ,ϕ)
     z = ρ * cos(θ)
     x = ρ * sin(θ) * cos(ϕ)
@@ -150,6 +153,7 @@ function test_p(epsilon::Number, pmax=50;
 
     # determine expansion order using Pringle method
     ρ = norm(local_branch.center - multipole.center)
+    ρ2 = ρ * ρ
     am = multipole.source_radius
     p_equal_spheres_check = solve_p_old(epsilon, ρ, am, pmax)
 
@@ -157,11 +161,11 @@ function test_p(epsilon::Number, pmax=50;
     expansion_order = FastMultipole.Dynamic(pmax, epsilon)
 
     # FastMultipole old error method (Equal spheres)
-    rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ, FastMultipole.EqualSpheres())
+    rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.EqualSpheres())
     p_equal_spheres = FastMultipole.get_P(rs..., expansion_order)
 
     # adapted for unequal spheres
-    rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ, FastMultipole.UnequalSpheres())
+    rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.UnequalSpheres())
     p_unequal_spheres = FastMultipole.get_P(rs..., expansion_order)
 
     if !(shrink && local_branch.source_radius > multipole.source_radius) # can break if target branch has a larger radius than source branch
@@ -169,7 +173,7 @@ function test_p(epsilon::Number, pmax=50;
     end
 
     # adapted for unequal boxes
-    rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ, FastMultipole.UnequalBoxes())
+    rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.UnequalBoxes())
     p_unequal_boxes = FastMultipole.get_P(rs..., expansion_order)
 
     @test p_unequal_boxes <= p_unequal_spheres
@@ -320,13 +324,399 @@ function test_p_set(epsilon, shrink; pmax=50,
     return nothing
 end
 
-@testset "dynamic expansion order" begin
+#@testset "dynamic expansion order" begin
 
 test_p_set(1e-2, false)
 test_p_set(1e-2, true)
 test_p_set(1e-4, false)
 test_p_set(1e-4, true)
 test_p_set(1e-11, true)
+
+#end
+
+function build_system(seed, n_bodies)
+    Random.seed!(seed)
+    source_bodies = rand(8, n_bodies)
+    system = Gravitational(source_bodies)
+    return system
+end
+
+function build_4_levels()
+	x1 = SVector{3}(0.0,0,0)
+	x2 = SVector{3}(1.0,1,1)
+	dx = x2 - x1
+	x3 = x1 + dx * 0.6
+	x4 = x1 + dx * 0.7
+	bodies = zeros(8, 4)
+	xs = [x1, x2, x3, x4]
+	for i in 1:4
+	    bodies[1:3,i] .= xs[i]
+		bodies[5,i] = 1.0 # all unit strength
+	end
+    return Gravitational(bodies)
+end
+
+function recursive_l2l(unsorted_system, tree, i_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, Pmax)
+    branches = tree.branches
+    branch = branches[i_branch]
+    velocity_n_m = zeros(2,3,size(weights_tmp_1,3))
+    if length(branch.branch_index) == 0 # leaf
+        for i_sorted in branch.bodies_index
+			i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+			x_target = unsorted_system[i_unsorted, FastMultipole.Position()]
+			dx = x_target - branch.center
+			phi, v, vg = FastMultipole.evaluate_local(dx, branch.harmonics, velocity_n_m, branch.local_expansion, Pmax, lamb_helmholtz, DerivativesSwitch())
+            unsorted_system.potential[1,i_unsorted] = phi
+        end
+    else
+        for i_child in branch.branch_index
+            FastMultipole.local_to_local!(branches[i_child], branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+            recursive_l2l(unsorted_system, tree, i_child, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, Pmax)
+        end
+    end
+end
+
+#@testset "fmm! error control" begin
+function check_m2l(unsorted_system, tree, m2l_list, direct_list;
+	Ts = zeros(FastMultipole.length_Ts(30)),
+	eimϕs = zeros(2, 30+1),
+	weights_tmp_1 = initialize_expansion(30),
+	weights_tmp_2 = initialize_expansion(30),
+	lamb_helmholtz = Val(false),
+	harmonics = FastMultipole.initialize_harmonics(30),
+)
+	velocity_n_m = zeros(2,3,size(harmonics,3))
+
+	# check all m2l_list interactions
+	errors = []
+	for (j_target, i_source, P) in m2l_list
+		source_branch = tree.branches[i_source]
+		target_branch = tree.branches[j_target]
+		target_branch.local_expansion .= zero(eltype(target_branch.local_expansion))
+		FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, P, lamb_helmholtz)
+
+		# loop over target bodies
+		errs = Float64[]
+		for i_sorted in target_branch.bodies_index
+			i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+			x_target = unsorted_system[i_unsorted, FastMultipole.Position()]
+			dx = x_target - target_branch.center
+			phi, v, vg = FastMultipole.evaluate_local(dx, harmonics, velocity_n_m, target_branch.local_expansion, Val(P), lamb_helmholtz, DerivativesSwitch())
+
+			# calculate potential directly
+			phi_direct = 0.0
+			for i_source_sorted in source_branch.bodies_index
+				i_source_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_source_sorted, tree)
+				x_source = unsorted_system[i_source_unsorted, FastMultipole.Position()]
+				r = norm(x_target - x_source)
+				strength = unsorted_system[i_source_unsorted, FastMultipole.Strength()]
+				phi_direct += strength / r / 4 / pi
+			end
+			push!(errs, phi_direct - phi)
+		end
+		push!(errors, errs)
+	end
+
+    # repeat, but include L2L operations
+	errors_l2l = []
+	for (j_target, i_source, P) in m2l_list
+		source_branch = tree.branches[i_source]
+		target_branch = tree.branches[j_target]
+		target_branch.local_expansion .= zero(eltype(target_branch.local_expansion))
+		FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, P, lamb_helmholtz)
+
+        # downward pass manually
+        unsorted_system.potential .= 0.0
+        recursive_l2l(unsorted_system, tree, j_target, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ηs_mag, FastMultipole.Hs_π2, Val(P), lamb_helmholtz, tree.expansion_order)
+
+		# loop over target bodies
+		errs = Float64[]
+		for i_sorted in target_branch.bodies_index
+			i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+            x_target = unsorted_system[i_unsorted, FastMultipole.Position()]
+            phi = unsorted_system.potential[1,i_unsorted]
+
+			# calculate potential directly
+			phi_direct = 0.0
+			for i_source_sorted in source_branch.bodies_index
+				i_source_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_source_sorted, tree)
+				x_source = unsorted_system[i_source_unsorted, FastMultipole.Position()]
+				r = norm(x_target - x_source)
+				strength = unsorted_system[i_source_unsorted, FastMultipole.Strength()]
+				phi_direct += strength / r / 4 / pi
+			end
+			push!(errs, phi_direct - phi)
+
+		end
+		push!(errors_l2l, errs)
+	end
+
+	# ensure all interactions are accounted for
+	n_bodies = FastMultipole.get_n_bodies(unsorted_system)
+	m2l_interactions_unsorted = zeros(Int64, n_bodies, n_bodies)
+
+	# loop over m2l_list and check interactions
+	for (i_target, i_source, P) in m2l_list
+		target_branch = tree.branches[i_target]
+		source_branch = tree.branches[i_source]
+		for i_target_sorted in target_branch.bodies_index
+			i_target_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_target_sorted, tree)
+			for i_source_sorted in source_branch.bodies_index
+				i_source_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_source_sorted, tree)
+				m2l_interactions_unsorted[i_target_unsorted, i_source_unsorted] += 1
+			end
+		end
+	end
+
+	# direct interactions now
+	direct_interactions_unsorted = zeros(Int64, n_bodies, n_bodies)
+
+	# loop over direct_list and check interactions
+	for (i_target, i_source) in direct_list
+		target_branch = tree.branches[i_target]
+		source_branch = tree.branches[i_source]
+		for i_target_sorted in target_branch.bodies_index
+			i_target_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_target_sorted, tree)
+			for i_source_sorted in source_branch.bodies_index
+				i_source_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_source_sorted, tree)
+				direct_interactions_unsorted[i_target_unsorted, i_source_unsorted] += 1
+			end
+		end
+	end
+
+	return errors, errors_l2l, m2l_interactions_unsorted, direct_interactions_unsorted
+end
+
+# check L2L
+function check_l2l(unsorted_system, tree::Tree{<:Any,P}, m2l_source, m2l_target, l2l_target) where P
+    # initialize containers
+	Ts = zeros(FastMultipole.length_Ts(30))
+	eimϕs = zeros(2, 30+1)
+	weights_tmp_1 = initialize_expansion(30)
+	weights_tmp_2 = initialize_expansion(30)
+	lamb_helmholtz = Val(false)
+	harmonics = FastMultipole.initialize_harmonics(30)
+	velocity_n_m = zeros(2,3,size(harmonics,3))
+
+    # reset potential/expansions
+    unsorted_system.potential .= 0.0
+    for branch in tree.branches
+        branch.local_expansion .= 0.0
+    end
+
+    # m2l
+    target_branch = tree.branches[m2l_target]
+    source_branch = tree.branches[m2l_source]
+    l2l_target_branch = tree.branches[l2l_target]
+    FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, P, lamb_helmholtz)
+
+    # check influence
+	m2l_errs = Float64[]
+	for i_sorted in l2l_target_branch.bodies_index
+		i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+		x_target = unsorted_system[i_unsorted, FastMultipole.Position()]
+		dx = x_target - target_branch.center
+		phi, v, vg = FastMultipole.evaluate_local(dx, harmonics, velocity_n_m, target_branch.local_expansion, Val(P), lamb_helmholtz, DerivativesSwitch())
+
+		# calculate potential directly
+		phi_direct = 0.0
+		for i_source_sorted in source_branch.bodies_index
+			i_source_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_source_sorted, tree)
+			x_source = unsorted_system[i_source_unsorted, FastMultipole.Position()]
+			r = norm(x_target - x_source)
+			strength = unsorted_system[i_source_unsorted, FastMultipole.Strength()]
+			phi_direct += strength / r / 4 / pi
+		end
+		push!(m2l_errs, phi_direct - phi)
+	end
+
+    # l2l
+    FastMultipole.local_to_local!(l2l_target_branch, target_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ηs_mag, FastMultipole.Hs_π2, Val(P), lamb_helmholtz)
+
+    # check influence
+	l2l_errs = Float64[]
+	for i_sorted in l2l_target_branch.bodies_index
+		i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+		x_target = unsorted_system[i_unsorted, FastMultipole.Position()]
+		dx = x_target - l2l_target_branch.center
+		phi, v, vg = FastMultipole.evaluate_local(dx, harmonics, velocity_n_m, l2l_target_branch.local_expansion, Val(P), lamb_helmholtz, DerivativesSwitch())
+
+		# calculate potential directly
+		phi_direct = 0.0
+		for i_source_sorted in source_branch.bodies_index
+			i_source_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_source_sorted, tree)
+			x_source = unsorted_system[i_source_unsorted, FastMultipole.Position()]
+			r = norm(x_target - x_source)
+			strength = unsorted_system[i_source_unsorted, FastMultipole.Strength()]
+			phi_direct += strength / r / 4 / pi
+		end
+		push!(l2l_errs, phi_direct - phi)
+	end
+
+    # return result
+    return m2l_errs, l2l_errs
+end
+
+function check_m2l_again(unsorted_system, tree, i_source, i_target, expansion_order; redo_b2m=false, check_b2m=false)
+    # get branches
+    source_branch = tree.branches[i_source]
+    target_branch = tree.branches[i_target]
+
+    # b2m (if requested)
+    if redo_b2m
+        old_multipole = deepcopy(source_branch.multipole_expansion)
+        source_branch.multipole_expansion .= 0.0
+        for i_sorted in source_branch.bodies_index
+            i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+
+            # relative body position
+            x = unsorted_system[i_unsorted,Position()]
+            Δx = x - source_branch.center
+
+            # update values
+            FastMultipole.body_to_multipole_point!(Point{Source}, source_branch.multipole_expansion, source_branch.harmonics, Δx, unsorted_system[i_unsorted, Strength()], Val(expansion_order))
+        end
+        new_multipole = deepcopy(source_branch.multipole_expansion)
+    end
+
+    if check_b2m
+        for i_sorted in target_branch.bodies_index
+            i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+            x_target = unsorted_system[i_unsorted,Position()]
+
+            phi_multipole, _, _ = evaluate_multipole(x_target, source_branch.center, source_branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
+
+            phi_direct = 0.0
+            for i_sorted_source in source_branch.bodies_index
+                i_unsorted_source = FastMultipole.sorted_index_2_unsorted_index(i_sorted_source, tree)
+                x_source = unsorted_system[i_unsorted_source, Position()]
+                strength = unsorted_system[i_unsorted_source, Strength()]
+                r = norm(x_target - x_source)
+                phi_direct += strength / 4 / pi / r
+            end
+
+        end
+    end
+
+    # reset local expansion
+    target_branch.local_expansion .= 0.0
+
+    # m2l
+    multipole_to_local!(target_branch, source_branch, expansion_order)
+
+    # evaluate local
+    phis = Float64[]
+    phis_direct = Float64[]
+    for i_sorted in target_branch.bodies_index
+        i_unsorted = FastMultipole.sorted_index_2_unsorted_index(i_sorted, tree)
+        x_target = unsorted_system[i_unsorted, Position()]
+
+        phi = evaluate_local(x_target, target_branch, expansion_order)
+        push!(phis, phi)
+
+        phi_direct = 0.0
+        for i_sorted_source in source_branch.bodies_index
+            i_unsorted_source = FastMultipole.sorted_index_2_unsorted_index(i_sorted_source, tree)
+            x_source = unsorted_system[i_unsorted_source, Position()]
+            strength = unsorted_system[i_unsorted_source, Strength()]
+            r = norm(x_target - x_source)
+            phi_direct += strength / 4 / pi / r
+        end
+        push!(phis_direct, phi_direct)
+    end
+
+    return phis, phis_direct
+end
+
+@testset "dynamic expansion order: no shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+#error_method = FastMultipole.UnequalSpheres()
+error_method = FastMultipole.UnequalBoxes()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+#masses_fmm = build_system(123, n_bodies)
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+#masses_direct = build_system(123, n_bodies)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+FastMultipole.DEBUG[] = true
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=false, unsort_bodies=true)
+FastMultipole.DEBUG[] = false
+FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+#masses_direct = build_system(123, n_bodies)
+#u_direct = masses_direct.potential[1,:]
+err = relative_error(u_direct, u_fmm)
+
+errs, errs_l2l, m2l, direct = check_m2l(masses_fmm, tree, m2l_list, direct_list)
+
+
+m2l_source, m2l_target, l2l_target = 11, 18, 18
+m2l_errs, l2l_errs = check_l2l(masses_fmm, tree, m2l_source, m2l_target, l2l_target)
+
+# check m2l from 11 to 18 manually
+i_source, i_target = 11, 18
+#i_source, i_target = 18, 11
+phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_target, Pmax; redo_b2m=false, check_b2m=true)
+
+@test maximum(abs.(err)) < rtol
+
+end
+
+@testset "dynamic expansion order: shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+#error_method = FastMultipole.UnequalSpheres()
+error_method = FastMultipole.UnequalBoxes()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+#masses_fmm = build_system(123, n_bodies)
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+#masses_direct = build_system(123, n_bodies)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+FastMultipole.DEBUG[] = true
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=true, unsort_bodies=true)
+FastMultipole.DEBUG[] = false
+FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+#masses_direct = build_system(123, n_bodies)
+#u_direct = masses_direct.potential[1,:]
+err = relative_error(u_direct, u_fmm)
+
+errs, errs_l2l, m2l, direct = check_m2l(masses_fmm, tree, m2l_list, direct_list)
+
+
+m2l_source, m2l_target, l2l_target = 11, 18, 18
+m2l_errs, l2l_errs = check_l2l(masses_fmm, tree, m2l_source, m2l_target, l2l_target)
+
+# check m2l from 11 to 18 manually
+i_source, i_target = 11, 18
+#i_source, i_target = 18, 11
+phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_target, Pmax; redo_b2m=false, check_b2m=true)
+
+@test maximum(abs.(err)) < rtol
 
 end
 
