@@ -190,8 +190,8 @@ end
 function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz, leaf_index) where {TF,P}
 
     # try preallocating one container to be reused
-    Ts = zeros(length_Ts(P))
-    eimϕs = zeros(2, P+1)
+    Ts = zeros(TF, length_Ts(P))
+    eimϕs = zeros(TF, 2, P+1)
     weights_tmp_1 = initialize_expansion(P, TF)
     weights_tmp_2 = initialize_expansion(P, TF)
 
@@ -307,8 +307,8 @@ end
 function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expansion_order::Val{P}, lamb_helmholtz, levels_index, n_threads) where {TF,P}
 
     # try preallocating one set of containers to be reused
-    Ts = [zeros(length_Ts(P)) for _ in 1:n_threads]
-    eimϕs = [zeros(2, P+1) for _ in 1:n_threads]
+    Ts = [zeros(TF, length_Ts(P)) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, P+1) for _ in 1:n_threads]
     weights_tmp_1 = [initialize_expansion(P, TF) for _ in 1:n_threads]
     weights_tmp_2 = [initialize_expansion(P, TF) for _ in 1:n_threads]
 
@@ -373,8 +373,8 @@ function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, so
     # preallocate containers to be reused
     weights_tmp_1 = initialize_expansion(P, TF)
     weights_tmp_2 = initialize_expansion(P, TF)
-    Ts = zeros(length_Ts(P))
-    eimϕs = zeros(2, P+1)
+    Ts = zeros(TF, length_Ts(P))
+    eimϕs = zeros(TF, 2, P+1)
 
     for (i_target, j_source, expansion_order) in m2l_list
         target_branch = target_branches[i_target]
@@ -400,8 +400,8 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
         assignments = 1:n_per_thread:length(m2l_list)
 
         # try preallocating one set of containers to be reused
-        Ts = [zeros(length_Ts(P)) for _ in 1:n_threads]
-        eimϕs = [zeros(2, P+1) for _ in 1:n_threads]
+        Ts = [zeros(TF, length_Ts(P)) for _ in 1:n_threads]
+        eimϕs = [zeros(TF, 2, P+1) for _ in 1:n_threads]
         weights_tmp_1 = [initialize_expansion(P, TF) for _ in 1:n_threads]
         weights_tmp_2 = [initialize_expansion(P, TF) for _ in 1:n_threads]
 
@@ -424,8 +424,8 @@ end
 
 function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz, derivatives_switches) where {TF,P}
     # try preallocating one container to be reused
-    Ts = zeros(length_Ts(P))
-    eimϕs = zeros(2, P+1)
+    Ts = zeros(TF, length_Ts(P))
+    eimϕs = zeros(TF, 2, P+1)
     weights_tmp_1 = initialize_expansion(P, TF)
     weights_tmp_2 = initialize_expansion(P, TF)
     velocity_n_m = zeros(eltype(branches[1]), 2, 3, size(weights_tmp_1, 3))
@@ -445,8 +445,8 @@ end
 function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion_order::Val{P}, levels_index, n_threads) where {TF,P}
 
     # try preallocating one set of containers to be reused
-    Ts = [zeros(length_Ts(P)) for _ in 1:n_threads]
-    eimϕs = [zeros(2, P+1) for _ in 1:n_threads]
+    Ts = [zeros(TF, length_Ts(P)) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, P+1) for _ in 1:n_threads]
     weights_tmp_1 = [initialize_expansion(P, TF) for _ in 1:n_threads]
     weights_tmp_2 = [initialize_expansion(P, TF) for _ in 1:n_threads]
 
