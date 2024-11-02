@@ -271,10 +271,7 @@ function body_to_multipole_multithread!(branches, system, expansion_order::Val{P
     leaf_assignments = fill(1:0, n_threads)
 
     # total number of bodies
-    n_bodies = 0
-    for i_leaf in leaf_index
-        n_bodies += length(branches[i_leaf].bodies_index)
-    end
+    n_bodies = get_n_bodies(system)
 
     # number of bodies per thread
     n_per_thread, rem = divrem(n_bodies, n_threads)
@@ -288,7 +285,7 @@ function body_to_multipole_multithread!(branches, system, expansion_order::Val{P
     i_thread = 1
     n_bodies = 0
     for (i_end,i_leaf) in enumerate(leaf_index)
-        n_bodies += length(branches[i_leaf].bodies_index)
+        n_bodies += get_n_bodies(branches[i_leaf])
         if n_bodies >= n_per_thread
             leaf_assignments[i_thread] = i_start:i_end
             i_start = i_end+1
@@ -342,7 +339,6 @@ function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expan
                 child_branch = branches[i_branch]
                 parent_branch = branches[child_branch.i_parent]
                 Threads.lock(parent_branch.lock) do
-                    # multipole_to_multipole!(parent_branch, child_branch, child_branch.harmonics, child_branch.ML, expansion_order)
                     multipole_to_multipole!(parent_branch, child_branch, weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
                 end
             end
@@ -466,13 +462,16 @@ function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion
         n_per_thread < MIN_NPT_L2L && (n_per_thread = MIN_NPT_L2L)
 
         # loop over branches
-        Threads.@threads for i_start in 1:n_per_thread:length(level_index)
+        i_starts = 1:n_per_thread:length(level_index)
+        #Threads.@threads for (i_task,i_start) in enumerate(1:n_per_thread:length(level_index))
+        Threads.@threads for i_task in 1:length(i_starts)
+            i_start = i_starts[i_task]
             i_stop = min(i_start+n_per_thread-1,length(level_index))
 
             # loop over branches
             for i_child in level_index[i_start]:level_index[i_stop]
                 child_branch = branches[i_child]
-                local_to_local!(child_branch, branches[child_branch.i_parent], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                local_to_local!(child_branch, branches[child_branch.i_parent], weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
@@ -912,12 +911,13 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     nearfield_user::Bool=false
 ) where PE
 
-    # repack in Val
-    lamb_helmholtz = Val(lamb_helmholtz)
-
     # check if systems are empty
     n_sources = get_n_bodies(source_systems)
     n_targets = get_n_bodies(target_systems)
+
+    # wrap lamb_helmholtz in Val
+    lamb_helmholtz = Val(lamb_helmholtz)
+
 
     if n_sources > 0 && n_targets > 0
 
