@@ -27,7 +27,7 @@ end
 function Gravitational(bodies::Matrix)
     nbodies = size(bodies)[2]
     bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],bodies[5,i]) for i in 1:nbodies]
-    potential = zeros(eltype(bodies),52,nbodies)
+    potential = zeros(52,nbodies)
     return Gravitational(bodies2,potential)
 end
 
@@ -89,11 +89,9 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
             dx = target_x - source_x
             dy = target_y - source_y
             dz = target_z - source_z
-            #r = sqrt(dx*dx + dy*dy + dz*dz)
-            r2 = dx*dx + dy*dy + dz*dz
+            r = sqrt(dx*dx + dy*dy + dz*dz)
             # te = @elapsed begin
-            if r2 > 0
-                r = sqrt(r2)
+            if r > 0
                 dϕ = source_strength / r * FastMultipole.ONE_OVER_4π
                 target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dϕ
                 dF = SVector{3}(dx,dy,dz) * source_strength / r^3 * FastMultipole.ONE_OVER_4π
