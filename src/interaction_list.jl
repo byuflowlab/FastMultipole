@@ -12,43 +12,59 @@ function build_interaction_lists(target_branches, source_branches, source_leaf_i
     return m2l_list, direct_list
 end
 
-function get_P(r_min, r_max, ρ_min, ρ_max, expansion_order::Int)
+function get_P(r_min, r_max, ρ_min, ρ_max, expansion_order::Int, error_method::ErrorMethod)
     return expansion_order
 end
 
-function get_P(r_min, r_max, ρ_min, ρ_max, ::Dynamic{PMAX,RTOL}) where {PMAX,RTOL}
-    return get_P(r_max / ρ_min, ρ_max / r_min, PMAX, RTOL)
+function get_P(r_min, r_max, ρ_min, ρ_max, ::Dynamic{PMAX,RTOL}, error_method::ErrorMethod) where {PMAX,RTOL}
+    return get_P(r_min, r_max, ρ_min, ρ_max, PMAX, RTOL, error_method)
 end
 
 """
-    get_P(r_max_over_ρ_min, ρ_max_over_r_min, Pmax, ε_rel)
+    get_P(r_min, r_max, ρ_min, ρ_max, Pmax, ε_rel, error_method)
 
 Returns the smallest expansion order not greater than `Pmax` and satisfying the specified relative error tolerance.
 
 # Inputs
 
-* `r_max_over_ρ_min::Float64`: ratio `r_max / ρ_min`
-* `ρ_max_over_r_min::Float64`: ratio `ρ_max / r_min`
+* `r_min::Flaot64`: distance from the multipole expansion to the closest target
+* `r_max::Float64`: distance from the local expansion to the farthest target
+* `ρ_min::Float64`: distance from the local expansion to the closest source
+* `ρ_max::Float64`: distance from the multipole expansion to the farthest source
 * `Pmax::Int64`: maximum allowable expansion order
 * `ε_rel::Float64`: relative error tolerance
-
-# where
-
-* `r_max::Float64`: distance from the local expansion to the farthest target
-* `r_min::Flaot64`: distance from the multipole expansion to the closest target
-* `ρ_max::Float64`: distance from the multipole expansion to the farthest source
-* `ρ_min::Float64`: distance from the local expansion to the closest source
+* `error_method::ErrorMethod`: type used to dispatch on the desired error method
 
 # Ouputs
 
 * `P::Int`: the smallest expansion order to satisfy the error tolerance
 
 """
-function get_P(r_max_over_ρ_min, ρ_max_over_r_min, Pmax, ε_rel)
+function get_P(r_min, r_max, ρ_min, ρ_max, Pmax, ε_rel, ::Union{EqualSpheres, UnequalSpheres, UnequalBoxes})
+    ρ_max_over_r_min = ρ_max / r_min
+    r_max_over_ρ_min = r_max / ρ_min
     t1 = ρ_max_over_r_min
     t2 = r_max_over_ρ_min
     for P in 0:Pmax-1
         t1 + t2 < ε_rel && (return P)
+        t1 *= ρ_max_over_r_min
+        t2 *= r_max_over_ρ_min
+    end
+
+    @warn "error tolerance not met with dynamic expansion order; try increasing `Pmax`"
+
+    return Pmax
+end
+
+function get_P(r_min, r_max, ρ_min, ρ_max, Pmax, ε_rel, ::Union{UniformUnequalSpheres, UniformUnequalBoxes})
+
+    ρ_max_over_r_min = ρ_max / r_min
+    r_max_over_ρ_min = r_max / ρ_min
+    t1 = ρ_max_over_r_min
+    t2 = r_max_over_ρ_min
+    for P in 0:Pmax-1
+        n = P + 1
+        t1 * 3 / sqrt((4*n+2) * (n+3) * (n+3)) + t2 < ε_rel && (return P)
         t1 *= ρ_max_over_r_min
         t2 *= r_max_over_ρ_min
     end
@@ -85,7 +101,7 @@ function minimum_distance(center1, center2, box2::SVector{3,<:Any})
     return sqrt(Δx*Δx + Δy*Δy + Δz*Δz)
 end
 
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UnequalBoxes)
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::Union{UnequalBoxes, UniformUnequalBoxes})
     r_max = target_branch.target_radius
     r_min = minimum_distance(source_branch.center, target_branch.center, target_branch.target_box)
     ρ_max = source_branch.source_radius
@@ -94,7 +110,7 @@ end
     return r_min, r_max, ρ_min, ρ_max
 end
 
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UnequalSpheres)
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::Union{UnequalSpheres, UniformUnequalSpheres})
     separation_distance = sqrt(separation_distance_squared)
     r_max = target_branch.target_radius
     r_min = separation_distance - r_max
@@ -138,7 +154,7 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
     #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
         if ff
-            P = get_P(r_min, r_max, ρ_min, ρ_max, expansion_order)
+            P = get_P(r_min, r_max, ρ_min, ρ_max, expansion_order, error_method)
             push!(m2l_list, (i_target, j_source, P))
         end
     elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves

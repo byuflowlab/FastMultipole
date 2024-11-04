@@ -1,5 +1,4 @@
-const DEBUG = Array{Bool,0}(undef)
-DEBUG[] = false
+using Statistics
 
 function spherical_to_cartesian(ρ,θ,ϕ)
     z = ρ * cos(θ)
@@ -162,11 +161,11 @@ function test_p(epsilon::Number, pmax=50;
 
     # FastMultipole old error method (Equal spheres)
     rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.EqualSpheres())
-    p_equal_spheres = FastMultipole.get_P(rs..., expansion_order)
+    p_equal_spheres = FastMultipole.get_P(rs..., expansion_order, FastMultipole.EqualSpheres())
 
     # adapted for unequal spheres
     rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.UnequalSpheres())
-    p_unequal_spheres = FastMultipole.get_P(rs..., expansion_order)
+    p_unequal_spheres = FastMultipole.get_P(rs..., expansion_order, FastMultipole.UnequalSpheres())
 
     if !(shrink && local_branch.source_radius > multipole.source_radius) # can break if target branch has a larger radius than source branch
         @test p_unequal_spheres <= p_equal_spheres
@@ -174,7 +173,7 @@ function test_p(epsilon::Number, pmax=50;
 
     # adapted for unequal boxes
     rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.UnequalBoxes())
-    p_unequal_boxes = FastMultipole.get_P(rs..., expansion_order)
+    p_unequal_boxes = FastMultipole.get_P(rs..., expansion_order, FastMultipole.UnequalBoxes())
 
     @test p_unequal_boxes <= p_unequal_spheres
 
@@ -324,7 +323,7 @@ function test_p_set(epsilon, shrink; pmax=50,
     return nothing
 end
 
-#@testset "dynamic expansion order" begin
+@testset "dynamic expansion order" begin
 
 test_p_set(1e-2, false)
 test_p_set(1e-2, true)
@@ -332,28 +331,6 @@ test_p_set(1e-4, false)
 test_p_set(1e-4, true)
 test_p_set(1e-11, true)
 
-#end
-
-function build_system(seed, n_bodies)
-    Random.seed!(seed)
-    source_bodies = rand(8, n_bodies)
-    system = Gravitational(source_bodies)
-    return system
-end
-
-function build_4_levels()
-	x1 = SVector{3}(0.0,0,0)
-	x2 = SVector{3}(1.0,1,1)
-	dx = x2 - x1
-	x3 = x1 + dx * 0.6
-	x4 = x1 + dx * 0.7
-	bodies = zeros(8, 4)
-	xs = [x1, x2, x3, x4]
-	for i in 1:4
-	    bodies[1:3,i] .= xs[i]
-		bodies[5,i] = 1.0 # all unit strength
-	end
-    return Gravitational(bodies)
 end
 
 function recursive_l2l(unsorted_system, tree, i_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, Pmax)
@@ -376,7 +353,6 @@ function recursive_l2l(unsorted_system, tree, i_branch, weights_tmp_1, weights_t
     end
 end
 
-#@testset "fmm! error control" begin
 function check_m2l(unsorted_system, tree, m2l_list, direct_list;
 	Ts = zeros(FastMultipole.length_Ts(30)),
 	eimϕs = zeros(2, 30+1),
@@ -628,20 +604,22 @@ function check_m2l_again(unsorted_system, tree, i_source, i_target, expansion_or
     return phis, phis_direct
 end
 
-@testset "dynamic expansion order: no shrinking" begin
+function analyze_m2l_list(m2l_list)
+    Ps = [m2l[3] for m2l in m2l_list]
+    return length(Ps), mean(Ps), std(Ps)
+end
+
+@testset "dynamic expansion order: UnequalSpheres without shrinking" begin
 
 n_bodies = 1000
 Pmax = 30
 rtol = 1e-2
-#error_method = FastMultipole.UnequalSpheres()
-error_method = FastMultipole.UnequalBoxes()
+error_method = FastMultipole.UnequalSpheres()
 leaf_size = 10
 multipole_threshold=0.5
 seed = 123
 
-#masses_fmm = build_system(123, n_bodies)
 masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-#masses_direct = build_system(123, n_bodies)
 masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 expansion_order = Dynamic(Pmax,rtol)
 FastMultipole.DEBUG[] = true
@@ -650,50 +628,166 @@ FastMultipole.DEBUG[] = false
 FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
 u_fmm = masses_fmm.potential[1,:]
 
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+
 # direct
 masses_fmm.potential .= 0.0
 fmm.direct!(masses_direct)
 u_direct = masses_direct.potential[1,:]
 
-#masses_direct = build_system(123, n_bodies)
-#u_direct = masses_direct.potential[1,:]
 err = relative_error(u_direct, u_fmm)
-
-errs, errs_l2l, m2l, direct = check_m2l(masses_fmm, tree, m2l_list, direct_list)
-
-
-m2l_source, m2l_target, l2l_target = 11, 18, 18
-m2l_errs, l2l_errs = check_l2l(masses_fmm, tree, m2l_source, m2l_target, l2l_target)
-
-# check m2l from 11 to 18 manually
-i_source, i_target = 11, 18
-#i_source, i_target = 18, 11
-phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_target, Pmax; redo_b2m=false, check_b2m=true)
 
 @test maximum(abs.(err)) < rtol
 
+@show maximum(abs.(err))
 end
 
-@testset "dynamic expansion order: shrinking" begin
+@testset "dynamic expansion order: UnequalSpheres with shrinking" begin
 
 n_bodies = 1000
 Pmax = 30
 rtol = 1e-2
-#error_method = FastMultipole.UnequalSpheres()
+error_method = FastMultipole.UnequalSpheres()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=true, unsort_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+err = relative_error(u_direct, u_fmm)
+
+@test maximum(abs.(err)) < rtol
+@show maximum(abs.(err))
+
+end
+
+@testset "dynamic expansion order: UniformUnequalSpheres without shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+error_method = FastMultipole.UniformUnequalSpheres()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=false, unsort_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+err = relative_error(u_direct, u_fmm)
+
+@test maximum(abs.(err)) < rtol
+
+@show maximum(abs.(err))
+
+end
+
+@testset "dynamic expansion order: UniformUnequalSpheres with shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+error_method = FastMultipole.UniformUnequalSpheres()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=true, unsort_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+err = relative_error(u_direct, u_fmm)
+
+@test maximum(abs.(err)) < rtol
+@show maximum(abs.(err))
+
+end
+
+@testset "dynamic expansion order: UnequalBoxes without shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
 error_method = FastMultipole.UnequalBoxes()
 leaf_size = 10
 multipole_threshold=0.5
 seed = 123
 
-#masses_fmm = build_system(123, n_bodies)
 masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-#masses_direct = build_system(123, n_bodies)
 masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 expansion_order = Dynamic(Pmax,rtol)
-FastMultipole.DEBUG[] = true
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=false, unsort_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+err = relative_error(u_direct, u_fmm)
+
+@test maximum(abs.(err)) < rtol
+@show maximum(abs.(err))
+
+end
+
+@testset "dynamic expansion order: UnequalBoxes with shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+error_method = FastMultipole.UnequalBoxes()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+#FastMultipole.DEBUG[] = true
 tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=true, unsort_bodies=true)
-FastMultipole.DEBUG[] = false
-FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+#FastMultipole.DEBUG[] = false
+#FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
 u_fmm = masses_fmm.potential[1,:]
 
 # direct
@@ -701,10 +795,9 @@ masses_fmm.potential .= 0.0
 fmm.direct!(masses_direct)
 u_direct = masses_direct.potential[1,:]
 
-#masses_direct = build_system(123, n_bodies)
-#u_direct = masses_direct.potential[1,:]
 err = relative_error(u_direct, u_fmm)
 
+#=
 errs, errs_l2l, m2l, direct = check_m2l(masses_fmm, tree, m2l_list, direct_list)
 
 
@@ -715,39 +808,88 @@ m2l_errs, l2l_errs = check_l2l(masses_fmm, tree, m2l_source, m2l_target, l2l_tar
 i_source, i_target = 11, 18
 #i_source, i_target = 18, 11
 phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_target, Pmax; redo_b2m=false, check_b2m=true)
+=#
 
 @test maximum(abs.(err)) < rtol
+@show maximum(abs.(err))
 
 end
 
+@testset "dynamic expansion order: UniformUnequalBoxes without shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+error_method = FastMultipole.UniformUnequalBoxes()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=false, unsort_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+err = relative_error(u_direct, u_fmm)
+
+@test maximum(abs.(err)) < rtol
+@show maximum(abs.(err))
+
+end
+
+@testset "dynamic expansion order: UniformUnequalBoxes with shrinking" begin
+
+n_bodies = 1000
+Pmax = 30
+rtol = 1e-2
+error_method = FastMultipole.UniformUnequalBoxes()
+leaf_size = 10
+multipole_threshold=0.5
+seed = 123
+
+masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
+expansion_order = Dynamic(Pmax,rtol)
+#FastMultipole.DEBUG[] = true
+tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=true, unsort_bodies=true)
+
+Ps = analyze_m2l_list(m2l_list)
+@show Ps
+#FastMultipole.DEBUG[] = false
+#FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
+u_fmm = masses_fmm.potential[1,:]
+
+# direct
+masses_fmm.potential .= 0.0
+fmm.direct!(masses_direct)
+u_direct = masses_direct.potential[1,:]
+
+err = relative_error(u_direct, u_fmm)
+
 #=
-fig = figure("choose p")
-fig.clear()
-fig.add_subplot(211, xlabel="relative error tolerance", ylabel="resulting error")
-fig.add_subplot(212, xlabel="relative error tolerance", ylabel="expansion order")
-ax1 = fig.get_axes()[0]
-ax0 = fig.get_axes()[1]
+errs, errs_l2l, m2l, direct = check_m2l(masses_fmm, tree, m2l_list, direct_list)
 
-distance = 0.5
-eps = [10.0^x for x in -12:0.005:0]
-m, l, old_ps, m_new, l_new, new_ps = choose_p(eps, distance)
 
-ax0.plot(eps, old_ps)
-ax0.plot(eps, new_ps)
-#ax1.plot(eps, m)
-ax1.plot(eps, l)
-ax1.plot(eps, l_new)
-ax1.plot(eps, eps, "red")
+m2l_source, m2l_target, l2l_target = 11, 18, 18
+m2l_errs, l2l_errs = check_l2l(masses_fmm, tree, m2l_source, m2l_target, l2l_target)
 
-ax0.set_xscale("log")
-ax0.legend(["Pringle", "novel"])
-
-ax1.set_xscale("log")
-ax1.set_yscale("log")
-ax1.legend(["Pringle", "novel", "tolerance"])
-
-tight_layout()
-
-BSON.@save "choose_p2_d$distance.bson" m l old_ps m_new l_new new_ps
-savefig("choose_p2_d$distance.png")
+# check m2l from 11 to 18 manually
+i_source, i_target = 11, 18
+#i_source, i_target = 18, 11
+phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_target, Pmax; redo_b2m=false, check_b2m=true)
 =#
+
+@test maximum(abs.(err)) < rtol
+@show maximum(abs.(err))
+
+end
+

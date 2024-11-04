@@ -137,6 +137,10 @@ struct UnequalSpheres <: ErrorMethod end
 
 struct UnequalBoxes <: ErrorMethod end
 
+struct UniformUnequalSpheres <: ErrorMethod end
+
+struct UniformUnequalBoxes <: ErrorMethod end
+
 #------- expansion order -------#
 
 struct Dynamic{PMAX,RTOL} end
