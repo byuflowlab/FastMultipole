@@ -12,11 +12,11 @@ body_to_multipole!(system::VortexSheetSurface, args...) = body_to_multipole!(Pan
 
 =#
 
-@inline function body_to_multipole!(branch, system, harmonics, expansion_order)
+@inline function body_to_multipole!(branch::SingleBranch, system, harmonics, expansion_order)
     body_to_multipole!(system, branch, branch.bodies_index, harmonics, expansion_order)
 end
 
-@inline function body_to_multipole!(branch, systems::Tuple, harmonics, expansion_order)
+@inline function body_to_multipole!(branch::MultiBranch, systems::Tuple, harmonics, expansion_order)
     # iterate over systems
     for (system,bodies_index) in zip(systems, branch.bodies_index)
         body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)

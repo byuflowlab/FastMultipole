@@ -60,11 +60,10 @@ function get_P(r_min, r_max, ρ_min, ρ_max, Pmax, ε_rel, ::Union{UniformUnequa
 
     ρ_max_over_r_min = ρ_max / r_min
     r_max_over_ρ_min = r_max / ρ_min
-    t1 = ρ_max_over_r_min
+    t1 = ρ_max / (r_min - ρ_max)
     t2 = r_max_over_ρ_min
     for P in 0:Pmax-1
-        n = P + 1
-        t1 * 3 / sqrt((4*n+2) * (n+3) * (n+3)) + t2 < ε_rel && (return P)
+        t1 * sqrt(9 / ( (P+4)*(P+4)*(4*P+6) )) + t2 < ε_rel && (return P)
         t1 *= ρ_max_over_r_min
         t2 *= r_max_over_ρ_min
     end

@@ -15,6 +15,12 @@ const DEBUG = Array{Bool,0}(undef)
 DEBUG[] = false
 
 # multithreading parameters
+#const MIN_NPT_B2M = 1
+#const MIN_NPT_M2M = 1
+#const MIN_NPT_M2L = 1
+#const MIN_NPT_L2L = 1
+#const MIN_NPT_L2B = 1
+#const MIN_NPT_NF = 1
 const MIN_NPT_B2M = 100
 const MIN_NPT_M2M = 100
 const MIN_NPT_M2L = 100

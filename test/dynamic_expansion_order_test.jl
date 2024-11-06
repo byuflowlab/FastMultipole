@@ -611,20 +611,20 @@ end
 
 @testset "dynamic expansion order: UnequalSpheres without shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UnequalSpheres()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
 masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 expansion_order = Dynamic(Pmax,rtol)
-FastMultipole.DEBUG[] = true
+#FastMultipole.DEBUG[] = true
 tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=false, unsort_bodies=true)
-FastMultipole.DEBUG[] = false
+#FastMultipole.DEBUG[] = false
 FastMultipole.visualize("bad_error", masses_fmm, tree; toggle_branches=true, toggle_bodies=true)
 u_fmm = masses_fmm.potential[1,:]
 
@@ -645,18 +645,20 @@ end
 
 @testset "dynamic expansion order: UnequalSpheres with shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 18
+rtol = 1e-4
 error_method = FastMultipole.UnequalSpheres()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
 masses_fmm = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 masses_direct = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 expansion_order = Dynamic(Pmax,rtol)
+FastMultipole.DEBUG[] = true
 tree, m2l_list, direct_list, derivatives_switch = fmm.fmm!(masses_fmm; expansion_order, error_method, leaf_size, multipole_threshold, shrink_recenter=true, unsort_bodies=true)
+FastMultipole.DEBUG[] = false
 u_fmm = masses_fmm.potential[1,:]
 
 Ps = analyze_m2l_list(m2l_list)
@@ -673,14 +675,14 @@ err = relative_error(u_direct, u_fmm)
 @show maximum(abs.(err))
 
 end
-
+throw("made it")
 @testset "dynamic expansion order: UniformUnequalSpheres without shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UniformUnequalSpheres()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
@@ -708,11 +710,11 @@ end
 
 @testset "dynamic expansion order: UniformUnequalSpheres with shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UniformUnequalSpheres()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
@@ -739,11 +741,11 @@ end
 
 @testset "dynamic expansion order: UnequalBoxes without shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UnequalBoxes()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
@@ -770,11 +772,11 @@ end
 
 @testset "dynamic expansion order: UnequalBoxes with shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UnequalBoxes()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
@@ -817,11 +819,11 @@ end
 
 @testset "dynamic expansion order: UniformUnequalBoxes without shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UniformUnequalBoxes()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 
@@ -848,11 +850,11 @@ end
 
 @testset "dynamic expansion order: UniformUnequalBoxes with shrinking" begin
 
-n_bodies = 1000
-Pmax = 30
-rtol = 1e-2
+n_bodies = 10000
+Pmax = 10
+rtol = 1e-4
 error_method = FastMultipole.UniformUnequalBoxes()
-leaf_size = 10
+leaf_size = 100
 multipole_threshold=0.5
 seed = 123
 

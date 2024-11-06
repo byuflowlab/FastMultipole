@@ -31,6 +31,13 @@ struct VortexParticles{TF}
     velocity_stretching::Matrix{TF}
 end
 
+function generate_vortex(seed, n_bodies; strength_scale=1/n_bodies)
+    Random.seed!(seed)
+    position = rand(3, n_bodies)
+    strength = rand(3, n_bodies) .* strength_scale
+    return VortexParticles(position, strength)
+end
+
 abstract type IntegrationScheme end
 
 struct Euler{TF} <: IntegrationScheme
