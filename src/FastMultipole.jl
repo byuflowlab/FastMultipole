@@ -14,6 +14,12 @@ const ONE_THIRD = 1/3
 const DEBUG = Array{Bool,0}(undef)
 DEBUG[] = false
 
+const WARNING_FLAG_LEAF_SIZE = Array{Bool,0}(undef)
+WARNING_FLAG_LEAF_SIZE[] = true
+
+const WARNING_FLAG_PMAX = Array{Bool,0}(undef)
+WARNING_FLAG_PMAX[] = true
+
 # multithreading parameters
 #const MIN_NPT_B2M = 1
 #const MIN_NPT_M2M = 1

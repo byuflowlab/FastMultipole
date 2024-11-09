@@ -1,6 +1,3 @@
-const WARNING_FLAG_LEAF_SIZE = Array{Bool,0}(undef)
-WARNING_FLAG_LEAF_SIZE[] = true
-
 #####
 ##### tree constructor
 #####

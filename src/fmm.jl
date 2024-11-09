@@ -964,21 +964,8 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
             nearfield && nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list, n_threads)
             upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, Pmax, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads)
-            if DEBUG[]
-            println("\n\nMultithreaded Tests:")
-            println("\tpost upward pass:")
-            @show source_tree.branches[end].multipole_expansion
-        end
             horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, Pmax, n_threads)
-            if DEBUG[]
-            println("\tpost horizontal pass")
-            @show target_tree.branches[end].local_expansion
-        end
             downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, Pmax, lamb_helmholtz, target_tree.levels_index, target_tree.leaf_index, n_threads)
-            if DEBUG[]
-            println("\tpost downward pass")
-            @show target_tree.branches[end].local_expansion
-        end
 
         end
 
