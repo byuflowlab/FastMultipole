@@ -181,7 +181,7 @@ r, ρ_max, A, ΔC = 1.0, 3.0, 1.0, 5.0
 ps = collect(0:20)
 
 # integral of abs(Plm(cos)...
-#e_manual = manual_sum.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
+e_manual = manual_sum.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
 
 # let abs(Plm(cos(theta))) <= 1; numerical integral
 e2_manual = manual_sum2.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
