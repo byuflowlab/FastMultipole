@@ -104,14 +104,20 @@ end
 function execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, i_source_system, source_branches, direct_list, assignment)
     for i_interaction in assignment
         i_target, i_source = direct_list[i_interaction]
-        nearfield_singlethread!(target_systems, target_branches[i_target].bodies_index, derivatives_switches, source_system, source_branches[i_source].bodies_index[i_source_system])
+        target_branch = target_branches[i_target]
+        Threads.lock(target_branch.lock) do
+            nearfield_singlethread!(target_systems, target_branch.bodies_index, derivatives_switches, source_system, source_branches[i_source].bodies_index[i_source_system])
+        end
     end
 end
 
 function execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, assignment)
     for i_interaction in assignment
         i_target, i_source = direct_list[i_interaction]
-        nearfield_singlethread!(target_systems, target_branches[i_target].bodies_index, derivatives_switches, source_system, source_branches[i_source].bodies_index)
+        target_branch = target_branches[i_target]
+        Threads.lock(target_branch.lock) do
+            nearfield_singlethread!(target_systems, target_branch.bodies_index, derivatives_switches, source_system, source_branches[i_source].bodies_index)
+        end
     end
 end
 
@@ -185,6 +191,9 @@ function _nearfield_multithread!(target_systems, target_branches, derivatives_sw
     make_assignments!(assignments, target_branches, source_branches, direct_list, n_threads, n_per_thread)
 
     # execute tasks
+    if DEBUG[]
+        @show assignments
+    end
     Threads.@threads for assignment in assignments
         execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, assignment)
     end

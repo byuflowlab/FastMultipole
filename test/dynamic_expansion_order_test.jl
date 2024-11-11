@@ -161,11 +161,11 @@ function test_p(epsilon::Number, pmax=50;
 
     # FastMultipole old error method (Equal spheres)
     rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.EqualSpheres())
-    p_equal_spheres = FastMultipole.get_P(rs..., expansion_order, FastMultipole.EqualSpheres())
+    p_equal_spheres = FastMultipole.get_P(rs..., ρ, expansion_order, FastMultipole.EqualSpheres())
 
     # adapted for unequal spheres
     rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.UnequalSpheres())
-    p_unequal_spheres = FastMultipole.get_P(rs..., expansion_order, FastMultipole.UnequalSpheres())
+    p_unequal_spheres = FastMultipole.get_P(rs..., ρ, expansion_order, FastMultipole.UnequalSpheres())
 
     if !(shrink && local_branch.source_radius > multipole.source_radius) # can break if target branch has a larger radius than source branch
         @test p_unequal_spheres <= p_equal_spheres
@@ -173,7 +173,7 @@ function test_p(epsilon::Number, pmax=50;
 
     # adapted for unequal boxes
     rs = FastMultipole.get_r_ρ(local_branch, multipole, ρ2, FastMultipole.UnequalBoxes())
-    p_unequal_boxes = FastMultipole.get_P(rs..., expansion_order, FastMultipole.UnequalBoxes())
+    p_unequal_boxes = FastMultipole.get_P(rs..., ρ, expansion_order, FastMultipole.UnequalBoxes())
 
     @test p_unequal_boxes <= p_unequal_spheres
 
@@ -675,7 +675,8 @@ err = relative_error(u_direct, u_fmm)
 @show maximum(abs.(err))
 
 end
-throw("made it")
+
+#=
 @testset "dynamic expansion order: UniformUnequalSpheres without shrinking" begin
 
 n_bodies = 10000
@@ -707,6 +708,7 @@ err = relative_error(u_direct, u_fmm)
 @show maximum(abs.(err))
 
 end
+=#
 
 @testset "dynamic expansion order: UniformUnequalSpheres with shrinking" begin
 
@@ -817,6 +819,7 @@ phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_ta
 
 end
 
+#=
 @testset "dynamic expansion order: UniformUnequalBoxes without shrinking" begin
 
 n_bodies = 10000
@@ -847,7 +850,9 @@ err = relative_error(u_direct, u_fmm)
 @show maximum(abs.(err))
 
 end
+=#
 
+#=
 @testset "dynamic expansion order: UniformUnequalBoxes with shrinking" begin
 
 n_bodies = 10000
@@ -894,4 +899,4 @@ phis_again, phis_direct_again = check_m2l_again(masses_fmm, tree, i_source, i_ta
 @show maximum(abs.(err))
 
 end
-
+=#
