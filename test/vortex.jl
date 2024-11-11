@@ -2,6 +2,7 @@
 
 import FastMultipole as fmm
 import FastMultipole.WriteVTK
+using FastMultipole
 using SpecialFunctions:erf
 
 #####
@@ -14,8 +15,6 @@ const i_STRENGTH_vortex = 4:6
 const i_POTENTIAL_SCALAR = 1:1
 const i_POTENTIAL_VECTOR = 2:4
 const i_VELOCITY_GRADIENT_vortex = 5:13
-i_POTENTIAL_JACOBIAN = 5:16
-i_POTENTIAL_HESSIAN = 17:52
 const i_VELOCITY_vortex = 1:3
 const i_STRETCHING_vortex = 4:6
 
@@ -55,12 +54,21 @@ Base.getindex(vp::VortexParticles, i, ::ScalarPotential) = vp.potential[1,i]
 Base.getindex(vp::VortexParticles, i, ::Velocity) = view(vp.velocity_stretching,i_VELOCITY_vortex,i)
 Base.getindex(vp::VortexParticles, i, ::VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
 Base.getindex(vp::VortexParticles, i, ::Strength) = vp.bodies[i].strength
-Base.getindex(vp::VortexParticles, i, ::FastMultipole.Body) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
+Base.getindex(vp::VortexParticles, i, ::FastMultipole.Body) = vp.bodies[i], vp.potential[:,i], vp.velocity_stretching[:,i]
 
+function Base.setindex!(vp::VortexParticles, val, i, ::Position)
+    vp.bodies[i] = Vorton(val, vp.bodies[i].strength, vp.bodies[i].sigma)
+    return nothing
+end
+function Base.setindex!(vp::VortexParticles, val, i, ::Strength)
+    vp.bodies[i] = Vorton(vp.bodies[i].position, val, vp.bodies[i].sigma)
+    return nothing
+end
 function Base.setindex!(vp::VortexParticles, val, i, ::FastMultipole.Body)
-    body, potential = val
+    body, potential, velocity = val
     vp.bodies[i] = body
     vp.potential[:,i] .= potential
+    vp.velocity_stretching[:,i] .= velocity
     return nothing
 end
 function Base.setindex!(vp::VortexParticles, val, i, ::ScalarPotential)
@@ -236,7 +244,7 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     if direct
         fmm.direct!(vortex_particles)
     else
-        fmm.fmm!((vortex_particles,), fmm_options)
+        fmm.fmm!((vortex_particles,); fmm_options...)
     end
 
     # convect bodies
@@ -245,36 +253,46 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     velocity_stretching = vortex_particles.velocity_stretching
     update_velocity_stretching!(vortex_particles)
     for i_body in 1:fmm.get_n_bodies(vortex_particles)
-        vortex_particles[i_body, Position()] .+= vortex_particles.velocity_stretching[1:3,i_body] * euler.dt
-        vortex_particles.bodies[i_body] .+= vortex_particles.velocity_stretching[4:6] * euler.dt
+        vortex_particles[i_body, Position()] = vortex_particles[i_body, Position()] + vortex_particles.velocity_stretching[i_VELOCITY_vortex,i_body] * euler.dt
+        vortex_particles[i_body, Strength()] = vortex_particles[i_body, Strength()] + vortex_particles.velocity_stretching[i_STRETCHING_vortex] * euler.dt
     end
 end
 
 function convect!(vortex_particles::VortexParticles, nsteps;
         # integration options
-        integrate!::IntegrationScheme=Euler(1.0),
+        integrate::IntegrationScheme=Euler(1.0),
         # fmm options
-        fmm_p=4, fmm_ncrit=50, fmm_multipole_threshold=0.5, fmm_targets=SVector{1}(Int8(1)),
+        fmm_p=4, fmm_ncrit=50, fmm_multipole_threshold=0.5,
         direct::Bool=false,
         # save options
         save::Bool=true, filename::String="default", compress::Bool=false,
     )
-    fmm_options = fmm.Options(fmm_p, fmm_ncrit, fmm_multipole_threshold, fmm_targets)
+    fmm_options = (; expansion_order=fmm_p, leaf_size=fmm_ncrit, multipole_threshold=fmm_multipole_threshold, lamb_helmholtz=true)
     save && save_vtk(filename, vortex_particles; compress)
     for istep in 1:nsteps
-        integrate!(vortex_particles, fmm_options, direct)
+        integrate(vortex_particles, fmm_options, direct)
         save && save_vtk(filename, vortex_particles, istep; compress)
     end
     return nothing
 end
 
 function save_vtk(filename, vortex_particles::VortexParticles, nt=0; compress=false)
-    n_bodies = size(vortex_particles.bodies)[2]
-    WriteVTK.vtk_grid(filename*"."*string(nt)*".vts", reshape(vortex_particles.bodies[i_POSITION_vortex,:], 3, n_bodies,1,1); compress) do vtk
-        vtk["vector strength"] = reshape(vortex_particles.bodies[i_STRENGTH_vortex,:],3,n_bodies,1,1)
-        vtk["scalar potential"] = reshape(vortex_particles.potential[i_POTENTIAL_SCALAR,:],n_bodies,1,1)
-        vtk["vector potential"] = reshape(vortex_particles.potential[i_POTENTIAL_VECTOR,:],3,n_bodies,1,1)
-        vtk["velocity"] = reshape(vortex_particles.velocity_stretching[i_VELOCITY_vortex,:],3,n_bodies,1,1)
-        vtk["stretching"] = reshape(vortex_particles.velocity_stretching[i_STRETCHING_vortex,:],3,n_bodies,1,1)
+
+    n_bodies = length(vortex_particles.bodies)
+
+    positions = reshape([vortex_particles[j, Position()][i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
+    vectorstrength = reshape([vortex_particles[j, Strength()][i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
+    scalarpotential = reshape([vortex_particles[j, ScalarPotential()] for j in 1:n_bodies], n_bodies, 1, 1)
+    vectorpotential = reshape(vortex_particles.potential[i_POTENTIAL_VECTOR,:],3,n_bodies,1,1)
+    velocity = reshape(vortex_particles.velocity_stretching[i_VELOCITY_vortex,:],3,n_bodies,1,1)
+    stretching = reshape(vortex_particles.velocity_stretching[i_STRETCHING_vortex,:],3,n_bodies,1,1)
+
+    WriteVTK.vtk_grid(filename*"."*string(nt)*".vts", positions; compress) do vtk
+        vtk["vector strength"] = vectorstrength
+        vtk["scalar potential"] = scalarpotential
+        vtk["vector potential"] = vectorpotential
+        vtk["velocity"] = velocity
+        vtk["stretching"] = stretching
     end
+
 end
