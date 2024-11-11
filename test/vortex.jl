@@ -15,8 +15,6 @@ const i_STRENGTH_vortex = 4:6
 const i_POTENTIAL_SCALAR = 1:1
 const i_POTENTIAL_VECTOR = 2:4
 const i_VELOCITY_GRADIENT_vortex = 5:13
-i_POTENTIAL_JACOBIAN = 5:16
-i_POTENTIAL_HESSIAN = 17:52
 const i_VELOCITY_vortex = 1:3
 const i_STRETCHING_vortex = 4:6
 
@@ -56,7 +54,7 @@ Base.getindex(vp::VortexParticles, i, ::ScalarPotential) = vp.potential[1,i]
 Base.getindex(vp::VortexParticles, i, ::Velocity) = view(vp.velocity_stretching,i_VELOCITY_vortex,i)
 Base.getindex(vp::VortexParticles, i, ::VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
 Base.getindex(vp::VortexParticles, i, ::Strength) = vp.bodies[i].strength
-Base.getindex(vp::VortexParticles, i, ::FastMultipole.Body) = vp.bodies[i], view(vp.potential,:,i), view(vp.velocity_stretching,:,i)
+Base.getindex(vp::VortexParticles, i, ::FastMultipole.Body) = vp.bodies[i], vp.potential[:,i], vp.velocity_stretching[:,i]
 
 function Base.setindex!(vp::VortexParticles, val, i, ::Position)
     vp.bodies[i] = Vorton(val, vp.bodies[i].strength, vp.bodies[i].sigma)
@@ -67,9 +65,10 @@ function Base.setindex!(vp::VortexParticles, val, i, ::Strength)
     return nothing
 end
 function Base.setindex!(vp::VortexParticles, val, i, ::FastMultipole.Body)
-    body, potential = val
+    body, potential, velocity = val
     vp.bodies[i] = body
     vp.potential[:,i] .= potential
+    vp.velocity_stretching[:,i] .= velocity
     return nothing
 end
 function Base.setindex!(vp::VortexParticles, val, i, ::ScalarPotential)
@@ -268,7 +267,7 @@ function convect!(vortex_particles::VortexParticles, nsteps;
         # save options
         save::Bool=true, filename::String="default", compress::Bool=false,
     )
-    fmm_options = (; expansion_order=fmm_p, leaf_size=fmm_ncrit, multipole_threshold=fmm_multipole_threshold)
+    fmm_options = (; expansion_order=fmm_p, leaf_size=fmm_ncrit, multipole_threshold=fmm_multipole_threshold, lamb_helmholtz=true)
     save && save_vtk(filename, vortex_particles; compress)
     for istep in 1:nsteps
         integrate(vortex_particles, fmm_options, direct)
