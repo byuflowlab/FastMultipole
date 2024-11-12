@@ -355,9 +355,6 @@ bodies = [
     0.08 0.5 1.1
 ]
 
-Random.seed!(123)
-bodies = rand(7,3)
-
 vortex_particles = VortexParticles(bodies)
 
 psis = zeros(3,3)
