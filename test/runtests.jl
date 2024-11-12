@@ -62,5 +62,6 @@ include("evaluate_expansions_test.jl")
 include("lamb_helmholtz_test.jl")
 include("tree_test.jl")
 include("dynamic_expansion_order_test.jl")
+include("interaction_list_test.jl")
 include("fmm_test.jl")
 

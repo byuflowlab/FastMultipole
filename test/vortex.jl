@@ -84,12 +84,6 @@ end
 function Base.setindex!(vp::VortexParticles, val, i, ::VelocityGradient)
     vp.potential[i_VELOCITY_GRADIENT_vortex,i] .= reshape(val,9)
 end
-function Base.setindex!(vp::VortexParticles, val, i, ::Strength)
-    p = vp.bodies[i]
-    position = p.position
-    sigma = p.sigma
-    vp.bodies[i] = Vorton(position, val, sigma)
-end
 FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
 Base.eltype(::VortexParticles{TF}) where TF = TF
 
