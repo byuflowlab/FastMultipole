@@ -200,6 +200,73 @@ function _nearfield_multithread!(target_systems, target_branches, derivatives_sw
 
 end
 
+"""
+    nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
+
+User-defined function used to offload nearfield calculations to a device, such as GPU.
+
+# Arguments
+
+* `target_systems`: user-defined system on which `source_system` acts
+* `target_tree::Tree`: octree object used to sort `target_systems`
+* `derivatives_switches::Union{DerivativesSwitch, NTuple{N,DerivativesSwitch}}`: determines whether the scalar potential, velocity, and or velocity gradient should be calculated
+* `source_systems`: user-defined system acting on `target_system`
+* `source_tree::Tree`: octree object used to sort `target_systems`
+* `direct_list::Vector{SVector{2,Int32}}`: each element `[i,j]` maps nearfield interaction from `source_tree.branches[j]` on `target_tree.branches[i]`
+
+"""
+function nearfield_device!(target_systems, target_tree::Tree, derivatives_switches, source_systems, source_tree::Tree, direct_list)
+    @warn "nearfield_device! was called but hasn't been overloaded by the user"
+end
+
+"""
+    nearfield_device!(target_systems, derivatives_switches, source_systems)
+
+Dispatches `nearfield_device!` without having to build a `::Tree`. Performs all interactions.
+
+# Arguments
+
+* `target_systems`: user-defined system on which `source_system` acts
+* `derivatives_switches::Union{DerivativesSwitch, NTuple{N,DerivativesSwitch}}`: determines whether the scalar potential, velocity, and or velocity gradient should be calculated
+* `source_systems`: user-defined system acting on `target_system`
+
+"""
+function nearfield_device!(target_systems, derivatives_switches, source_systems)
+
+    # get type
+    x_source, _, _ = first_body_position(source_systems)
+    TF_source = typeof(x_source)
+    x_target, _, _ = first_body_position(target_systems)
+    TF_target = typeof(x_target)
+    TF = promote_type(TF_source, TF_target)
+
+    # build target tree
+    target_bodies_index = get_bodies_index(target_systems)
+    n_branches, branch_index, i_parent, i_leaf_index = 0, 1, -1, 1
+    center, source_radius, target_radius = SVector{3,TF}(0.0,0,0), zero(TF), zero(TF)
+    source_box, target_box, expansion_order = SVector{6,TF}(0.0,0,0,0,0,0), SVector{3,TF}(0.0,0,0), 0
+    target_branch = Branch(target_bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
+    levels_index, leaf_index, sort_index, inverse_sort_index, leaf_size = [1:1], [1], dummy_sort_index(target_systems), dummy_sort_index(target_systems), maximum(target_bodies_index)
+    target_tree = Tree([target_branch], levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), leaf_size)
+
+    if target_systems === source_systems
+        source_tree = target_tree
+    else
+        # build source tree
+        source_bodies_index = get_bodies_index(source_systems)
+        source_branch = Branch(source_bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
+        sort_index, inverse_sort_index, leaf_size = dummy_sort_index(source_systems), dummy_sort_index(source_systems), maximum(source_bodies_index)
+        source_tree = Tree([source_branch], levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), leaf_size)
+    end
+
+    # build direct_list
+    direct_list = [SVector{2,Int32}(1,1)]
+
+    # call user-defined function
+    nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
+
+end
+
 #------- UPWARD PASS -------#
 
 function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz, leaf_index) where {TF,P}
@@ -606,7 +673,7 @@ function fmm!(target_systems, source_systems;
     unsort_source_bodies=true, unsort_target_bodies=true,
     source_shrink_recenter::Bool=false, target_shrink_recenter::Bool=false,
     save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree",
-    nearfield_user::Bool=false
+    nearfield_device::Bool=false
 ) where PE
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
@@ -624,7 +691,7 @@ function fmm!(target_systems, source_systems;
         reset_source_tree=false, reset_target_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
-        unsort_source_bodies, unsort_target_bodies, nearfield_user
+        unsort_source_bodies, unsort_target_bodies, nearfield_device
     )
 
     # visualize
@@ -664,7 +731,7 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 - `shink_recenter::Bool`: indicates whether or not to resize branches for the octree after it is created to increase computational efficiency
 - `save_tree::Bool`: indicates whether or not to save a VTK file for visualizing the octree
 - `save_name::String`: name and path of the octree visualization if `save_tree == true`
-- `nearfield_user::Bool`: indicates whether or not the `nearfield_user!` function should be used for nearfield interactions
+- `nearfield_device::Bool`: indicates whether or not the `nearfield_device!` function should be used for nearfield interactions
 
 """
 function fmm!(systems;
@@ -675,7 +742,7 @@ function fmm!(systems;
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, shrink_recenter::Bool=false,
-    save_tree::Bool=false, save_name="tree", nearfield_user::Bool=false
+    save_tree::Bool=false, save_name="tree", nearfield_device::Bool=false
 ) where PE
 
     # create tree
@@ -690,7 +757,7 @@ function fmm!(systems;
         multipole_threshold, reset_tree=false,
         upward_pass, horizontal_pass, downward_pass,
         nearfield, farfield, self_induced,
-        unsort_bodies, nearfield_user
+        unsort_bodies, nearfield_device
     )
 
     # visualize
@@ -725,7 +792,7 @@ Dispatches `fmm!` using an existing `::Tree`.
 - `farfield::Bool`: indicates whether far-field (computed with multipoles) interactions should be included in the m2l_list
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
 - `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
-- `nearfield_user::Bool`: indicates whether or not the `nearfield_user!` function should be used for nearfield interactions
+- `nearfield_device::Bool`: indicates whether or not the `nearfield_device!` function should be used for nearfield interactions
 
 """
 function fmm!(tree::Tree, systems;
@@ -736,7 +803,7 @@ function fmm!(tree::Tree, systems;
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_bodies::Bool=true, nearfield_user::Bool=false
+    unsort_bodies::Bool=true, nearfield_device::Bool=false
 ) where PE
 
     # assemble derivatives switch
@@ -752,7 +819,7 @@ function fmm!(tree::Tree, systems;
         lamb_helmholtz,
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_bodies, nearfield_user
+        unsort_bodies, nearfield_device
     )
 
     return m2l_list, direct_list, derivatives_switches
@@ -793,7 +860,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 - `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
 - `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `source_systems`
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
-- `nearfield_user::Bool`: indicates whether or not the `nearfield_user!` function should be used for nearfield interactions
+- `nearfield_device::Bool`: indicates whether or not the `nearfield_device!` function should be used for nearfield interactions
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
@@ -805,7 +872,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
-    nearfield_user::Bool=false
+    nearfield_device::Bool=false
 ) where PE
 
     # assemble derivatives switch
@@ -823,7 +890,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         lamb_helmholtz,
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies, unsort_target_bodies, nearfield_user
+        unsort_source_bodies, unsort_target_bodies, nearfield_device
     )
 
     return m2l_list, direct_list, derivatives_switches
@@ -859,7 +926,7 @@ function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches, 
     lamb_helmholtz::Bool=false,
     reset_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    unsort_bodies::Bool=true, nearfield_user::Bool=false
+    unsort_bodies::Bool=true, nearfield_device::Bool=false
 ) where PE
 
     fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches, Pmax;
@@ -868,7 +935,7 @@ function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches, 
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
         unsort_source_bodies=unsort_bodies, unsort_target_bodies=false,
-        nearfield_user
+        nearfield_device
     )
 
 end
@@ -923,7 +990,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     reset_source_tree::Bool=true, reset_target_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
-    nearfield_user::Bool=false
+    nearfield_device::Bool=false
 ) where PE
 
     # check if systems are empty
@@ -952,10 +1019,10 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
 
 
         # begin FMM
-        if nearfield_user
+        if nearfield_device
 
-            # allow nearfield_user! to be called concurrently with upward and horizontal passes
-            t1 = Threads.@spawn nearfield && nearfield_user!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
+            # allow nearfield_device! to be called concurrently with upward and horizontal passes
+            t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
                     upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, Pmax, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
