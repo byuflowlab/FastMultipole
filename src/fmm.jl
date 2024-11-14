@@ -1022,7 +1022,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         if nearfield_device
 
             # allow nearfield_device! to be called concurrently with upward and horizontal passes
-            t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list)
+            t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
                     upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, Pmax, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
