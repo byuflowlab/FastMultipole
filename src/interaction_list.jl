@@ -67,10 +67,9 @@ end
 
 function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, Pmax, ε_rel, ::Union{UniformUnequalSpheres, UniformUnequalBoxes})
 
-    ρ_max_over_r_min = ρ_max / r_min
-    r_max_over_ρ_min = r_max / ρ_min
 
     # multipole error
+    ρ_max_over_r_min = ρ_max / r_min
     ε_multipole = 1.5 * ρ_max / (r_min - ρ_max)
 
     # local error
@@ -88,7 +87,8 @@ function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, Pmax, ε_rel, ::Union{Uniform
     ΔC_minus = ρ_min
 
     t_plus = r_max / ΔC_plus
-    t_minus = r_max / ΔC_minus
+    one_over_ΔC_minus = 1/ΔC_minus
+    t_minus = r_max * one_over_ΔC_minus
     L = log((1-t_plus)/(1-t_minus))
     ΔC2_inv = 1/(2*ΔC)
     ρ2_ΔC2_2ΔC = (ρ_max2 - ΔC2) * ΔC2_inv
@@ -100,7 +100,7 @@ function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, Pmax, ε_rel, ::Union{Uniform
     Lζ_sum_pm3 = L
     t_plus_n = t_plus
     t_minus_n = t_minus
-    η_p = log(ΔC_plus / ΔC_minus)
+    η_p = log(ΔC_plus * one_over_ΔC_minus)
     r_inv = 1/r_max
     η_pm1 = η_p + (ΔC_plus - ΔC_minus) * r_inv
     η_pm2 = η_pm1 + (ΔC_plus*ΔC_plus - ΔC_minus*ΔC_minus) * r_inv * r_inv * 0.5
@@ -174,11 +174,20 @@ function minimum_distance(center1, center2, box2::SVector{3,<:Any})
     return sqrt(Δx*Δx + Δy*Δy + Δz*Δz)
 end
 
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::Union{UnequalBoxes, UniformUnequalBoxes})
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UnequalBoxes)
     r_max = target_branch.target_radius
     r_min = minimum_distance(source_branch.center, target_branch.center, target_branch.target_box)
     ρ_max = source_branch.source_radius
     ρ_min = minimum_distance(target_branch.center, source_branch.center, source_branch.source_box)
+
+    return r_min, r_max, ρ_min, ρ_max
+end
+
+@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UniformUnequalBoxes)
+    r_max = target_branch.target_radius
+    r_min = minimum_distance(source_branch.center, target_branch.center, target_branch.target_box)
+    ρ_max = source_branch.source_radius
+    ρ_min = sqrt(separation_distance_squared) - ρ_max
 
     return r_min, r_max, ρ_min, ρ_max
 end
@@ -246,7 +255,7 @@ end
 @inline preallocate_bodies_index(T::Type{<:MultiBranch{<:Any,NT}}, n) where NT = Tuple(Vector{UnitRange{Int64}}(undef, n) for _ in 1:NT)
 @inline preallocate_bodies_index(T::Type{<:SingleBranch}, n) = Vector{UnitRange{Int64}}(undef, n)
 
-function sort_list_by_target(direct_list, target_branches::Vector{<:Branch})
+function sort_by_target(direct_list, target_branches::Vector{<:Branch})
     # count cardinality of each target leaf in direct_list
     target_counter = zeros(Int32, 2, length(target_branches))
     for (i,j) in direct_list
@@ -278,7 +287,7 @@ function sort_list_by_target(direct_list, target_branches::Vector{<:Branch})
     return sorted_direct_list
 end
 
-function sort_list_by_source(direct_list, source_branches::Vector{<:Branch})
+function sort_by_source(direct_list, source_branches::Vector{<:Branch})
     # count cardinality of each source leaf in direct_list
     source_counter = zeros(Int32, 2, length(source_branches))
     for (i,j) in direct_list
