@@ -1034,7 +1034,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             fetch(t2)
 
             # local to body interaction
-            downward_pass && local_to_body_multithread!(branches, systems, derivatives_switch, Pmax, lamb_helmholtz, leaf_index, n_threads)
+            downward_pass && local_to_body_multithread!(target_tree.branches, target_systems, derivatives_switches, Pmax, lamb_helmholtz, target_tree.leaf_index, n_threads)
 
         else # standard nearfield function
 
