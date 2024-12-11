@@ -19,9 +19,38 @@ function build_system(center, ρs, θs, ϕs, radii, qs)
     return system
 end
 
+function build_system_cartesian(center, xs, ys, zs, radii, qs)
+    source_bodies = zeros(8,length(ρs))
+    for (i,(x,y,z,r,q)) in enumerate(zip(xs, ys, zs, radii, qs))
+        source_bodies[1:3,i] .= center + SVector{3}(x,y,z)
+        source_bodies[4,i] = r
+        source_bodies[5,i] = q
+    end
+    system = Gravitational(source_bodies)
+    return system
+end
+
 function generate_multipole(center, ρs, θs, ϕs, radii, qs, expansion_order, shrink)
     # build system
     system = build_system(center, ρs, θs, ϕs, radii, qs)
+
+    # build branch
+    branch = Branch(1:length(ρs), 0, 1:0, 0, 1, center, sqrt(3.0), sqrt(3.0), SVector{6}(-1.0,1.0,-1.0,1.0,-1.0,1.0), SVector{3}(1.0,1.0,1.0), expansion_order)
+
+    # shrink branch
+    branches = [branch]
+    shrink && FastMultipole.shrink_recenter!(branches, [1:1], system)
+    branch = branches[1]
+
+    # multipole coefficients
+    body_to_multipole!(branch, system, branch.harmonics, Val(expansion_order))
+
+    return branch, system
+end
+
+function generate_multipole_cartesian(center, xs, ys, zs, radii, qs, expansion_order, shrink)
+    # build system
+    system = build_system_cartesian(center, xs, ys, zs, radii, qs)
 
     # build branch
     branch = Branch(1:length(ρs), 0, 1:0, 0, 1, center, sqrt(3.0), sqrt(3.0), SVector{6}(-1.0,1.0,-1.0,1.0,-1.0,1.0), SVector{3}(1.0,1.0,1.0), expansion_order)
@@ -124,6 +153,44 @@ function relative_error(u_true, u_test)
     return (u_test .- u_true) ./ u_true
 end
 
+function multipole_local_error(local_branch, local_system, multipole_branch, multipole_system, expansion_order::Int)
+    # get direct potential
+    potential_direct = [evaluate_direct(local_branch[i,Position()], multipole_system) for i in 1:get_n_bodies(local_system)]
+
+    # multipole expansion
+    multipole_branch.multipole_expansion .= 0.0
+    x_mp = multipole_branch.center
+    for i in 1:get_n_bodies(multipole_system)
+        Δx = multipole_system[i,Position()] - x_mp
+        FastMultipole.body_to_multipole_point!(Point{Source}, multipole_branch.multipole_expansion, multipole_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
+    end
+
+    # multipole error
+    potential_mp = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order) for i in 1:get_n_bodies(local_system)]
+    error_mp = relative_error(potential_direct, potential_mp)
+
+    # local expansion
+    local_branch.local_expansion .= 0.0
+    x_l = local_branch.center
+    for i in 1:get_n_bodies(multipole_system)
+        Δx = multipole_system[i,Position()] - x_l
+        FastMultipole.body_to_local_point!(Point{Source}, local_branch.local_expansion, local_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
+    end
+
+    # local error
+    velocity_n_m = zeros(2,3,size(local_branch.local_expansion,3))
+    potential_l = [evaluate_local(local_system[i,Position()] - local_branch.center, local_branch.harmonics, velocity_n_m, local_branch.local_expansion, Val(expansion_order), Val(false), DerivativesSwitch(true,true,true)) for i in 1:get_n_bodies(local_system)]
+    error_l = relative_error(potential_direct, potential_l)
+
+    # overall error
+    local_branch.local_expansion .= 0.0
+    multipole_to_local!(local_branch, multipole_branch, expansion_order)
+    potential_o = [evaluate_local(local_system[i,Position()] - local_branch.center, local_branch.harmonics, velocity_n_m, local_branch.local_expansion, Val(expansion_order), Val(false), DerivativesSwitch(true,true,true)) for i in 1:get_n_bodies(local_system)]
+    error_o = relative_error(potential_direct, potential_o)
+
+    return error_mp, error_l, error_o
+end
+
 function test_p(epsilon::Number, pmax=50;
         multipole_center = SVector{3}(0.0,0,0),
         local_center = SVector{3}(4.0,0,0),
@@ -168,6 +235,9 @@ function test_p(epsilon::Number, pmax=50;
     p_unequal_spheres = FastMultipole.get_P(rs..., ρ, expansion_order, FastMultipole.UnequalSpheres())
 
     if !(shrink && local_branch.source_radius > multipole.source_radius) # can break if target branch has a larger radius than source branch
+        if p_unequal_spheres > p_equal_spheres
+            @show local_branch.source_radius multipole.source_radius
+        end
         @test p_unequal_spheres <= p_equal_spheres
     end
 
@@ -326,7 +396,9 @@ end
 @testset "dynamic expansion order" begin
 
 test_p_set(1e-2, false)
+fmm.DEBUG[] = true
 test_p_set(1e-2, true)
+fmm.DEBUG[] = false
 test_p_set(1e-4, false)
 test_p_set(1e-4, true)
 test_p_set(1e-11, true)

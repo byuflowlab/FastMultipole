@@ -150,12 +150,12 @@ expansion_order = 9
 leaf_size = 1
 x_branch_1 = SVector{3}([0.0,0,0])
 bounding_box = SVector{3}(0.0,0,0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, 1/8, 1/8, source_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+
+branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_2 = FastMultipole.SVector{3}(xs[:,1] .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, 1/8, 1/8, source_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_3 = FastMultipole.SVector{3}(xs[:,2] .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, 1/8, 1/8, source_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 
 # using FMM
 dummy_index = (zeros(Int64,FastMultipole.get_n_bodies(vortexparticles)),)
@@ -261,12 +261,12 @@ leaf_size = 1
 # manually build tree
 x_branch_1 = SVector{3}((bodies[1:3,1] + bodies[1:3,2])/2)
 bounding_box = SVector{3}(0.0,0,0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, 1/8, 1/8, source_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+
+branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_2 = SVector{3}(bodies[1:3,1])# .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, 1/8, 1/8, source_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_3 = SVector{3}(bodies[1:3,2])# .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, 1/8, 1/8, source_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)

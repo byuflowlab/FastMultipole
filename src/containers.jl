@@ -141,11 +141,13 @@ struct UniformUnequalSpheres <: ErrorMethod end
 
 struct UniformUnequalBoxes <: ErrorMethod end
 
+struct UniformCubes <: ErrorMethod end
+
 #------- expansion order -------#
 
-struct Dynamic{PMAX,RTOL} end
+struct Dynamic{PMAX,ATOL} end
 
-Dynamic(PMAX,RTOL) = Dynamic{PMAX,RTOL}()
+Dynamic(PMAX,ATOL) = Dynamic{PMAX,ATOL}()
 
 #------- octree creation -------#
 
@@ -183,10 +185,11 @@ struct MultiBranch{TF,N} <: Branch{TF}
     branch_index::UnitRange{Int64}
     i_parent::Int64
     i_leaf::Int64
-    center::SVector{3,TF}   # center of the branch
+    source_center::SVector{3,TF}   # center of the branch
+    target_center::SVector{3,TF}   # center of the branch
     source_radius::TF
     target_radius::TF
-    source_box::SVector{6,TF} # x, y, and z half widths of the box encapsulating all sources
+    source_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     charge::TF
     dipole::TF
@@ -197,10 +200,10 @@ struct MultiBranch{TF,N} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
+function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
+    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
@@ -236,10 +239,11 @@ struct SingleBranch{TF} <: Branch{TF}
     branch_index::UnitRange{Int64}
     i_parent::Int64
     i_leaf::Int64
-    center::SVector{3,TF}   # center of the branch
+    source_center::SVector{3,TF}   # center of sources
+    target_center::SVector{3,TF}   # center of targets
     source_radius::TF
     target_radius::TF
-    source_box::SVector{6,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
+    source_box::SVector{3,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     charge::TF
     dipole::TF
@@ -250,10 +254,10 @@ struct SingleBranch{TF} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
+function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
+    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF

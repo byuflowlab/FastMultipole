@@ -21,12 +21,6 @@ const WARNING_FLAG_PMAX = Array{Bool,0}(undef)
 WARNING_FLAG_PMAX[] = true
 
 # multithreading parameters
-#const MIN_NPT_B2M = 1
-#const MIN_NPT_M2M = 1
-#const MIN_NPT_M2L = 1
-#const MIN_NPT_L2L = 1
-#const MIN_NPT_L2B = 1
-#const MIN_NPT_NF = 1
 const MIN_NPT_B2M = 100
 const MIN_NPT_M2M = 100
 const MIN_NPT_M2L = 100
@@ -37,9 +31,26 @@ const MIN_NPT_NF = 100
 # preallocate y-axis rotation matrices by π/2
 const Hs_π2 = Float64[1.0]
 
-# preallocate y-axis Wigner matrix normalization
+# preallocate y-axis rotation Wigner matrix normalization
 const ζs_mag = Float64[1.0]
 const ηs_mag = Float64[1.0]
+
+# preallocate error integrals
+const ε_MAX_N = 20
+const ε_NX = 100
+const ε_Nθ = 80
+const ε_Δθ = π / ε_Nθ
+const ε_Nϕ = 10
+const ε_Δϕ = π / ε_Nϕ
+const ε_NΔθ = 100
+const ε_dΔθ = π * 0.5 / ε_NΔθ
+
+include("error_preintegration.jl")
+
+fpath = joinpath(@__DIR__, "multipole_integrals.csv")
+const MULTIPOLE_INTEGRALS = read_write_multipole(fpath)
+fpath = joinpath(@__DIR__, "local_integrals.csv")
+const LOCAL_INTEGRALS = read_write_local(fpath)
 
 #------- HEADERS AND EXPORTS -------#
 
@@ -73,13 +84,21 @@ include("derivativesswitch.jl")
 
 export DerivativesSwitch
 
+include("error.jl")
+
+export multipole_error, local_error, error
+
+include("dynamic_expansion_order.jl")
+
+export get_P
+
 include("sortwrapper.jl")
 
 export SortWrapper
 
 include("interaction_list.jl")
 
-export EqualSpheres, UnequalSpheres, UnequalBoxes, Dynamic, build_interaction_lists
+export EqualSpheres, UnequalSpheres, UnequalBoxes, UniformUnequalSpheres, UniformUnequalBoxes, UniformCubes, Dynamic, build_interaction_lists
 
 include("fmm.jl")
 

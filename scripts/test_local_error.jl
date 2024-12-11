@@ -34,6 +34,41 @@ function manual_sum(r, ρ_max, A, p, ΔC)
     return val
 end
 
+function manual_integral_box(x1,x2,y1,y2,z1,z2,n,ndiv)
+    xs = range(x1,stop=x2,length=ndiv)
+    ys = range(y1,stop=y2,length=ndiv)
+    zs = range(z1,stop=z2,length=ndiv)
+    dx=xs[2]-xs[1]
+    dy=ys[2]-ys[1]
+    dz=zs[2]-zs[1]
+    val = 0.0
+    for ix in 1:length(xs)-1
+        x = (xs[ix]+xs[ix+1])*0.5
+        for iy in 1:length(ys)-1
+            y = (ys[iy]+ys[iy+1])*0.5
+            for iz in 1:length(zs)-1
+                z = (zs[iz]+zs[iz+1])*0.5
+                val += (x^2+y^2+z^2)^(-(n+1)*0.5)
+            end
+        end
+    end
+    return val * dx * dy * dz
+end
+
+function manual_sum_box(r, x1,x2,y1,y2,z1,z2,A,p; ndiv=50)
+    println("Manual Sum Box: p=$p")
+    val = 0.0
+
+    for n in p+1:1000
+        F = manual_integral_box(x1,x2,y1,y2,z1,z2,n,ndiv)
+        val += r^n * F
+    end
+
+    val *= A / ((x2-x1)*(y2-y1)*(z2-z1))
+
+    return val
+end
+
 function theta_integral2(ρ_max, ΔC, n, ρ̂)
     stuff = (-ρ_max^2 + ΔC^2 + ρ̂^2) / (2 * ΔC * ρ̂)
     θs = range(0, stop=acos(stuff), length=100)
@@ -163,10 +198,6 @@ function manual_sum5_rel(r, ρ_max, A, p, ΔC)
     r_max = r
     ρ2_ΔC2_2ΔC = (ρ_max^2 - ΔC^2) / (2*ΔC)
     r2_ΔC2 = r^2/(2*ΔC)
-    @show Γ, r_max, ρ2_ΔC2_2ΔC, r2_ΔC2
-    @show logterm + t1
-    @show logterm + t2
-    @show logterm + t3
 
     return val
 end
@@ -175,9 +206,8 @@ function upper_bound_2(r, ρ_max, A, p, ΔC)
     return A / (ΔC - ρ_max - r) * (r/(ΔC - ρ_max))^(p+1)
 end
 
-
 # manual integral
-r, ρ_max, A, ΔC = 1.0, 3.0, 1.0, 5.0
+r, ρ_max, A, ΔC = 1.0, 0.5, 1.0, 3.0
 ps = collect(0:20)
 
 # integral of abs(Plm(cos)...
@@ -195,8 +225,21 @@ e4_manual = manual_sum4.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
 # simplification
 e5_manual = manual_sum5.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
 e5_manual_rel = manual_sum5_rel.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
+e5_manual_rel_2 = e5_manual ./ (A/(ΔC - r - ρ_max))
 
 ub2 = upper_bound_2.(Ref(r), Ref(ρ_max), Ref(A), ps, Ref(ΔC))
+
+# try box integral- x axis
+sx = sy = sz = (4/3*pi)^(1/3) * ρ_max # preserve volume
+sx = sy = sz = 2 * ρ_max # sphere inscribed in the box
+sx = sy = sz = 2 * ρ_max / sqrt(3) # box inscribed in the sphere
+x1 = ΔC - sx/2
+x2 = ΔC + sx/2
+y1 = -sy/2
+y2 = sy/2
+z1 = -sz/2
+z2 = sz/2
+e_manual_box_x = manual_sum_box.(Ref(r), Ref(x1), Ref(x2), Ref(y1), Ref(y2), Ref(z1), Ref(z2), Ref(A), ps; ndiv=50)
 
 p = ps[end]
 

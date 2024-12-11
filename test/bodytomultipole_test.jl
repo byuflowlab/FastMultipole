@@ -217,12 +217,11 @@ bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
 expansion_order = 10
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, 0.0, source_box, box, expansion_order)
+branch = Branch(1:1, 0, 1:0, 0, 1, x, x, 0.0, 0.0, box, box, expansion_order)
 
 body_to_multipole!(Point{Source}, masses, branch, 1:1, branch.harmonics, Val(expansion_order))
 
-Δx = SVector{3}(bodies[1:3]) - branch.center
+Δx = SVector{3}(bodies[1:3]) - branch.source_center
 ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx...)
 
 # check against known values
@@ -252,7 +251,7 @@ r = x_target - xs
 rnorm = sqrt(r'*r)
 ϕ_analytic = masses.bodies[1].strength/rnorm/4/pi
 v_analytic = r/rnorm^3/4/pi * masses.bodies[1].strength
-ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(x_target, branch.center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
+ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(x_target, branch.source_center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
 
 @test isapprox(ϕ_m2b, ϕ_analytic; atol=1e-12)
 
@@ -260,8 +259,7 @@ v_analytic = r/rnorm^3/4/pi * masses.bodies[1].strength
 
 target_center = x_target + SVector{3}(0.05, -0.1, -0.2)
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-target_branch = Branch(1:1, 0, 1:0, 0, 1, target_center, 0.0, 0.0, source_box, box, expansion_order)
+target_branch = Branch(1:1, 0, 1:0, 0, 1, target_center, target_center, 0.0, 0.0, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -307,8 +305,7 @@ system = DipolePoints([xs], [q])
 # create branch
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Dipole}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -316,7 +313,7 @@ test_expansion!(branch.multipole_expansion, -multipole_check_expansion, 1, expan
 
 # local branch
 target_center = xt + SVector{3}(0.1, 0.2, -0.3)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -362,8 +359,7 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = xs + SVector{3}(0.01, 0.02, -0.03)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Vortex}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -372,7 +368,7 @@ test_expansion!(branch.multipole_expansion, multipole_check_expansion, 2, expans
 
 xt = SVector{3}(6.8, 0.0, 0.0)
 target_center = xt + SVector{3}(0.1,-0.2,-0.3)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -509,11 +505,11 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = (x1+x2)/2 + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Filament{Source}, system, branch, 1:1, harmonics, Val(expansion_order))
-ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
+ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
 
 @test isapprox(ϕ_check, ϕ_m2b; atol=1e-12)
 
@@ -601,8 +597,8 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = (x1+x2)/2 + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Filament{Dipole}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -614,7 +610,7 @@ for i in eachindex(s)
     @test isapprox(s[i], s_man[i]; atol=1e-12)
 end
 
-ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
+ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
 
 # point dipole
 x_point = (x1+x2)/2
@@ -664,8 +660,8 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = (x1+x2)/2 + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Filament{Vortex}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -674,8 +670,8 @@ body_to_multipole!(Filament{Vortex}, system, branch, 1:1, harmonics, Val(expansi
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-source_box = SVector{6}(0.0 for _ in 1:6)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
+
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -725,8 +721,8 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = centroid + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Panel{Source}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -739,18 +735,18 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = SourcePoints([x_point], [q_point])
-branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Source}, system_point, branch_point, 1:1, harmonics_point, Val(expansion_order))
-#ϕ_point, v_point, g_point = evaluate_multipole(xt, branch_point.center, branch_point.multipole_expansion, DerivativesSwitch(true,true,true), Val(expansion_order))
+#ϕ_point, v_point, g_point = evaluate_multipole(xt, branch_point.source_center, branch_point.multipole_expansion, DerivativesSwitch(true,true,true), Val(expansion_order))
 
 ϕnm_point = branch_point.multipole_expansion[1,1,:] .+ branch_point.multipole_expansion[2,1,:] .* im
 χnm_point = branch_point.multipole_expansion[1,2,:] .+ branch_point.multipole_expansion[2,2,:] .* im
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
-target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
+target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -815,8 +811,8 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = centroid + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Panel{Dipole}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -829,7 +825,7 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = DipolePoints([x_point], [q_point])
-branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Dipole}, system_point, branch_point, 1:1, harmonics_point, Val(expansion_order))
 
@@ -839,8 +835,8 @@ body_to_multipole!(Point{Dipole}, system_point, branch_point, 1:1, harmonics_poi
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
 box = SVector{3}(0.0,0.0,0.0)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
-target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
+target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
@@ -923,8 +919,8 @@ bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0,
 center = centroid + SVector{3}(0.1,0.2,0.08)
 radius = 0.0
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+
+branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 body_to_multipole!(Panel{Vortex}, system, branch, 1:1, harmonics, Val(expansion_order))
 
@@ -937,7 +933,7 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = Vortons([x_point], [q_point])
-branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, radius, radius, source_box, box, expansion_order)
+branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 body_to_multipole!(Point{Vortex}, system_point, branch_point, 1:1, harmonics_point, Val(expansion_order))
 
@@ -946,8 +942,8 @@ body_to_multipole!(Point{Vortex}, system_point, branch_point, 1:1, harmonics_poi
 
 # evaluate local expansion
 target_center = xt + SVector{3}(0.0001, -0.0002, 0.003)
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
-target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, radius, radius, source_box, box, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
+target_branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]

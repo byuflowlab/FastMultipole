@@ -36,8 +36,8 @@ bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
 expansion_order = 7
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch = Branch(1:1, 0, 1:0, 0, 1, x, 0.0, 0.0, source_box, box, expansion_order)
+
+branch = Branch(1:1, 0, 1:0, 0, 1, x, x, 0.0, 0.0, box, box, expansion_order)
 
 body_to_multipole!(Point{Source}, masses, branch, 1:1, branch.harmonics, Val(expansion_order))
 
@@ -60,8 +60,8 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 
 # next multipole branch
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), 0.0, 0.0, source_box, box, expansion_order)
+
+branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), x + SVector{3}(0.1, 0.2, 0.14), 0.0, 0.0, box, box, expansion_order)
 expansion_switch = Val(false)
 
 FastMultipole.multipole_to_multipole!(branch_2, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, Val(expansion_order), expansion_switch)

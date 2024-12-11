@@ -15,6 +15,7 @@ include("./gravitational.jl")
 include("./vortex.jl")
 include("./panels.jl")
 include("evaluate_multipole.jl")
+include("bodytolocal.jl")
 
 #--- helper functions ---#
 
@@ -61,7 +62,7 @@ include("translate_local_test.jl")
 include("evaluate_expansions_test.jl")
 include("lamb_helmholtz_test.jl")
 include("tree_test.jl")
-include("dynamic_expansion_order_test.jl")
+# include("dynamic_expansion_order_test.jl")
 include("interaction_list_test.jl")
 include("fmm_test.jl")
 

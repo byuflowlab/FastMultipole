@@ -10,14 +10,13 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_r
         bodies_index = get_bodies_index(system)
 
         # root branch
-        center, target_box = center_box(system)
-        bx, by, bz = target_box
+        center, box = center_box(system)
+        bx, by, bz = box
 
         # initial octree generation uses cubic cells
         bmax = max(max(bx,by),bz)
         radius = sqrt(bmax*bmax*3.0)
-        target_box = SVector{3}(bmax, bmax, bmax)
-        source_box = SVector{6}(-bmax, bmax, -bmax, bmax, -bmax, bmax)
+        box = SVector{3}(bmax, bmax, bmax)
 
         # prepare to divide
         i_first_branch = 2
@@ -26,7 +25,7 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_r
         sort_index_buffer = get_sort_index_buffer(system)
 
         # grow root branch
-        root_branch, n_children, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, radius, radius, source_box, target_box, 0, 1, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+        root_branch, n_children, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, center, radius, radius, box, box, 0, 1, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `Branch` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
         branches = [root_branch] # this first branch will already have its child branches encoded
         # estimated_n_branches = estimate_n_branches(system, leaf_size, allocation_safety_factor)
         # sizehint!(branches, estimated_n_branches)
@@ -163,11 +162,10 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
         if parent_branch.n_branches > 0
             # radius of the child branches
             child_radius = parent_branch.target_radius * 0.5
-            child_source_box = parent_branch.source_box * 0.5
-            child_target_box = parent_branch.target_box * 0.5
+            child_box = parent_branch.target_box * 0.5
 
             # count bodies per octant
-            census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
+            census!(cumulative_octant_census, system, parent_branch.bodies_index, parent_branch.target_center) # doesn't need to sort them here; just count them; the alternative is to save census data for EVERY CHILD BRANCH EACH GENERATION; then I save myself some effort at the expense of more memory allocation, as the octant_census would already be available; then again, the allocation might cost more than I save (which is what my intuition suggests)
             update_octant_accumulator!(cumulative_octant_census)
 
             # number of child branches
@@ -175,8 +173,8 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
                 for i_octant in 1:8
                     if get_population(cumulative_octant_census, i_octant) > 0
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
-                        child_center = get_child_center(parent_branch.center, parent_branch.target_box, i_octant)
-                        child_branch, n_grandchildren, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_radius, child_radius, child_source_box, child_target_box, i_parent, i_leaf, leaf_size, expansion_order)
+                        child_center = get_child_center(parent_branch.target_center, parent_branch.target_box, i_octant)
+                        child_branch, n_grandchildren, i_leaf = Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, child_center, child_center, child_radius, child_radius, child_box, child_box, i_parent, i_leaf, leaf_size, expansion_order)
                         i_first_branch += n_grandchildren
                         push!(branches, child_branch)
                     end
@@ -189,9 +187,9 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
     return parents_index, n_children, i_leaf
 end
 
-function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, center, source_radius, target_radius, source_box, target_box, i_parent, i_leaf, leaf_size, expansion_order)
+function Branch(system, sort_index, octant_container, buffer, sort_index_buffer, i_first_branch, bodies_index, source_center, target_center, source_radius, target_radius, source_box, target_box, i_parent, i_leaf, leaf_size, expansion_order)
     # count bodies in each octant
-    census!(octant_container, system, bodies_index, center)
+    census!(octant_container, system, bodies_index, target_center)
 
     # cumsum
     update_octant_accumulator!(octant_container)
@@ -203,7 +201,7 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
         octant_beginning_index!(octant_container, bodies_index)
 
         # sort bodies into octants
-        sort_bodies!(system, sort_index, octant_container, buffer, sort_index_buffer, bodies_index, center)
+        sort_bodies!(system, sort_index, octant_container, buffer, sort_index_buffer, bodies_index, target_center)
     end
 
     # get child branch information
@@ -217,15 +215,15 @@ function Branch(system, sort_index, octant_container, buffer, sort_index_buffer,
         i_leaf_index = -1
     end
 
-    return Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order), n_children, i_leaf
+    return Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order), n_children, i_leaf
 end
 
-function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
-    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_harmonics(expansion_order, typeof(source_radius)), ReentrantLock())
+function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
+    return SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_harmonics(expansion_order, typeof(source_radius)), ReentrantLock())
 end
 
-function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
-    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), ReentrantLock())
+function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
+    return MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,POSITION] for i in bodies_index)
@@ -540,7 +538,7 @@ end
 
         # extract child branch
         child_branch = branches[i_child]
-        cx, cy, cz = child_branch.center
+        cx, cy, cz = child_branch.target_center
         dx, dy, dz = child_branch.target_box
 
         # get bounding box
@@ -588,7 +586,7 @@ end
 
     # smallest bounding rectangle
     first_branch = branches[child_index[1]]
-    x_min, y_min, z_min = first_branch.center
+    x_min, y_min, z_min = first_branch.target_center
     x_max = x_min
     y_max = y_min
     z_max = z_min
@@ -599,6 +597,89 @@ end
     bounding_box = SVector{3}(x_max - center[1], y_max - center[2], z_max - center[3])
 
     return center, bounding_box
+end
+
+@inline function source_max_xyz(x_max, y_max, z_max, x, y, z)
+    x_max = max(x_max, x)
+    y_max = max(y_max, y)
+    z_max = max(z_max, z)
+
+    return x_max, y_max, z_max
+end
+
+@inline function source_min_xyz(x_min, y_min, z_min, x, y, z)
+    x_min = min(x_min, x)
+    y_min = min(y_min, y)
+    z_min = min(z_min, z)
+
+    return x_min, y_min, z_min
+end
+
+@inline function source_max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, system, bodies_index)
+    for i in bodies_index
+        x, y, z = system[i,Position()]
+        r = system[i,Radius()]
+        x_min, y_min, z_min = source_min_xyz(x_min, y_min, z_min, x-r, y-r, z-r)
+        x_max, y_max, z_max = source_max_xyz(x_max, y_max, z_max, x+r, y+r, z+r)
+    end
+
+    return x_min, x_max, y_min, y_max, z_min, z_max
+end
+
+@inline function source_max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, branches::Vector{<:Branch}, child_index)
+
+    # loop over child branches
+    for i_child in child_index
+
+        # extract child branch
+        child_branch = branches[i_child]
+        cx, cy, cz = child_branch.source_center
+        dx, dy, dz = child_branch.source_box
+
+        # get bounding box
+        x_min = min(x_min, cx-dx)
+        x_max = max(x_max, cx+dx)
+        y_min = min(y_min, cy-dy)
+        y_max = max(y_max, cy+dy)
+        z_min = min(z_min, cz-dz)
+        z_max = max(z_max, cz+dz)
+    end
+
+    return x_min, x_max, y_min, y_max, z_min, z_max
+end
+
+function source_center_box(systems::Tuple, bodies_indices)
+    x_min, y_min, z_min = first_body_position(systems, bodies_indices)
+    x_max, y_max, z_max = x_min, y_min, z_min
+    for (system, bodies_index) in zip(systems, bodies_indices)
+        x_min, x_max, y_min, y_max, z_min, z_max = source_max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, system, bodies_index)
+    end
+
+    return get_center_box(x_min, x_max, y_min, y_max, z_min, z_max)
+end
+
+function source_center_box(system, bodies_index)
+    x_min, y_min, z_min = first_body_position(system, bodies_index)
+    x_max, y_max, z_max = x_min, y_min, z_min
+    x_min, x_max, y_min, y_max, z_min, z_max = source_max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, system, bodies_index)
+    return get_center_box(x_min, x_max, y_min, y_max, z_min, z_max)
+end
+
+@inline function source_center_box(branches::Vector{<:Branch}, child_index)
+
+    # smallest bounding rectangle
+    first_branch = branches[child_index[1]]
+    x_min, y_min, z_min = first_branch.source_center
+    x_max = x_min
+    y_max = y_min
+    z_max = z_min
+    x_min, x_max, y_min, y_max, z_min, z_max = source_max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, branches, child_index)
+
+    # find center
+    source_center = SVector{3}((x_min+x_max)*0.5, (y_min+y_max)*0.5, (z_min+z_max)*0.5)
+    bounding_box = SVector{3}(x_max - source_center[1], y_max - source_center[2], z_max - source_center[3])
+
+    return source_center, bounding_box
 end
 
 #------- shrinking method for bodies of non-zero radius -------#
@@ -630,17 +711,18 @@ end
 @inline get_n_bodies_vec(branch::MultiBranch) = SVector{Int}(length(bodies_index) for bodies_index in branch.bodies_index)
 
 
-@inline function shrink_radius_box(target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max, center, systems::Tuple, bodies_indices)
+@inline function shrink_radius(target_radius, source_radius, target_center, source_center, systems::Tuple, bodies_indices)
     # loop over systems
     for (system, bodies_index) in zip(systems, bodies_indices)
-        target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max = shrink_radius_box(target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max, center, system, bodies_index)
+        target_radius, source_radius = shrink_radius(target_radius, source_radius, target_center, source_center, system, bodies_index)
     end
-    return target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max
+    return target_radius, source_radius
 end
 
-@inline function shrink_radius_box(target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max, center, system, bodies_index)
-    # extract center
-    cx, cy, cz = center
+@inline function shrink_radius(target_radius, source_radius, target_center, source_center, system, bodies_index)
+    # extract target/source centers
+    cxt, cyt, czt = target_center
+    cxs, cys, czs = source_center
 
     # loop over all bodies
     for i_body in bodies_index
@@ -649,95 +731,80 @@ end
         x, y, z = system[i_body,Position()]
         body_radius = system[i_body,Radius()]
 
-        # max radius
-        dx = x - cx
-        dy = y - cy
-        dz = z - cz
+        # max target radius
+        dx = x - cxt
+        dy = y - cyt
+        dz = z - czt
         distance = sqrt(dx*dx + dy*dy + dz*dz)
         target_radius = max(target_radius, distance)
+
+        # max source radius
+        dx = x - cxs
+        dy = y - cys
+        dz = z - czs
+        distance = sqrt(dx*dx + dy*dy + dz*dz)
         source_radius = max(source_radius, distance + body_radius)
 
-        # bounding box
-        dx_min = min(dx_min, dx-body_radius)
-        dx_max = max(dx_max, dx+body_radius)
-        dy_min = min(dy_min, dy-body_radius)
-        dy_max = max(dy_max, dy+body_radius)
-        dz_min = min(dz_min, dz-body_radius)
-        dz_max = max(dz_max, dz+body_radius)
     end
 
-    return target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max
+    return target_radius, source_radius
 end
 
-@inline function shrink_radius_box(center, system, bodies_index)
+@inline function shrink_radius(target_center, source_center, system, bodies_index)
     # initialize values
-    target_radius = zero(eltype(center))
-    source_radius = zero(eltype(center))
-    x, y, z = first_body_position(system, bodies_index)
-    dx_max, dy_max, dz_max = x - center[1], y - center[2], z - center[3]
-    dx_min, dy_min, dz_min = dx_max, dy_max, dz_max
+    target_radius = zero(eltype(target_center))
+    source_radius = zero(eltype(target_center))
 
-    # max/min values
-    target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max = shrink_radius_box(target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max, center, system, bodies_index)
+    # get radii
+    target_radius, source_radius = shrink_radius(target_radius, source_radius, target_center, source_center, system, bodies_index)
 
-    # form bounding box
-    bounding_box = SVector{6}(dx_min, dx_max, dy_min, dy_max, dz_min, dz_max)
-
-    return target_radius, source_radius, bounding_box
+    return target_radius, source_radius
 end
 
-@inline function shrink_radius_box(center, branches::Vector{<:Branch}, child_index)
+@inline function shrink_radius(target_center, source_center, branches::Vector{<:Branch}, child_index)
     # initialize values
-    target_radius = zero(eltype(center))
-    source_radius = zero(eltype(center))
+    target_radius = zero(eltype(target_center))
+    source_radius = zero(eltype(target_center))
     first_child = branches[child_index[1]]
-    cx, cy, cz = first_child.center
-    dx_min = cx - center[1]
-    dy_min = cy - center[2]
-    dz_min = cz - center[3]
-    dx_max, dy_max, dz_max = dx_min, dy_min, dz_min
 
-    # max/min values
-    target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max = shrink_radius_box(target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max, center, branches, child_index)
+    # get radii
+    target_radius, source_radius = shrink_radius(target_radius, source_radius, target_center, source_center, branches, child_index)
 
-    # form bounding box
-    bounding_box = SVector{6}(dx_min, dx_max, dy_min, dy_max, dz_min, dz_max)
-
-    return target_radius, source_radius, bounding_box
+    return target_radius, source_radius
 end
 
-@inline function shrink_radius_box(target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max, center, branches::Vector{<:Branch}, child_index)
-    # extract center
-    cx, cy, cz = center
+@inline function shrink_radius(target_radius, source_radius, target_center, source_center, branches::Vector{<:Branch}, child_index)
+    # extract target/source centers
+    cxt, cyt, czt = target_center
+    cxs, cys, czs = source_center
 
     # loop over all bodies
     for i_child in child_index
 
         # extract body position and size
         child_branch = branches[i_child]
-        x, y, z = child_branch.center
+        xt, yt, zt = child_branch.target_center
+        xs, ys, zs = child_branch.source_center
         child_target_radius = child_branch.target_radius
         child_source_radius = child_branch.source_radius
 
-        # max radius
-        dx = x - cx
-        dy = y - cy
-        dz = z - cz
+        # max target radius
+        dx = xt - cxt
+        dy = yt - cyt
+        dz = zt - czt
         distance = sqrt(dx*dx + dy*dy + dz*dz)
         target_radius = max(target_radius, distance + child_target_radius)
+
+        # max source radius
+        dx = xs - cxs
+        dy = ys - cys
+        dz = zs - czs
+        distance = sqrt(dx*dx + dy*dy + dz*dz)
         source_radius = max(source_radius, distance + child_source_radius)
 
-        # bounding box
-        bx_min, bx_max, by_min, by_max, bz_min, bz_max = child_branch.source_box
-        dx_min = min(dx_min, dx+bx_min)
-        dx_max = max(dx_max, dx+bx_max)
-        dy_min = min(dy_min, dy+by_min)
-        dy_max = max(dy_max, dy+by_max)
-        dz_min = min(dz_min, dz+bz_min)
-        dz_max = max(dz_max, dz+bz_max)
     end
 
-    return target_radius, source_radius, dx_min, dx_max, dy_min, dy_max, dz_min, dz_max
+    return target_radius, source_radius
 end
 
 function shrink_leaf!(branches, i_branch, system)
@@ -746,13 +813,14 @@ function shrink_leaf!(branches, i_branch, system)
     bodies_index = branch.bodies_index
 
     # recenter and target box
-    new_center, new_target_box = center_box(system, bodies_index)
+    new_target_center, new_target_box = center_box(system, bodies_index)
+    new_source_center, new_source_box = source_center_box(system, bodies_index)
 
     # shrink radii and create source box
-    new_target_radius, new_source_radius, new_source_box = shrink_radius_box(new_center, system, bodies_index)
+    new_target_radius, new_source_radius = shrink_radius(new_target_center, new_source_center, system, bodies_index)
 
     # replace branch
-    replace_branch!(branches, i_branch, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box)
+    replace_branch!(branches, i_branch, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box)
 
 end
 
@@ -764,13 +832,14 @@ Shrunk radii are merely the distance from the center to the corner of the box.
 function shrink_branch!(branches, i_branch, child_index)
 
     # recenter and target box
-    new_center, new_target_box = center_box(branches, child_index)
+    new_target_center, new_target_box = center_box(branches, child_index)
+    new_source_center, new_source_box = source_center_box(branches, child_index)
 
     # shrink radii and create source box
-    new_target_radius, new_source_radius, new_source_box = shrink_radius_box(new_center, branches, child_index)
+    new_target_radius, new_source_radius = shrink_radius(new_target_center, new_source_center, branches, child_index)
 
     # replace branch
-    replace_branch!(branches, i_branch, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box)
+    replace_branch!(branches, i_branch, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box)
 end
 
 function shrink_recenter!(branches, levels_index, system)
@@ -912,7 +981,7 @@ end
 
 #--- helper function ---#
 
-@inline function replace_branch!(branches::Vector{TB}, i_branch, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box) where TB
+@inline function replace_branch!(branches::Vector{TB}, i_branch, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box) where TB
     # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, lock) = branch[]
     branch = branches[i_branch]
     bodies_index = branch.bodies_index
@@ -927,7 +996,7 @@ end
     local_expansion = branch.local_expansion
     harmonics = branch.harmonics
     lock = branch.lock
-    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, new_center, new_source_radius, new_target_radius, new_source_box, new_target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
+    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 @inline function replace_branch!(branches::Vector{TB}, i_branch, new_charge, new_dipole) where TB
@@ -938,7 +1007,8 @@ end
     branch_index = branch.branch_index
     i_parent = branch.i_parent
     i_leaf = branch.i_leaf
-    center = branch.center
+    source_center = branch.source_center
+    target_center = branch.target_center
     source_radius = branch.source_radius
     target_radius = branch.target_radius
     source_box = branch.source_box
@@ -948,7 +1018,7 @@ end
     local_expansion = branch.local_expansion
     harmonics = branch.harmonics
     lock = branch.lock
-    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, new_charge, new_dipole, error, multipole_expansion, local_expansion, harmonics, lock)
+    branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, new_charge, new_dipole, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 function initialize_expansion(expansion_order, type=Float64)

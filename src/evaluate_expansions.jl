@@ -1,11 +1,17 @@
 function evaluate_local!(systems, branch::MultiBranch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     for i in eachindex(systems)
-        evaluate_local!(systems[i], branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.center, expansion_order, lamb_helmholtz, derivatives_switches[i])
+        evaluate_local!(systems[i], branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
     end
 end
 
+function evaluate_local!(system, branch, expansion_order, lamb_helmholtz, derivatives_switch)
+    harmonics = branch.harmonics
+    velocity_n_m = zeros(2,3,size(branch.multipole_expansion,3))
+    evaluate_local!(system, branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
+end
+
 function evaluate_local!(system, branch::SingleBranch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
-    evaluate_local!(system, branch.bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.center, expansion_order, lamb_helmholtz, derivatives_switch)
+    evaluate_local!(system, branch.bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
 function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_expansion, expansion_center, expansion_order::Val{P}, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {P,PS,VS,GS}

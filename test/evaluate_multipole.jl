@@ -1,17 +1,17 @@
 function evaluate_multipole!(system, bodies_index, multipole_weights, derivatives_switch::DerivativesSwitch{PS,VS,GS}, expansion_order, expansion_center) where {PS,VS,GS}
     for i_body in bodies_index
-		scalar_potential, vector_potential, velocity, gradient = evaluate_multipole(system[i_body,POSITION], expansion_center, multipole_weights, derivatives_switch, expansion_order)
+        scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,Position()], expansion_center, multipole_weights, derivatives_switch, expansion_order)
 
         if PS
-            system[i_body,SCALAR_POTENTIAL] += scalar_potential
+            system[i_body,ScalarPotential()] += scalar_potential
         end
         if VS
-            vpx, vpy, vpz = system[i_body,VELOCITY]
-			system[i_body,VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
+            vpx, vpy, vpz = system[i_body,Velocity()]
+			system[i_body,Velocity()] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
         end
         if GS
-            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
-            system[i_body,VELOCITY_GRADIENT] = SMatrix{3,3}(
+            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VelocityGradient()]
+            system[i_body,VelocityGradient()] = SMatrix{3,3}(
                 gradient[1] + v1,
                 gradient[2] + v2,
                 gradient[3] + v3,

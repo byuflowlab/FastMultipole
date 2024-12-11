@@ -378,7 +378,7 @@ end
 @inline function body_to_multipole!(element::Type{<:Point}, system, branch, bodies_index, harmonics, expansion_order::Val)
 
     # extract containers
-    center = branch.center
+    center = branch.source_center
     multipole_coefficients = branch.multipole_expansion
 
     # loop over bodies
@@ -485,7 +485,7 @@ end
 
 @inline function body_to_multipole!(element::Type{<:Filament}, system, branch, bodies_index, harmonics, expansion_order::Val)
     # extract containers
-    center = branch.center
+    center = branch.source_center
     multipole_coefficients = branch.multipole_expansion
 
     # loop over bodies
@@ -624,7 +624,7 @@ end
 
 @inline function body_to_multipole!(element::Type{<:Panel}, system, branch, bodies_index, harmonics, expansion_order::Val)
     # extract containers
-    center = branch.center
+    center = branch.source_center
     multipole_coefficients = branch.multipole_expansion
 
     # loop over bodies

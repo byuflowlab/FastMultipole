@@ -146,7 +146,7 @@ function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, we
     source_weights = source_branch.multipole_expansion
 
     # translation vector
-    Δx = target_branch.center - source_branch.center
+    Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     #--- rotate coordinate system ---#
@@ -260,7 +260,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     source_weights = source_branch.multipole_expansion
 
     # translation vector
-    Δx = target_branch.center - source_branch.center
+    Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     # choose expansion order
@@ -348,7 +348,7 @@ function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tm
     source_weights = source_branch.local_expansion
 
     # translation vector
-    Δx = target_branch.center - source_branch.center
+    Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     #--- rotate coordinate system ---#
