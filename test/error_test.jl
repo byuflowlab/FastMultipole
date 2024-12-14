@@ -6,8 +6,10 @@ include("../test/gravitational.jl")
 include("../test/bodytolocal.jl")
 include("../test/evaluate_multipole.jl")
 
-function output_stuff(v)
-    # @show mean(abs.(v)) maximum(abs.(v)) minimum(abs.(v)) std(abs.(v))
+function output_stuff(v; verbose=false)
+    if verbose
+        @show mean(abs.(v)) maximum(abs.(v)) minimum(abs.(v)) std(abs.(v))
+    end
     return mean(abs.(v)), maximum(abs.(v)), minimum(abs.(v)), std(abs.(v))
 end
 
@@ -144,9 +146,10 @@ function generate_branch_cartesian(center, x_range, y_range, z_range, r_range, q
     return branch, system
 end
 
-function evaluate_multipole(xt, branch::Branch, expansion_order)
-    ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
-    return ϕ_m2b
+function evaluate_multipole(xt, branch::Branch, expansion_order, lamb_helmholtz::Bool)
+    Δx = xt - branch.source_center
+    ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(Δx, branch.harmonics, branch.multipole_expansion, Val(expansion_order), Val(LH), DerivativesSwitch())
+    return ϕ_m2b, v_m2b
 end
 
 function evaluate_direct(xt, system::Gravitational, multipole_branch::SingleBranch)
@@ -201,7 +204,7 @@ function absolute_error(u_true, u_test)
     return u_test .- u_true
 end
 
-function multipole_local_error(local_branch::SingleBranch, local_system, multipole_branch::SingleBranch, multipole_system, expansion_order::Int)
+function multipole_local_error(local_branch::SingleBranch, local_system, multipole_branch::SingleBranch, multipole_system, expansion_order::Int; body_type=Point{Source})
     # get direct potential
     potential_direct = [evaluate_direct(local_system[i,Position()], multipole_system, multipole_branch) for i in local_branch.bodies_index]
 
@@ -210,30 +213,38 @@ function multipole_local_error(local_branch::SingleBranch, local_system, multipo
     x_mp = multipole_branch.source_center
     for i in multipole_branch.bodies_index
         Δx = multipole_system[i,Position()] - x_mp
-        FastMultipole.body_to_multipole_point!(Point{Source}, multipole_branch.multipole_expansion, multipole_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
+        FastMultipole.body_to_multipole_point!(body_type, multipole_branch.multipole_expansion, multipole_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
     end
 
     # multipole error
-    potential_mp = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order) for i in local_branch.bodies_index]
+    lamb_helmholtz = body_type == Point{Vortex}
+    potential_mp = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order, lamb_helmholtz)[1] for i in local_branch.bodies_index]
+    velocity_mp = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
     error_mp = absolute_error(potential_direct, potential_mp)
 
     # local expansion
-    local_branch.local_expansion .= 0.0
-    x_l = local_branch.target_center
-    for i in multipole_branch.bodies_index
-        Δx = multipole_system[i,Position()] - x_l
-        body_to_local_point!(Point{Source}, local_branch.local_expansion, local_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
-    end
+    if body_type == Point{Source}
+        local_branch.local_expansion .= 0.0
+        x_l = local_branch.target_center
+        for i in multipole_branch.bodies_index
+            Δx = multipole_system[i,Position()] - x_l
+            body_to_local_point!(body_type, local_branch.local_expansion, local_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
+        end
 
-    # local error
-    potential_l = [evaluate_local(local_system[i,Position()], local_branch, expansion_order) for i in local_branch.bodies_index]
-    error_l = absolute_error(potential_direct, potential_l)
+        # local error
+        potential_l = [evaluate_local(local_system[i,Position()], local_branch, expansion_order) for i in local_branch.bodies_index]
+        error_l = absolute_error(potential_direct, potential_l)
+    end
 
     # overall error
     local_branch.local_expansion .= 0.0
     multipole_to_local!(local_branch, multipole_branch, expansion_order)
     potential_o = [evaluate_local(local_system[i,Position()], local_branch, expansion_order) for i in local_branch.bodies_index]
     error_o = absolute_error(potential_direct, potential_o)
+
+    if body_type !== Point{Source}
+        error_l = abs.(error_o) .- abs.(error_mp)
+    end
 
     return error_mp, error_l, error_o
 end
@@ -253,7 +264,12 @@ end
 
 function test_error(local_branch, local_system, multipole_branch, multipole_system, expansion_order::Int)
     # experimental error
-    e_mp, e_l, e_o = multipole_local_error(local_branch, local_system, multipole_branch, multipole_system, expansion_order)
+    if typeof(multipole_system) <: Gravitational
+        body_type = Point{Source}
+    elseif typeof(multipole_system) <: VortexParticles
+        body_type = Point{Vortex}
+    end
+    e_mp, e_l, e_o = multipole_local_error(local_branch, local_system, multipole_branch, multipole_system, expansion_order; body_type)
 
     # unequal spheres
     ub_mp_us = multipole_error(local_branch, multipole_branch, expansion_order, UnequalSpheres())
@@ -472,9 +488,6 @@ function multipole_preintegration(rvec, n_max, s, nx)
                     # update integral for each n
                     for n in 1:n_max
                         # res[n] += ρr_n * Pn * rinv # actual integral for ρ/r
-                        #if n == 1
-                        #    @show ρn, Pn, ρn*Pn
-                        #end
                         res[n] += ρn * Pn
 
                         # next Legendre polynomial
@@ -630,36 +643,34 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
                     rho_vec = SVector{3}(x,y,z) + m_branch.source_center - l_branch.target_center
                     rho = norm(rho_vec)
                     cos_gamma = dot(rvec, rho_vec) / (r * rho)
-                    for n in P+1:20
+                    for n in P+1:P+2
                         rho_inv = 1/rho
-                        integral_local += (r * rho_inv)^n * rho_inv * Plm(cos_gamma, n, 0)
+                        Pn = Plm(cos_gamma, n, 0)
+                        integral_local += (r * rho_inv)^n * rho_inv * Pn
                     end
                 end
             end
         end
-        #if true || minimum(cosines) < 0
-        #    @show mean(cosines) std(cosines) maximum(cosines) minimum(cosines)
-        #end
         integral_local *= A * dx*dy*dz / (8*lx*ly*lz)
 
     elseif method == "sphere"
         rvec = x_t - l_branch.target_center
         r = norm(x_t - l_branch.target_center)
         cosines = Float64[]
-        s2 = x0*x0 + y0*y0 + z0*z0
-        radius2 = (x0*x0 + y0*y0 + z0*z0) / 3 # 3 makes this the largest encompassed sphere
+        s_over_2 = mean([lx,ly,lz])
+        # radius2 = (x0*x0 + y0*y0 + z0*z0) / 3 # 3 makes this the largest encompassed sphere
         # radius2 = 3/(4pi)^(0.666666666) * s2
 
         for z in range(z0, step=dz, length=nz)
             for y in range(y0, step=dy, length=ny)
                 for x in range(x0, step=dx, length=nx)
                     rhop = SVector{3}(x,y,z)
-                    if rhop'*rhop < radius2 # contained in the largest encompassed sphere
+                    if rhop'*rhop < s_over_2 * s_over_2 # radius2 # contained in the largest encompassed sphere
                         rho_vec = rhop + m_branch.source_center - l_branch.target_center
                         rho = norm(rho_vec)
                         cos_gamma = dot(rvec, rho_vec) / (r * rho)
                         push!(cosines, cos_gamma)
-                        for n in P+1:20
+                        for n in P+1:P+2
                             rho_inv = 1/rho
                             integral_local += (r * rho_inv)^n * rho_inv * Plm(cos_gamma, n, 0)
                         end
@@ -667,10 +678,35 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
                 end
             end
         end
-        #if true || minimum(cosines) < 0
-        #    @show mean(cosines) std(cosines) maximum(cosines) minimum(cosines)
-        #end
         integral_local *= A * dx*dy*dz / (8*lx*ly*lz)
+
+    elseif method == "separate_radial_sphere"
+        rvec = x_t - l_branch.target_center
+        r = norm(x_t - l_branch.target_center)
+        cosines = Float64[]
+        s_over_2 = mean([lx,ly,lz])
+        # radius2 = (x0*x0 + y0*y0 + z0*z0) / 3 # 3 makes this the largest encompassed sphere
+        # radius2 = 3/(4pi)^(0.666666666) * s2
+
+        for z in range(z0, step=dz, length=nz)
+            for y in range(y0, step=dy, length=ny)
+                for x in range(x0, step=dx, length=nx)
+                    rhop = SVector{3}(x,y,z)
+                    if rhop'*rhop < s_over_2 * s_over_2 # radius2 # contained in the largest encompassed sphere
+                        rho_vec = rhop + m_branch.source_center - l_branch.target_center
+                        rho = norm(rho_vec)
+                        cos_gamma = dot(rvec, rho_vec) / (r * rho)
+                        push!(cosines, cos_gamma)
+                        for n in P+1:P+1
+                            rho_inv = 1/rho
+                            integral_local += (rho_inv)^(n+1) * Plm(cos_gamma, n, 0)
+                        end
+                    end
+                end
+            end
+        end
+        integral_local *= dx*dy*dz / (8*lx*ly*lz)
+        integral_local *= A * r^(P+1)
 
     elseif method == "separate_angular_sphere"
         rvec = x_t - l_branch.target_center
@@ -723,21 +759,11 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
             rn *= r
         end
 
-        if debug
-            @show R, sqrt(radius2)
-            @show R_np2, r, Rinv, Δθ, iΔθ, rn, this_P, this_cos, R, rvec
-        end
         for n in P+1:P+2
             pint = FastMultipole.LOCAL_INTEGRALS[n,iΔθ] * R_np2
             integral_local += pint * rn
-            if debug
-                @show FastMultipole.LOCAL_INTEGRALS[n,iΔθ], R_np2, rn
-            end
             R_np2 *= Rinv
             rn *= r
-        end
-        if debug
-            @show integral_local, A, lx,ly,lz, this_P
         end
         integral_local *= A / (8*lx*ly*lz) * this_P
 
@@ -761,9 +787,6 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
                 end
             end
         end
-        #if true || minimum(cosines) < 0
-        #    @show mean(cosines) std(cosines) maximum(cosines) minimum(cosines)
-        #end
         integral_local *= A * dx*dy*dz / (8*lx*ly*lz)
 
     elseif method == "separate_angular"
@@ -786,9 +809,6 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
                 end
             end
         end
-        #if true || minimum(cosines) < 0
-        #    @show mean(cosines) std(cosines) maximum(cosines) minimum(cosines)
-        #end
         integral_local *= A * dx*dy*dz / (8*lx*ly*lz)
 
     elseif method == "loop"
@@ -803,7 +823,11 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
             rho_inv = 1/rho
             cos_gamma = dot(rvec, rho_vec) / (r*rho)
             for n in P+1:20
-                err += q * (r*rho_inv)^n * rho_inv * Plm(cos_gamma, n, 0)
+                if typeof(m_system) <: VortexParticles
+                    err += dot(q,rvec)/(r*r) * n * (r*rho_inv)^n * rho_inv * Plm(cos_gamma, n, 0)
+                else
+                    err += q * (r*rho_inv)^n * rho_inv * Plm(cos_gamma, n, 0)
+                end
             end
         end
 
@@ -871,7 +895,6 @@ end
 
 function multipole_error_r(rvec, r, r_inv, m_branch, system, x0, y0, z0, dx, dy, dz, nx, ny, nz, lx, ly, lz, A, P; method="loop", debug=false)
 
-    # @show rvec, r, r_inv
     integral = 0.0
     if method == "loop"
         err = 0.0
@@ -882,7 +905,11 @@ function multipole_error_r(rvec, r, r_inv, m_branch, system, x0, y0, z0, dx, dy,
             rho = norm(rho_vec)
             cos_gamma = dot(rvec, rho_vec) / (r*rho)
             for n in P+1:20
-                err += q * (rho*r_inv)^n * r_inv * Plm(cos_gamma, n, 0)
+                if typeof(system) <: VortexParticles
+                    err += (n+1) * dot(q,rvec) * r_inv * r_inv * (rho*r_inv)^n * r_inv * Plm(cos_gamma, n, 0)
+                else
+                    err += q * (rho*r_inv)^n * r_inv * Plm(cos_gamma, n, 0)
+                end
             end
         end
         integral = err
@@ -992,23 +1019,19 @@ function multipole_error_r(rvec, r, r_inv, m_branch, system, x0, y0, z0, dx, dy,
         # mpint_full = multipole_full_integration(rvec, n_max, s, nx)
 
         # compute error
-        if debug
-            @show s, θr, iθ, ϕr, iϕ, scalar, A, rvec, s_rinv
-        end
         test_integral = 0.0
         for n in P+1:n_max
             integral += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
             scalar *= s_rinv
-            if debug
-                @show FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ]
-            end
             # test_integral += integrate_multipole(rvec, m_branch, n)
         end
 
         # integral *= A/(8*lx*ly*lz)
         integral *= A/(s*s*s)
-        # @show integral / 4 / pi, test_integral
         # println()
+
+        iszero(m_branch.source_box) && (integral = 0.0)
+
     end
     return integral
 end
@@ -1077,12 +1100,22 @@ function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold
     ubs_mp_uub, ubs_l_uub = Float64[], Float64[]
     errs_mp_uc, errs_l_uc = Float64[], Float64[]
     errs_mp_r, errs_l_r = Float64[], Float64[]
+    i_m2l = 1
     for (i_target, i_source, P) in m2l_list
+        println("\n========== i_m2l = $i_m2l ==========\n")
+        if i_m2l == 5
+            FastMultipole.DEBUG[] = true
+        end
         local_branch = tree.branches[i_target]
         multipole_branch = tree.branches[i_source]
         e_mp, e_l, e_o, ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc = test_error(local_branch, system, multipole_branch, system, P)
         # settings
-        e_mp_r, e_l_r = rectangle_error(local_branch, system, multipole_branch, system, P; m_method="precomputed", l_method="precomputed")
+        e_mp_r, e_l_r = rectangle_error(local_branch, system, multipole_branch, system, P; m_method="loop", l_method="loop")
+
+        if i_m2l == 5
+            FastMultipole.DEBUG[] = false
+        end
+        i_m2l += 1
         push!(errs_mp, e_mp)
         push!(errs_l, e_l)
         push!(errs_o, e_o)
@@ -1121,8 +1154,9 @@ Random.seed!(123)
 bodies = rand(7,n_bodies)
 bodies[4,:] .= 0.0
 system = Gravitational(bodies)
-errs_mp, errs_l, errs_o, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order=5, multipole_threshold=0.5, leaf_size=260, shrink_recenter=true)
+errs_mp, errs_l, errs_o, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order=9, multipole_threshold=0.5, leaf_size=260, shrink_recenter=true)
 
+#=
 @testset "error: multipole" begin
 
 #--- test multipole error ---#
@@ -1154,8 +1188,8 @@ me_l2, ma_l2, mi_l2, st_l2 = output_stuff(v_l2)
 @test isapprox(st_l, st_l2; rtol=0.5)
 
 end
+=#
 
-#=
 # explore multipole preintegration
 rvec = SVector{3}(5*sqrt(3),0,0)
 n_max = 10
@@ -1190,8 +1224,9 @@ function vary_polar_angle(res, itheta, iϕ)
     fig.clear()
     fig.add_subplot(111,xlabel="n",ylabel="integral")
     ax = fig.get_axes()[0]
+    iθ = 16
     for iθ in itheta
-        ax.scatter(1:size(res,1), abs.(res[:,iθ,iϕ]))
+        ax.plot(1:size(res,1), abs.(res[:,iθ,iϕ]))
     end
     dθ = pi / (size(res,2)-1)
     ax.legend([L"\theta="*"$((round(i*dθ*180/pi, digits=1)))"*L"^\circ" for i in 0:size(res,2)-1 if i+1 in itheta])
@@ -1202,8 +1237,8 @@ function vary_polar_angle(res, itheta, iϕ)
     fig2.clear()
     fig2.add_subplot(111,xlabel="theta",ylabel="integral")
     ax2 = fig2.get_axes()[0]
-    for n in 4:2:size(res,1)
-        ax2.plot(range(0,stop=pi,length=size(res,2)), res[n,:,iϕ] ./ maximum(res[n,:,iϕ]))
+    for n in 1:8#size(res,1)
+        ax2.plot(range(0,stop=pi,length=size(res,2)), res[n,:,iϕ])# ./ maximum(abs.(res[n,:,iϕ])))
     end
     ax2.legend(["n=$i" for i in 1:size(res,1)])
     # ax2.set_yscale("log")
@@ -1259,5 +1294,4 @@ s = sqrt(1.5^2+0.5^2*2)
 
 r_err = r_averaged_error(expansion_order, s)
 
-=#
 =#

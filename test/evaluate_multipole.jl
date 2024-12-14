@@ -1,17 +1,29 @@
-function evaluate_multipole!(system, bodies_index, multipole_weights, derivatives_switch::DerivativesSwitch{PS,VS,GS}, expansion_order, expansion_center) where {PS,VS,GS}
-    for i_body in bodies_index
-        scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,Position()], expansion_center, multipole_weights, derivatives_switch, expansion_order)
+function evaluate_multipole!(systems, branch::MultiBranch, harmonics, expansion_order, lamb_helmholtz, derivatives_switches)
+    for i in eachindex(systems)
+        evaluate_multipole!(systems[i], branch.bodies_index[i], harmonics, branch.multipole_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
+    end
+end
 
-        if PS
-            system[i_body,ScalarPotential()] += scalar_potential
-        end
+function evaluate_multipole!(system, branch, expansion_order, lamb_helmholtz, derivatives_switch)
+    harmonics = branch.harmonics
+    evaluate_multipole!(system, branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
+end
+
+function evaluate_multipole!(system, branch::SingleBranch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
+    evaluate_multipole!(system, branch.bodies_index, harmonics, branch.multipole_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+end
+
+function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order::Val{P}, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {P,PS,VS,GS}
+    for i_body in bodies_index
+        scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,POSITION] - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+        PS && (system[i_body, SCALAR_POTENTIAL] += scalar_potential)
         if VS
-            vpx, vpy, vpz = system[i_body,Velocity()]
-			system[i_body,Velocity()] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
+            vpx, vpy, vpz = system[i_body, VELOCITY]
+            system[i_body, VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
         end
         if GS
-            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VelocityGradient()]
-            system[i_body,VelocityGradient()] = SMatrix{3,3}(
+            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
+            system[i_body,VELOCITY_GRADIENT] = SMatrix{3,3}(
                 gradient[1] + v1,
                 gradient[2] + v2,
                 gradient[3] + v3,
@@ -23,87 +35,204 @@ function evaluate_multipole!(system, bodies_index, multipole_weights, derivative
                 gradient[9] + v9
             )
         end
-
     end
 end
 
-function evaluate_multipole(x_target, expansion_center, multipole_weights::AbstractArray{TF}, derivatives_switch::DerivativesSwitch{PS,VS,GS}, expansion_order::Val{P}) where {TF,PS,VS,GS,P}
-    # outputs
-    potential = zero(TF)
-    velocity = zero(SVector{3,TF})
-    velocity_gradient = zero(SMatrix{3,3,TF,9})
+function evaluate_multipole(x_target, source_center, multipole_expansion, derivatives_switch, expansion_order::Val{P}, lamb_helmholtz=Val(false)) where P
+    Δx = x_target - source_center
+    harmonics = initialize_harmonics(P+2)
+    return evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+end
 
-    # distance vector
-    Δx = x_target - expansion_center
-    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
+function check_S(r,θ,ϕ,n,m)
+    if m > n
+        return 0.0
+    else
+        return (-1)^m * im^abs(m) * r^(-n-1) * Plm(cos(θ),n,abs(m)) * exp(im*m*ϕ) * factorial(n-abs(m))
+    end
+end
 
-    # compute irregular solid harmonics on the fly
-    y, x = sincos(θ)
-    fact = 1.0 # 2m+1 (odd integers)
-    pn = 1 # Legendre polynomial of degree n, order n
-    one_over_ρ = 1.0 / ρ # NOTE: this should never be singular, as we only evaluate irregular harmonics far away
-    ρm = one_over_ρ # (-1)^m / ρ^(n+1)
-    i_ei_imag, i_ei_real = sincos(ϕ+π/2) # i e^(iϕ) = e^[i(ϕ+π/2)]
-    i_eim_real, i_eim_imag = 1.0, 0.0 # i^m e^(i * m * phi) = e^[i m (ϕ+π/2)]
+function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order::Val{P}, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {P,LH,PS,VS,GS}
+    # convert to spherical coordinates
+    r, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
 
-    for m=0:P # n=m
-        p = pn
-        i = FastMultipole.harmonic_index(m, m)
-        ρm_p = ρm * p
+    # expansion basis is the irregular solid harmonics
+    FastMultipole.irregular_harmonics!(harmonics, r, θ, ϕ, Val(P+2))
 
-        # irregular solid harmonics
-        Snm_real = ρm_p * i_eim_real
-        Snm_imag = ρm_p * i_eim_imag
+    #--- declare/reset variables ---#
 
-        # multipole weights
-        Mnm_real = multipole_weights[1,1,i]
-        Mnm_imag = multipole_weights[2,1,i]
+    # scalar potential
+    u = zero(eltype(multipole_expansion))
 
-        # evaluate
-        if PS
-            Δ_potential = Mnm_real * Snm_real - Mnm_imag * Snm_imag
-            m > 0 && (Δ_potential *= 2)
-            potential += Δ_potential
-        end
+    # velocity
+    vx, vy, vz = zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion))
 
-        p1 = p
-        p = x * (2 * m + 1) * p1
-        ρm *= -one_over_ρ
-        ρn = -ρm
+    # velocity gradient
+    vxx, vxy, vxz = zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion))
+    vyx, vyy, vyz = zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion))
+    vzx, vzy, vzz = zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion))
 
-        for n=m+1:P # n>m
-            i = FastMultipole.harmonic_index(n, m)
-            ρn_p = ρn * p
+    # index
+    i_n_m = 0
 
-            # irregular solid harmonics
-            Snm_real = ρn_p * i_eim_real
-            Snm_imag = ρn_p * i_eim_imag
+    _1_m = -1.0
 
-            # multipole weights
-            Mnm_real = multipole_weights[1,1,i]
-            Mnm_imag = multipole_weights[2,1,i]
+    for n in 0:P
+        for m in 0:n
 
-            # evaluate
-            if PS
-                Δ_potential = Mnm_real * Snm_real - Mnm_imag * Snm_imag
-                m > 0 && (Δ_potential *= 2)
-                potential += Δ_potential
+            # update index
+            i_n_m += 1
+
+            # update (-1)^m
+            _1_m = -_1_m
+
+            # update multiplier (due to ignoring -m)
+            scalar = m > 0 ? 2.0 : 1.0
+
+            # get multipole coefficients
+            ϕ_n_m_real = multipole_expansion[1,1,i_n_m]
+            ϕ_n_m_imag = multipole_expansion[2,1,i_n_m]
+
+            if LH
+                χ_n_m_real = multipole_expansion[1,2,i_n_m]
+                χ_n_m_imag = multipole_expansion[2,2,i_n_m]
             end
 
-            p2 = p1
-            p1 = p
-            p = (x * (2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1)
-            ρn *= one_over_ρ * (n - m + 1)
-        end
+            # expansion basis
+            S_n_m_real, S_n_m_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
-        # recurse
-        pn *= -fact * y
-        fact += 2
-        i_eim_real_tmp = i_eim_real
-        i_eim_imag_tmp = i_eim_imag
-        i_eim_real = i_eim_real_tmp * i_ei_real - i_eim_imag_tmp * i_ei_imag
-        i_eim_imag = i_eim_real_tmp * i_ei_imag + i_eim_imag_tmp * i_ei_real
-    end
+            # scalar potential
+            if PS && !LH
+                u += scalar * (S_n_m_real * ϕ_n_m_real - S_n_m_imag * ϕ_n_m_imag)
+            end
 
-    return -potential / 4 / pi, velocity / 4 / pi, velocity_gradient / 4 / pi
+            # velocity
+            if VS
+
+                # due to ϕ
+                S_np1_mp1_real, S_np1_mp1_imag = harmonics[1,1,i_n_m+n+2], harmonics[2,1,i_n_m+n+2]
+                S_np1_m_real, S_np1_m_imag = harmonics[1,1,i_n_m+n+1], harmonics[2,1,i_n_m+n+1]
+                S_np1_mm1_real, S_np1_mm1_imag = harmonics[1,1,i_n_m+n], harmonics[2,1,i_n_m+n]
+                if m == 0; S_np1_mm1_real, S_np1_mm1_imag = -S_np1_mp1_real, S_np1_mp1_imag; end
+
+                vx += scalar * -0.5 * (ϕ_n_m_real * (S_np1_mp1_imag + S_np1_mm1_imag) + ϕ_n_m_imag * (S_np1_mp1_real + S_np1_mm1_real))
+                vy += scalar * 0.5 * (ϕ_n_m_real * (S_np1_mp1_real - S_np1_mm1_real) - ϕ_n_m_imag * (S_np1_mp1_imag - S_np1_mm1_imag))
+                vz += scalar * (-ϕ_n_m_real * S_np1_m_real + ϕ_n_m_imag * S_np1_m_imag)
+
+                # due to χ
+                if LH && n>0
+
+                    S_n_mp1_real, S_n_mp1_imag = m < n ? (harmonics[1,1,i_n_m+1], harmonics[2,1,i_n_m+1]) : (zero(eltype(harmonics)), zero(eltype(harmonics)))
+                    S_n_mm1_real, S_n_mm1_imag = harmonics[1,1,i_n_m-1], harmonics[2,1,i_n_m-1]
+                    if m == 0; S_n_mm1_real, S_n_mm1_imag = -S_n_mp1_real, S_n_mp1_imag; end
+
+                    vx += scalar * ( χ_n_m_real * 0.5 * (-(n+m)*S_n_mm1_real + (n-m)*S_n_mp1_real) -
+                                    χ_n_m_imag * 0.5 * (-(n+m)*S_n_mm1_imag + (n-m)*S_n_mp1_imag) )
+                    vy += scalar * ( χ_n_m_real * 0.5 * ((n+m)*S_n_mm1_imag + (n-m)*S_n_mp1_imag) +
+                                    χ_n_m_imag * 0.5 * ((n+m)*S_n_mm1_real + (n-m)*S_n_mp1_real) )
+                    vz += scalar * m * (χ_n_m_real * S_n_m_imag + χ_n_m_imag * S_n_m_real)
+
+                end
+
+            end
+
+            # velocity gradient
+            if GS
+
+                # due to ϕ
+                S_np2_mp2_real, S_np2_mp2_imag = harmonics[1,1,i_n_m+n+n+5], harmonics[2,1,i_n_m+n+n+5]
+                S_np2_mp1_real, S_np2_mp1_imag = harmonics[1,1,i_n_m+n+n+4], harmonics[2,1,i_n_m+n+n+4]
+                S_np2_m_real, S_np2_m_imag = harmonics[1,1,i_n_m+n+n+3], harmonics[2,1,i_n_m+n+n+3]
+                S_np2_mm1_real, S_np2_mm1_imag = harmonics[1,1,i_n_m+n+n+2], harmonics[2,1,i_n_m+n+n+2]
+                S_np2_mm2_real, S_np2_mm2_imag = harmonics[1,1,i_n_m+n+n+1], harmonics[2,1,i_n_m+n+n+1]
+                if m == 0
+                    S_np2_mm1_real, S_np2_mm1_imag = -S_np2_mp1_real, S_np2_mp1_imag
+                    S_np2_mm2_real, S_np2_mm2_imag = S_np2_mp2_real, -S_np2_mp2_imag
+                end
+                if m == 1
+                    S_np2_mm2_real, S_np2_mm2_imag = -S_np2_m_real, S_np2_m_imag
+                end
+
+                vxx += scalar * 0.25 * (-ϕ_n_m_real * (S_np2_mp2_real + 2.0*S_np2_m_real + S_np2_mm2_real) +
+                                        ϕ_n_m_imag * (S_np2_mp2_imag + 2.0*S_np2_m_imag + S_np2_mm2_imag) )
+                this_vxy = scalar * -0.25 * (ϕ_n_m_real * (S_np2_mp2_imag - S_np2_mm2_imag) +
+                                             ϕ_n_m_imag * (S_np2_mp2_real - S_np2_mm2_real) )
+                vxy += this_vxy
+                vyx += this_vxy
+                this_vxz = scalar * 0.5 * (ϕ_n_m_real * (S_np2_mp1_imag + S_np2_mm1_imag) +
+                                           ϕ_n_m_imag * (S_np2_mp1_real + S_np2_mm1_real) )
+                vxz += this_vxz
+                vzx += this_vxz
+                vyy += scalar * 0.25 * (ϕ_n_m_real * (S_np2_mp2_real - 2.0*S_np2_m_real + S_np2_mm2_real) +
+                                        -ϕ_n_m_imag * (S_np2_mp2_imag - 2.0*S_np2_m_imag + S_np2_mm2_imag) )
+                this_vyz = scalar * 0.5 * (-ϕ_n_m_real * (S_np2_mp1_real - S_np2_mm1_real) +
+                                           ϕ_n_m_imag * (S_np2_mp1_imag - S_np2_mm1_imag) )
+                vyz += this_vyz
+                vzy += this_vyz
+                vzz += scalar * (ϕ_n_m_real * S_np2_m_real - ϕ_n_m_imag * S_np2_m_imag)
+
+                # due to χ
+                if LH && n>0
+
+                    throw("velocity gradient with lamb_helmholtz=true is not working")
+
+                    S_np1_mp2_real, S_np1_mp2_imag = harmonics[1,1,i_n_m+n+3], harmonics[2,1,i_n_m+n+3]
+                    S_np1_mp1_real, S_np1_mp1_imag = harmonics[1,1,i_n_m+n+2], harmonics[2,1,i_n_m+n+2]
+                    S_np1_m_real, S_np1_m_imag = harmonics[1,1,i_n_m+n+1], harmonics[2,1,i_n_m+n+1]
+                    S_np1_mm1_real, S_np1_mm1_imag = harmonics[1,1,i_n_m+n], harmonics[2,1,i_n_m+n]
+                    S_np1_mm2_real, S_np1_mm2_imag = harmonics[1,1,i_n_m+n-1], harmonics[2,1,i_n_m+n-1]
+                    if m+2 > n+1
+                        S_np1_mp2_real, S_np1_mp2_imag = 0.0, 0.0
+                    end
+                    if m == 0
+                        S_np1_mm1_real, S_np1_mm1_imag = -S_np1_mp1_real, S_np1_mp1_imag
+                        S_np1_mm2_real, S_np1_mm2_imag = S_np1_mp2_real, -S_np1_mp2_imag
+                    end
+                    if m == 1
+                        S_np1_mm2_real, S_np1_mm2_imag = -S_np1_m_real, S_np1_m_imag
+                    end
+
+                    # S_np1_mp2_check = check_S(r,θ,ϕ,n+1,m+2)
+                    # S_np1_mp1_check = check_S(r,θ,ϕ,n+1,m+1)
+                    # S_np1_m_check = check_S(r,θ,ϕ,n+1,m)
+                    # S_np1_mm1_check = check_S(r,θ,ϕ,n+1,m-1)
+                    # S_np1_mm2_check = check_S(r,θ,ϕ,n+1,m-2)
+
+                    # @assert isapprox(real(S_np1_mp2_check), S_np1_mp2_real;atol=1e-12)
+                    # @assert isapprox(imag(S_np1_mp2_check), S_np1_mp2_imag;atol=1e-12)
+                    # @assert isapprox(real(S_np1_mp1_check), S_np1_mp1_real;atol=1e-12)
+                    # @assert isapprox(imag(S_np1_mp1_check), S_np1_mp1_imag;atol=1e-12)
+                    # @assert isapprox(real(S_np1_m_check), S_np1_m_real;atol=1e-12)
+                    # @assert isapprox(imag(S_np1_m_check), S_np1_m_imag;atol=1e-12)
+                    # @assert isapprox(real(S_np1_mm1_check), S_np1_mm1_real;atol=1e-12)
+                    # @assert isapprox(imag(S_np1_mm1_check), S_np1_mm1_imag;atol=1e-12)
+                    # @assert isapprox(real(S_np1_mm2_check), S_np1_mm2_real;atol=1e-12)
+                    # @assert isapprox(imag(S_np1_mm2_check), S_np1_mm2_imag;atol=1e-12)
+
+                    vxx += scalar * 0.25 * (ϕ_n_m_real * ((n+m)*S_np1_mm2_imag + 2*m*S_np1_m_imag - (n-m)*S_np1_mp2_imag) +
+                                            ϕ_n_m_imag * ((n+m)*S_np1_mm2_real + 2*m*S_np1_m_real - (n-m)*S_np1_mp2_real) )
+                    vxy += scalar * 0.25 * (ϕ_n_m_real * ((n+m)*S_np1_mm2_real - 2*n*S_np1_m_real + (n-m)*S_np1_mp2_real) -
+                                            ϕ_n_m_imag * ((n+m)*S_np1_mm2_imag - 2*n*S_np1_m_imag + (n-m)*S_np1_mp2_imag) )
+                    vxz += scalar * 0.5 * (ϕ_n_m_real * ((n+m) * S_np1_mm1_real - (n-m) * S_np1_mp1_real) -
+                                           ϕ_n_m_imag * ((n+m) * S_np1_mm1_imag - (n-m) * S_np1_mp1_imag) )
+                    vyx += scalar * 0.25 * (ϕ_n_m_real * ((n+m) * S_np1_mm2_real + n * S_np1_m_real + (n-m) * S_np1_mp2_real) -
+                                            ϕ_n_m_imag * ((n+m) * S_np1_mm2_imag + n * S_np1_m_imag + (n-m) * S_np1_mp2_imag) )
+                    vyy += scalar * 0.25 * (ϕ_n_m_real * (-(n+m) * S_np1_mm2_imag + m * S_np1_m_imag + (n-m) * S_np1_mp2_imag) +
+                                            ϕ_n_m_imag * (-(n+m) * S_np1_mm2_real + m * S_np1_m_real + (n-m) * S_np1_mp2_real) )
+                    vyz += scalar * 0.5 * (ϕ_n_m_real * (-(n+m) * S_np1_mm1_imag - (n-m) * S_np1_mp1_imag) +
+                                           ϕ_n_m_imag * (-(n+m) * S_np1_mm1_real - (n-m) * S_np1_mp1_real) )
+                    vzx += scalar * 0.5 * (ϕ_n_m_real * m * (S_np1_mp1_real + S_np1_mm1_real) -
+                                           ϕ_n_m_imag * m * (S_np1_mp1_imag + S_np1_mm1_imag) )
+                    vzy += scalar * 0.5 * (ϕ_n_m_real * -m * (S_np1_mp1_imag - S_np1_mm1_imag) +
+                                           ϕ_n_m_imag * -m * (S_np1_mp1_real - S_np1_mm1_real) )
+                    vzz += scalar * m * (-ϕ_n_m_real * S_np1_m_imag - ϕ_n_m_imag * S_np1_m_real)
+
+                end
+
+            end
+        end # m
+    end # n
+
+    return -u * FastMultipole.ONE_OVER_4π, SVector{3}(vx,vy,vz) * FastMultipole.ONE_OVER_4π, SMatrix{3,3,eltype(multipole_expansion),9}(vxx, vxy, vxz, vyx, vyy, vyz, vzx, vzy, vzz) * FastMultipole.ONE_OVER_4π
 end
+

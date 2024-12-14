@@ -251,9 +251,17 @@ r = x_target - xs
 rnorm = sqrt(r'*r)
 ϕ_analytic = masses.bodies[1].strength/rnorm/4/pi
 v_analytic = r/rnorm^3/4/pi * masses.bodies[1].strength
+rx, ry, rz = r
+g_analytic = -masses.bodies[1].strength .* [
+   3*rx^2/rnorm^5 - 1/rnorm^3 3*rx*ry/rnorm^5 3*rx*rz/rnorm^5;
+   3*rx*ry/rnorm^5 3*ry^2/rnorm^5 - 1/rnorm^3 3*ry*rz/rnorm^5;
+   3*rx*rz/rnorm^5 3*ry*rz/rnorm^5 3*rz^2/rnorm^5 - 1/rnorm^3
+  ] ./ (4*pi)
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(x_target, branch.source_center, branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order))
 
 @test isapprox(ϕ_m2b, ϕ_analytic; atol=1e-12)
+@test isapprox(v_m2b, v_analytic; atol=1e-12)
+@test isapprox(g_m2b, g_analytic; atol=1e-12)
 
 #--- evaluate local expansion ---#
 
@@ -391,6 +399,13 @@ FastMultipole.multipole_to_local!(target_branch, branch, weights_tmp_1, weights_
 # evaluate at target
 velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
+
+# evaluate multipole at target
+lamb_helmholtz = true
+ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(true,true,false), Val(expansion_order), Val(lamb_helmholtz))
+
+@test isapprox(v_m2b, v_l2b; atol=1e-12)
+# @test isapprox(g_m2b, g_l2b; atol=1e-12)
 
 # analytic result
 dx = xt-xs

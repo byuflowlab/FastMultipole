@@ -77,7 +77,7 @@ function get_dipole(expansion)
     return qx, qy, qz
 end
 
-function get_A(multipole_branch, r_vec)
+function get_A_multipole(multipole_branch, r_vec, expansion_order)
     # extract expansion
     expansion = multipole_branch.multipole_expansion
 
@@ -90,7 +90,25 @@ function get_A(multipole_branch, r_vec)
     # scaling factor
     rx, ry, rz = r_vec
     r2 = rx*rx + ry*ry + rz*rz
-    Q = max(abs(q_monopole), abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
+    Q = max(abs(q_monopole), (expansion_order+2) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
+
+    return Q
+end
+
+function get_A_local(multipole_branch, r_vec, expansion_order)
+    # extract expansion
+    expansion = multipole_branch.multipole_expansion
+
+    # monopole term
+    q_monopole = expansion[1,1,1]
+
+    # dipole term
+    q_dipole_x, q_dipole_y, q_dipole_z = get_dipole(expansion)
+
+    # scaling factor
+    rx, ry, rz = r_vec
+    r2 = rx*rx + ry*ry + rz*rz
+    Q = max(abs(q_monopole), (expansion_order+1) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
 
     return Q
 end
@@ -130,10 +148,11 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
     r_vec = minimum_distance(source_center, target_center, target_box)
 
     # length scale
+    iszero(source_box) && (return zero(r_vec[1]))
     s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
 
     # total charge in the cell
-    A = get_A(multipole_branch, r_vec)
+    A = get_A_multipole(multipole_branch, r_vec, P)
 
     # get polar/azimuth angles for accessing error database
     _, θr, ϕr = cartesian_to_spherical(r_vec)
@@ -141,23 +160,23 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
     iϕ = get_iϕ(ϕr)
 
     # get s^(P+4)/r^(P+1)
-    s_rinv = s / norm(r_vec)
+    r_inv = 1/norm(r_vec)
+    s_rinv = s * r_inv
     s2 = s*s
-    scalar = s2 * s_rinv
+    scalar = s_rinv / s
     for n in 1:P
         scalar *= s_rinv
     end
 
-    n_max, ndiv_x = P+1, 200
-    isodd(n_max) && (n_max += 1)
+    # n_max = P+1
 
     # compute error
-    ε = 0.0
-    for n in P+1:n_max
-        ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
-        scalar *= s_rinv
-    end
-    ε *= A/(s*s2)
+    # ε = 0.0
+    # for n in P+1:n_max
+        # ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
+        # scalar *= s_rinv
+    # end
+    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * A
 
     return abs(ε) * ONE_OVER_4π
 end
@@ -295,51 +314,36 @@ function local_error(local_branch, multipole_branch, expansion_order, error_meth
     r = sqrt(rx*rx + ry*ry + rz*rz)
 
     # total charge in the cell
-    A = get_A(multipole_branch, r_vec)
+    A = get_A_local(multipole_branch, r_vec, P)
 
     # get polar/azimuth angles for accessing error database
     s = sum(target_box) * 0.666666666666666
     Rx, Ry, Rz = source_center - target_center
     R = sqrt(Rx*Rx + Ry*Ry + Rz*Rz)
     Rinv = 1/R
-    Δθ = asin(s * 0.5 * Rinv)
-    iΔθ = get_iΔθ(Δθ)
+    ω = asin(s * 0.5 * Rinv)
+    iω = get_iω(ω)
+    cθ = (Rx*rx + Ry*ry + Rz*rz) * Rinv / r # cos(θ)
+    γ = acos(cθ)
+    iγ = get_iγ(γ)
 
     # prepare recursive factors
-    r_R_np2 = R * r
     r_over_R = r * Rinv
-    Pnm1 = 1.0
-    cθ = (Rx*rx + Ry*ry + Rz*rz) * Rinv / r # cos(θ)
-    Pn = cθ
-    # rn = r
+    scalar = Rinv * r_over_R
     for n in 1:P
-        # R_np2 *= Rinv
-        # rn *= r
-        r_R_np2 *= r_over_R
-
-        # recurse Legendre polynomials
-        Pnp1 = ((2n+1) * cθ * Pn - n * Pnm1) / (n+1)
-        Pnm1 = Pn
-        Pn = Pnp1
+        scalar *= r_over_R
     end
 
     # calculate error
-    P_pp1 = Pn
     ε = 0.0
+    this_integral = integrate_local(ω,γ,P+2)
     for n in P+1:P+2
-        ε += FastMultipole.LOCAL_INTEGRALS[n,iΔθ] * r_R_np2
-        r_R_np2 *= r_over_R
-
-        # recurse Legendre polynomials
-        Pnp1 = ((2n+1) * cθ * Pn - n * Pnm1) / (n+1)
-        Pnm1 = Pn
-        Pn = Pnp1
+        ε += LOCAL_INTEGRALS[n,iω,iγ] * scalar
+        scalar *= r_over_R
     end
 
-    # scale by charge density and Legendre polynomial
-    ε *= A / (s * s * s) * P_pp1
-
-    return abs(ε) * ONE_OVER_4π
+    # scale by charge and return
+    return abs(ε) * A * ONE_OVER_4π
 end
 
 function error(local_branch, multipole_branch, expansion_order, error_method)

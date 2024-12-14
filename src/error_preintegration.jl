@@ -1,3 +1,5 @@
+using Statistics
+using LegendrePolynomials
 #------- write/read files -------#
 
 function write_file(fname, arr::AbstractArray)
@@ -43,14 +45,13 @@ end
 
 function read_write_local(fpath)
     if isfile(fpath)
-        @show fpath
         local_integrals = read_file(fpath)
-        if size(local_integrals) != (ε_MAX_N,ε_NΔθ)
-            local_integrals = integrate_local(ε_MAX_N, ε_NΔθ)
+        if size(local_integrals) != (ε_MAX_N,ε_Nω,ε_Nγ)
+            local_integrals = integrate_local(ε_MAX_N, ε_Nω, ε_Nγ)
             write_file(fpath,local_integrals)
         end
     else
-        local_integrals = integrate_local(ε_MAX_N, ε_NΔθ)
+        local_integrals = integrate_local(ε_MAX_N, ε_Nω, ε_Nγ)
         write_file(fpath,local_integrals)
     end
     return local_integrals
@@ -67,7 +68,6 @@ function integrate_multipole(rvec, n_max, s, nx)
     rinv = 1/r
 
     res = zeros(n_max) # preallocate result
-    dV = dx * dx * dx # differential volume
     for ix in 1:nx
         y = -0.5*s + dx*0.5
         for iy in 1:nx
@@ -85,7 +85,7 @@ function integrate_multipole(rvec, n_max, s, nx)
 
                     # update integral for each n
                     for n in 1:n_max
-                        res[n] += ρr_n * Pn * rinv # actual integral for ρ/r
+                        res[n] += ρr_n * abs(Pn) * rinv # actual integral for ρ/r
                         # res[n] += ρn * Pn
 
                         # next Legendre polynomial
@@ -106,7 +106,7 @@ function integrate_multipole(rvec, n_max, s, nx)
     end
 
     # finish integration
-    res .*= dV
+    res .*= dx * dx * dx / (s * s * s) # note that s=1 makes the division unnecessary
 
     return res
 end
@@ -129,6 +129,7 @@ end
 
 function get_iθ(θr)
     θ = 0.0
+    θr > π_over_2 && (θr = π - θr)
     for i in 1:ε_Nθ
         if θ >= θr
             θ-θr > θr-θ+ε_Δθ && (return i-1)
@@ -157,49 +158,87 @@ end
 
 #------- local error -------#
 
-function integrate_local(dtheta::Float64, n::Int; R=1.0)
-    dtheta < 1e-6 && (dtheta += 1e-6)
-    drho = R*sin(dtheta)
-    nx = 30
-    dx = drho*2/nx
-    x0 = -drho + dx*0.5
-    y0 = -drho + dx*0.5
-    z0 = R - drho + dx*0.5
+# function integrate_local(dtheta::Float64, n::Int; R=1.0)
+"""
+Calculates the integral of Pn(γ)/ρ^(n+1) over a sphere at a distance of 1 and radius forming a cone of angle ω
+"""
+function integrate_local(ω, γ, n_max; R=1.0, nx=100)
+    ω < 1e-6 && (ω += 1e-6)
+    s_over_2 = R*sin(ω)
+    dx = s_over_2*2/nx
+    x0 = -s_over_2 + dx*0.5
+    y0 = -s_over_2 + dx*0.5
+    z0 = R - s_over_2 + dx*0.5
     cx, cy, cz = 0.0, 0.0, R
-    val = 0.0
-    for x in x0:dx:x0+2*drho
-        for y in y0:dx:y0+2*drho
-            for z in z0:dx:z0+2*drho
-                if (x^2+y^2+(z-cz)^2) <= drho*drho
-                    rho = sqrt(x*x+y*y+z*z)
-                    val += rho^(-n-1)
+    sγ, cγ = sincos(γ)
+    r_vec = SVector{3}(sγ,0.0,cγ) # assume π >= γ >= 0
+    val = zeros(n_max)
+    for x in x0:dx:x0+2*s_over_2
+        for y in y0:dx:y0+2*s_over_2
+            for z in z0:dx:z0+2*s_over_2
+                if (x^2+y^2+(z-cz)^2) <= s_over_2 * s_over_2 # inside the sphere
+                    # radial part
+                    ρ_inv = 1/sqrt(x*x+y*y+z*z)
+                    ρ_nm1 = ρ_inv*ρ_inv
+
+                    # Legendre polynomial
+                    cθ = (x*sγ + z*cγ) * ρ_inv
+                    Pnm1 = 1.0 # Legendre polynomial of degree n-1
+                    Pn = cθ # Legendre polynomial of degree n
+
+                    for n in 1:n_max
+                        # val[n] += rho^(-n-1)
+                        val[n] += ρ_nm1 * abs(Pn)
+
+                        # next Legendre polynomial
+                        Pnp1 = ((2n+1) * cθ * Pn - n * Pnm1) / (n+1)
+
+                        # recurse
+                        Pnm1 = Pn
+                        Pn = Pnp1
+
+                        ρ_nm1 *= ρ_inv
+                    end
                 end
             end
         end
     end
-    val *= dx*dx*dx
+    val .*= dx*dx*dx / (8*s_over_2*s_over_2*s_over_2)
     return val
 end
 
-function integrate_local(n_max::Int, nθ::Int)
-    res = zeros(n_max, nθ)
-    for (iθ,Δθ) in enumerate(range(0, stop=pi/2, length=nθ))
-        for n in 1:n_max
-            res[n,iθ] = integrate_local(Δθ,n)
+function integrate_local(n_max::Int, n_ω::Int, n_γ)
+    res = zeros(n_max, n_ω, n_γ)
+    for (iγ,γ) in enumerate(range(0, stop=π, length=n_γ))
+        for (iω,ω) in enumerate(range(0, stop=π_over_2, length=n_ω))
+            res[:,iω,iγ] .= integrate_local(ω,γ,n_max)
         end
     end
     return res
 end
 
-function get_iΔθ(Δθr)
-    Δθ = 0.0
-    for i in 1:ε_NΔθ
-        if Δθ >= Δθr
-            Δθ-Δθr > Δθr-Δθ+ε_dΔθ && (return i-1)
+function get_iω(ωr)
+    ω = 0.0
+    for i in 1:ε_Nω
+        if ω >= ωr
+            ω-ωr > ωr-ω+ε_Δω && (return i-1)
             return i
         end
-        Δθ += ε_dΔθ
+        ω += ε_Δω
     end
-    pi05-Δθr > Δθr-pi05+ε_dΔθ && (return ε_NΔθ-1)
-    return ε_NΔθ
+    π_over_2-ωr > ωr-π_over_2+ε_Δω && (return ε_Nω-1)
+    return ε_Nω
+end
+
+function get_iγ(γr)
+    γ = 0.0
+    for i in 1:ε_Nγ
+        if γ >= γr
+            γ-γr > γr-γ+ε_Δγ && (return i-1)
+            return i
+        end
+        γ += ε_Δγ
+    end
+    π-γr > γr-π+ε_Δγ && (return ε_Nγ-1)
+    return ε_Nγ
 end

@@ -12,7 +12,7 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
 end
 
 function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::UniformCubes) where {PMAX,ε}
-return nothing
+    return nothing
 end
 
 @inline function warn_Pmax()

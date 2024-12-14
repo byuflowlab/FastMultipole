@@ -11,6 +11,7 @@ using WriteVTK
 
 const ONE_OVER_4π = 1/4/pi
 const ONE_THIRD = 1/3
+const π_over_2 = pi/2
 const DEBUG = Array{Bool,0}(undef)
 DEBUG[] = false
 
@@ -38,12 +39,14 @@ const ηs_mag = Float64[1.0]
 # preallocate error integrals
 const ε_MAX_N = 20
 const ε_NX = 100
-const ε_Nθ = 80
-const ε_Δθ = π / ε_Nθ
+const ε_Nθ = 40
+const ε_Δθ = π_over_2 / ε_Nθ
 const ε_Nϕ = 10
 const ε_Δϕ = π / ε_Nϕ
-const ε_NΔθ = 100
-const ε_dΔθ = π * 0.5 / ε_NΔθ
+const ε_Nω = 100
+const ε_Δω = π_over_2 / ε_Nω
+const ε_Nγ = 80
+const ε_Δγ = π / ε_Nγ
 
 include("error_preintegration.jl")
 
