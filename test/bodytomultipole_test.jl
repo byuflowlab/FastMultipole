@@ -405,7 +405,7 @@ lamb_helmholtz = true
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(true,true,false), Val(expansion_order), Val(lamb_helmholtz))
 
 @test isapprox(v_m2b, v_l2b; atol=1e-12)
-# @test isapprox(g_m2b, g_l2b; atol=1e-12)
+# @test isapprox(g_m2b, g_l2b; atol=1e-12) # this doesn't work for some reason
 
 # analytic result
 dx = xt-xs

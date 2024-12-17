@@ -143,6 +143,8 @@ struct UniformUnequalBoxes <: ErrorMethod end
 
 struct UniformCubes <: ErrorMethod end
 
+struct UniformCubesVelocity <: ErrorMethod end
+
 #------- expansion order -------#
 
 struct Dynamic{PMAX,ATOL} end

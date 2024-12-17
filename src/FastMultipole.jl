@@ -37,7 +37,7 @@ const ζs_mag = Float64[1.0]
 const ηs_mag = Float64[1.0]
 
 # preallocate error integrals
-const ε_MAX_N = 20
+const ε_MAX_N = 30
 const ε_NX = 100
 const ε_Nθ = 40
 const ε_Δθ = π_over_2 / ε_Nθ
@@ -101,7 +101,7 @@ export SortWrapper
 
 include("interaction_list.jl")
 
-export EqualSpheres, UnequalSpheres, UnequalBoxes, UniformUnequalSpheres, UniformUnequalBoxes, UniformCubes, Dynamic, build_interaction_lists
+export EqualSpheres, UnequalSpheres, UnequalBoxes, UniformUnequalSpheres, UniformUnequalBoxes, UniformCubes, UniformCubesVelocity, Dynamic, build_interaction_lists
 
 include("fmm.jl")
 

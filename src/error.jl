@@ -69,30 +69,12 @@ end
     return r_min, r_max, ρ_min, ρ_max
 end
 
-function get_dipole(expansion)
+function dipole_from_multipole(expansion)
     # dipole term
     qx = -2 * expansion[2,1,3]
     qy = -2 * expansion[1,1,3]
     qz = expansion[1,1,2]
     return qx, qy, qz
-end
-
-function get_A_multipole(multipole_branch, r_vec, expansion_order)
-    # extract expansion
-    expansion = multipole_branch.multipole_expansion
-
-    # monopole term
-    q_monopole = expansion[1,1,1]
-
-    # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = get_dipole(expansion)
-
-    # scaling factor
-    rx, ry, rz = r_vec
-    r2 = rx*rx + ry*ry + rz*rz
-    Q = max(abs(q_monopole), (expansion_order+2) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
-
-    return Q
 end
 
 function get_A_local(multipole_branch, r_vec, expansion_order)
@@ -103,13 +85,14 @@ function get_A_local(multipole_branch, r_vec, expansion_order)
     q_monopole = expansion[1,1,1]
 
     # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = get_dipole(expansion)
+    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(expansion)
 
     # scaling factor
     rx, ry, rz = r_vec
     r2 = rx*rx + ry*ry + rz*rz
     Q = max(abs(q_monopole), (expansion_order+1) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
 
+    Q = q_monopole
     return Q
 end
 
@@ -129,12 +112,65 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Union{
         ε *= ρ_max_over_r_min
     end
 
-    return abs(ε)
+    return abs(ε) * ONE_OVER_4π
 end
 
 function multipole_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes})
     return 3 / (2*P+8) * multipole_error(local_branch, multipole_branch, P, UnequalSpheres())
     #return 3 / (2*P+8) * sqrt(2/(2*P+3)) * multipole_error(local_branch, multipole_branch, P, UnequalSpheres())
+end
+
+function multipole_error(local_branch, multipole_branch, P, error_method::UniformCubesVelocity)
+    # extract fields
+    source_box = multipole_branch.source_box
+    target_box = local_branch.target_box
+    source_center = multipole_branch.source_center
+    target_center = local_branch.target_center
+
+    # choose the closest point in the local branch
+    r_vec = minimum_distance(source_center, target_center, target_box)
+
+    # length scale
+    iszero(source_box) && (return zero(r_vec[1]))
+    s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
+
+    # monopole term
+    q_monopole = multipole_branch.multipole_expansion[1,1,1]
+
+    # dipole term
+    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
+
+    # determine whether monopole/dipole dominates
+    rx, ry, rz = r_vec
+    r2 = rx*rx + ry*ry + rz*rz
+    r_inv = 1/sqrt(r2)
+    q_dot_r̂ = (q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) * r_inv
+    Q = max(abs(q_monopole), r_inv * max(q_dot_r̂ * (P+3), (1-q_dot_r̂) * r_inv))
+
+    # get polar/azimuth angles for accessing error database
+    _, θr, ϕr = cartesian_to_spherical(r_vec)
+    iθ = get_iθ(θr)
+    iϕ = get_iϕ(ϕr)
+
+    # get s^(P+4)/r^(P+1)
+    s_rinv = s * r_inv
+    s2 = s*s
+    scalar = s_rinv / s
+    for n in 1:P
+        scalar *= s_rinv
+    end
+
+    # n_max = P+1
+
+    # compute error
+    # ε = 0.0
+    # for n in P+1:n_max
+        # ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
+        # scalar *= s_rinv
+    # end
+    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q * (P+2) * r_inv
+
+    return abs(ε) * ONE_OVER_4π
 end
 
 function multipole_error(local_branch, multipole_branch, P, error_method::UniformCubes)
@@ -151,8 +187,20 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
     iszero(source_box) && (return zero(r_vec[1]))
     s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
 
-    # total charge in the cell
-    A = get_A_multipole(multipole_branch, r_vec, P)
+    # monopole term
+    q_monopole = multipole_branch.multipole_expansion[1,1,1]
+
+    # dipole term
+    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
+
+    # determine whether monopole/dipole dominates
+    rx, ry, rz = r_vec
+    r2 = rx*rx + ry*ry + rz*rz
+    r_inv = 1/sqrt(r2)
+    Q = max(abs(q_monopole), (P+2) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) * r_inv * r_inv)
+    # if Q == abs(q_monopole)
+    #     println("monopole")
+    # end
 
     # get polar/azimuth angles for accessing error database
     _, θr, ϕr = cartesian_to_spherical(r_vec)
@@ -160,7 +208,6 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
     iϕ = get_iϕ(ϕr)
 
     # get s^(P+4)/r^(P+1)
-    r_inv = 1/norm(r_vec)
     s_rinv = s * r_inv
     s2 = s*s
     scalar = s_rinv / s
@@ -176,33 +223,10 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
         # ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
         # scalar *= s_rinv
     # end
-    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * A
+    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q
 
     return abs(ε) * ONE_OVER_4π
 end
-
-#function multipole_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes})
-#
-#    # get distances
-#    Δx, Δy, Δz = local_branch.center - multipole_branch.center
-#    separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
-#    r_min, _, _, ρ_max = get_r_ρ(local_branch, multipole_branch, separation_distance_squared, error_method)
-#
-#    # calculate error upper bound
-#    ρ_max_over_r_min = ρ_max / r_min
-#    ε_rel = log(1 - ρ_max_over_r_min)
-#    ρ_max_over_r_min_n = ρ_max_over_r_min
-#    for n in 1:P+3
-#        ε_rel += ρ_max_over_r_min_n
-#        ρ_max_over_r_min_n *= ρ_max_over_r_min / (n+1)
-#    end
-#
-#    r_min_over_ρ_max = r_min / ρ_max
-#    #ε_rel *= -1.5 * r_min_over_ρ_max * r_min_over_ρ_max * r_min_over_ρ_max * sqrt(2/(2*P+3)) # assume ϕ̅ = A/r_min
-#    ε_rel *= -1.5 * (r_min-ρ_max)/ρ_max * r_min_over_ρ_max * r_min_over_ρ_max * sqrt(2/(2*P+3)) # assume ϕ̄ = A/(r_min-ρ_max)
-#
-#    return ε_rel
-#end
 
 function local_error(local_branch, multipole_branch, P, error_method::Union{EqualSpheres, UnequalSpheres, UnequalBoxes})
     # get distances
@@ -312,9 +336,17 @@ function local_error(local_branch, multipole_branch, expansion_order, error_meth
     r_vec = closest_corner(source_center, target_center, target_box)
     rx, ry, rz = r_vec
     r = sqrt(rx*rx + ry*ry + rz*rz)
+    r_inv = 1/r
 
-    # total charge in the cell
-    A = get_A_local(multipole_branch, r_vec, P)
+    # monopole term
+    q_monopole = multipole_branch.multipole_expansion[1,1,1]
+
+    # dipole term
+    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
+
+    # determine whether monopole/dipole dominates
+    q_dot_r̂ = (q_dipole_x * rx + q_dipole_y * ry + q_dipole_z * rz) * r_inv
+    Q = max(abs(q_monopole), (P+1) * q_dot_r̂ * r_inv)
 
     # get polar/azimuth angles for accessing error database
     s = sum(target_box) * 0.666666666666666
@@ -343,7 +375,68 @@ function local_error(local_branch, multipole_branch, expansion_order, error_meth
     end
 
     # scale by charge and return
-    return abs(ε) * A * ONE_OVER_4π
+    return abs(ε) * Q * ONE_OVER_4π
+end
+
+function local_error(local_branch, multipole_branch, expansion_order, error_method::UniformCubesVelocity)
+    # extract fields
+    source_box = multipole_branch.source_box
+    target_box = local_branch.target_box
+    source_center = multipole_branch.source_center
+    target_center = local_branch.target_center
+    P = expansion_order
+
+    # choose the closest point in the local branch
+    r_vec = closest_corner(source_center, target_center, target_box)
+    rx, ry, rz = r_vec
+    r = sqrt(rx*rx + ry*ry + rz*rz)
+    r_inv = 1/r
+
+    # monopole term
+    q_monopole = multipole_branch.multipole_expansion[1,1,1]
+
+    # dipole term
+    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
+    q_dipole_2 = q_dipole_x * q_dipole_x + q_dipole_y * q_dipole_y + q_dipole_z * q_dipole_z
+
+    # determine whether monopole/dipole dominates
+    q_dot_r̂ = (q_dipole_x * rx + q_dipole_y * ry + q_dipole_z * rz) * r_inv
+    Q = max(abs(q_monopole), r_inv * sqrt((P*P-1) * q_dot_r̂ * q_dot_r̂ + q_dipole_2))
+    # print("Local: ")
+    # if Q == abs(q_monopole)
+    #     println("monopole")
+    # else
+    #     println("dipole")
+    # end
+
+    # get polar/azimuth angles for accessing error database
+    s = sum(target_box) * 0.666666666666666
+    Rx, Ry, Rz = source_center - target_center
+    R = sqrt(Rx*Rx + Ry*Ry + Rz*Rz)
+    Rinv = 1/R
+    ω = asin(s * 0.5 * Rinv)
+    iω = get_iω(ω)
+    cθ = (Rx*rx + Ry*ry + Rz*rz) * Rinv / r # cos(θ)
+    γ = acos(cθ)
+    iγ = get_iγ(γ)
+
+    # prepare recursive factors
+    r_over_R = r * Rinv
+    scalar = Rinv * r_over_R
+    for n in 1:P
+        scalar *= r_over_R
+    end
+
+    # calculate error
+    ε = 0.0
+    this_integral = integrate_local(ω,γ,P+2)
+    for n in P+1:P+3
+        ε += LOCAL_INTEGRALS[n,iω,iγ] * scalar * n
+        scalar *= r_over_R
+    end
+
+    # scale by charge and return
+    return abs(ε) * Q * ONE_OVER_4π * r_inv
 end
 
 function error(local_branch, multipole_branch, expansion_order, error_method)
