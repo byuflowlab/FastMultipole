@@ -388,7 +388,7 @@ end
         Δx = x - center
 
         # update values
-        body_to_multipole_point!(element, multipole_coefficients, harmonics, Δx, system[i_body, STRENGTH], expansion_order)
+        body_to_multipole_point!(element, multipole_coefficients, harmonics, Δx, system[i_body, Strength()], expansion_order)
     end
 
 end

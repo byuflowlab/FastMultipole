@@ -139,13 +139,15 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
 
     # dipole term
     q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
+    q_dipole_2 = q_dipole_x * q_dipole_x + q_dipole_y * q_dipole_y + q_dipole_z * q_dipole_z
 
     # determine whether monopole/dipole dominates
     rx, ry, rz = r_vec
     r2 = rx*rx + ry*ry + rz*rz
-    r_inv = 1/sqrt(r2)
+    r_inv_2 = 1/r2
+    r_inv = sqrt(r_inv_2)
     q_dot_r̂ = (q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) * r_inv
-    Q = max(abs(q_monopole), r_inv * max(q_dot_r̂ * (P+3), (1-q_dot_r̂) * r_inv))
+    Q = max(abs(q_monopole), r_inv * sqrt(q_dot_r̂ * q_dot_r̂ * (P+3) * (P+3) + r_inv_2 * (q_dipole_2 - q_dot_r̂ * q_dot_r̂)))
 
     # get polar/azimuth angles for accessing error database
     _, θr, ϕr = cartesian_to_spherical(r_vec)
@@ -368,7 +370,6 @@ function local_error(local_branch, multipole_branch, expansion_order, error_meth
 
     # calculate error
     ε = 0.0
-    this_integral = integrate_local(ω,γ,P+2)
     for n in P+1:P+2
         ε += LOCAL_INTEGRALS[n,iω,iγ] * scalar
         scalar *= r_over_R
@@ -402,12 +403,6 @@ function local_error(local_branch, multipole_branch, expansion_order, error_meth
     # determine whether monopole/dipole dominates
     q_dot_r̂ = (q_dipole_x * rx + q_dipole_y * ry + q_dipole_z * rz) * r_inv
     Q = max(abs(q_monopole), r_inv * sqrt((P*P-1) * q_dot_r̂ * q_dot_r̂ + q_dipole_2))
-    # print("Local: ")
-    # if Q == abs(q_monopole)
-    #     println("monopole")
-    # else
-    #     println("dipole")
-    # end
 
     # get polar/azimuth angles for accessing error database
     s = sum(target_box) * 0.666666666666666
@@ -429,14 +424,13 @@ function local_error(local_branch, multipole_branch, expansion_order, error_meth
 
     # calculate error
     ε = 0.0
-    this_integral = integrate_local(ω,γ,P+2)
     for n in P+1:P+3
         ε += LOCAL_INTEGRALS[n,iω,iγ] * scalar * n
         scalar *= r_over_R
     end
 
     # scale by charge and return
-    return abs(ε) * Q * ONE_OVER_4π * r_inv
+    return abs(ε) * Q * ONE_OVER_4π * r_inv # * r # * r to account for lamb-helmholtz decomp
 end
 
 function error(local_branch, multipole_branch, expansion_order, error_method)

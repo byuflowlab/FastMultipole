@@ -2,6 +2,7 @@ using Statistics, Random, LegendrePolynomials
 using PythonPlot
 using LaTeXStrings
 using LinearAlgebra
+using KernelDensity
 include("../test/gravitational.jl")
 include("../test/bodytolocal.jl")
 include("../test/evaluate_multipole.jl")
@@ -434,7 +435,6 @@ end
 function get_points(target_branch)
     lx, ly, lz = target_branch.target_box
     points = [
-                 target_branch.target_center,
                  target_branch.target_center + SVector{3}(lx,0.0,0.0),
                  target_branch.target_center + SVector{3}(0.0,ly,0.0),
                  target_branch.target_center + SVector{3}(0.0,0.0,lz),
@@ -900,7 +900,7 @@ function local_error_r(x_t, l_branch, m_branch, system, x0, y0, z0, dx, dy, dz, 
                     if typeof(system) <: VortexParticles
                         q = dot(q,rvec)/(r*r) * n
                     end
-                    err += q * (-1)^(n+m) * Float64(factorial(big(n-abs(m)))/factorial(big(n+abs(m)))) * (r*rho_inv)^n * rho_inv * Plm(cos_theta_s, n, abs(m)) * Plm(cos_theta_t, n, abs(m)) * exp(im*m*(phi_t-phi_s))
+                    err += q * Float64(factorial(big(n-abs(m)))/factorial(big(n+abs(m)))) * (r*rho_inv)^n * rho_inv * Plm(cos_theta_s, n, abs(m)) * Plm(cos_theta_t, n, abs(m)) * exp(im*m*(ϕs-ϕt))
                 end
             end
         end
@@ -1160,7 +1160,7 @@ function rectangle_error(l_branch, l_system, m_branch, m_system, P; m_method="lo
     return m_err/4/pi, l_err/4/pi
 end
 
-function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold=0.5, leaf_size=30, shrink_recenter=true)
+function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold=0.5, leaf_size=30, shrink_recenter=true, r=true)
     tree = Tree(system; expansion_order, leaf_size, shrink_recenter)
     m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, true, true, true, UnequalSpheres(), expansion_order)
     leaf_sizes = Int64[]
@@ -1177,16 +1177,25 @@ function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold
     errs_mp_uc_v, errs_l_uc_v = Float64[], Float64[]
     errs_mp_r, errs_l_r = Float64[], Float64[]
     i_m2l = 1
+    print_every = Int(ceil(length(m2l_list) / 100))
+    @show length(m2l_list)
     for (i_target, i_source, P) in m2l_list
         # println("\n========== i_m2l = $i_m2l ==========\n")
         if i_m2l == 5
             FastMultipole.DEBUG[] = true
         end
+        if i_m2l % print_every == 0
+            println("Progress: $(i_m2l/length(m2l_list)*100) %")
+        end
         local_branch = tree.branches[i_target]
         multipole_branch = tree.branches[i_source]
         e_mp, e_l, e_o, e_mp_v, e_l_v, e_o_v, ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc, ev_mp_uc, ev_l_uc = test_error(local_branch, system, multipole_branch, system, P)
         # settings
-        e_mp_r, e_l_r = rectangle_error(local_branch, system, multipole_branch, system, P; m_method="loop", l_method="loop")
+        if r
+            e_mp_r, e_l_r = rectangle_error(local_branch, system, multipole_branch, system, P; m_method="loop", l_method="loop")
+        else
+            e_mp_r = e_l_r = 0.0
+        end
 
         if i_m2l == 5
             FastMultipole.DEBUG[] = false
@@ -1231,7 +1240,8 @@ s = 1.0
 #function expected_legendre(n_max, cos0, dcos
 
 # result
-n_bodies = 2000
+#=
+n_bodies = 10000
 Random.seed!(123)
 bodies = rand(7,n_bodies)
 bodies[4,:] .= 0.0
@@ -1241,9 +1251,9 @@ system = Gravitational(bodies)
 # vortex system
 # system = generate_vortex(123, n_bodies)
 
-expansion_order, multipole_threshold, leaf_size = 1, 0.5, 260
+expansion_order, multipole_threshold, leaf_size = 4, 0.5, 100
+# expansion_order, multipole_threshold, leaf_size = 4, 0.5, 260
 
-#=
 leaf_size, multipole_threshold = 25,0.5
 FastMultipole.direct!(system)
 velocity_direct = deepcopy(system.velocity_stretching)
@@ -1267,19 +1277,119 @@ println("\nP=1:")
 # results
 means_local = Float64[]
 means_multipole = Float64[]
-Ps = 1:17
-for expansion_order in Ps
-    errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order, multipole_threshold, leaf_size, shrink_recenter=true) # leaf_size=260
-    push!(means_local, output_stuff(errs_l ./ errs_l_r)[1])
-    push!(means_multipole, output_stuff(errs_mp ./ errs_mp_r)[1])
-end
+Ps = 1:10
+#  for expansion_order in Ps
+#      errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order, multipole_threshold, leaf_size, shrink_recenter=true) # leaf_size=260
+#      push!(means_local, output_stuff(errs_l_v ./ errs_l_uc_v)[1])
+#      push!(means_multipole, output_stuff(errs_mp_v ./ errs_mp_uc_v)[1])
+#  end
 
-fig = figure("error with expansion order")
-fig.add_subplot(111,xlabel="expansion order", ylabel="mean potential error")
-ax = fig.get_axes()[0]
-ax.plot(Ps, means_multipole)
-ax.plot(Ps, means_local)
-ax.legend(["multipole error", "local error"])
+
+n_bodies = 10000
+Random.seed!(123)
+bodies = rand(7,n_bodies)
+bodies[4,:] .= 0.0
+# bodies[5,:] .-= 0.5 # coulombic interaction (positive and negative charges)
+system = Gravitational(bodies)
+
+# vortex system
+# system = generate_vortex(123, n_bodies)
+
+for expansion_order in [1,4,10]
+
+    multipole_threshold, leaf_size = 0.5, 100
+
+    errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order, multipole_threshold, leaf_size, shrink_recenter=true, r=false) # leaf_size=260
+
+
+    #------- get data for paper -------#
+
+    # checking multipole plus local error equals total error (close...)
+    v_mp_l = (abs.(errs_mp) .+ abs.(errs_l)) ./ errs_o
+    output_stuff(v_mp_l; verbose=true)
+
+    # log scale comparison
+    v_mp_uc = log10.(abs.(errs_mp ./ errs_mp_uc) .^ (-1))
+    v_mp_uc_v = log10.(abs.(errs_mp_v ./ errs_mp_uc_v) .^ (-1))
+    v_mp_ub = log10.(abs.(errs_mp ./ ubs_mp_ub) .^ (-1))
+    v_l_uc = log10.(abs.(errs_l ./ errs_l_uc) .^ (-1))
+    v_l_uc_v = log10.(abs.(errs_l_v ./ errs_l_uc_v) .^ (-1))
+    v_l_ub = log10.(abs.(errs_l ./ ubs_l_ub) .^ (-1))
+
+    # kde partitioning
+    npoints = 2^7
+    u_mp_uc = kde(v_mp_uc; npoints)
+    u_mp_uc_v = kde(v_mp_uc_v; npoints)
+    u_mp_ub = kde(v_mp_ub; npoints)
+    u_l_uc = kde(v_l_uc; npoints)
+    u_l_uc_v = kde(v_l_uc_v; npoints)
+    u_l_ub = kde(v_l_ub; npoints)
+
+    # make preliminary plots
+    fig = figure("multipole error")
+    fig.clear()
+    fig.add_subplot(111, xlabel="relative prediction error", ylabel="density")
+    ax = fig.get_axes()[0]
+    ax.plot(u_mp_uc.x, u_mp_uc.density)
+    ax.plot(u_mp_uc_v.x, u_mp_uc_v.density)
+    ax.plot(u_mp_ub.x, u_mp_ub.density)
+    ax.set_xticks([0.0,1.0,2.0,3.0], labels=["1", "10", "100", "1000"])
+    ax.set_xlim([-0.5,4.0])
+    legend(["potential", "velocity magnitude", "setting "*L"P_n=1"])
+    savefig("figs/compare_multipole_error_n$(n_bodies)_p$expansion_order.png")
+
+    fig2 = figure("local error")
+    fig2.clear()
+    fig2.add_subplot(111, xlabel="relative prediction error", ylabel="density")
+    ax = fig2.get_axes()[0]
+    ax.plot(u_l_uc.x, u_l_uc.density)
+    ax.plot(u_l_uc_v.x, u_l_uc_v.density)
+    ax.plot(u_l_ub.x, u_l_ub.density)
+    ax.set_xticks([-1.0,0.0,1.0,2.0,3.0], labels=["0.1","1", "10", "100", "1000"])
+    ax.set_xlim([-1.5,4.0])
+    legend(["potential", "velocity magnitude", "setting "*L"P_n=1"])
+    savefig("figs/compare_local_error_n$(n_bodies)_p$expansion_order.png")
+
+    # save data
+    multipole_comparison=zeros(npoints,6)
+    multipole_comparison[:,1] .= u_mp_uc.x
+    multipole_comparison[:,2] .= u_mp_uc.density
+    multipole_comparison[:,3] .= u_mp_uc_v.x
+    multipole_comparison[:,4] .= u_mp_uc_v.density
+    multipole_comparison[:,5] .= u_mp_ub.x
+    multipole_comparison[:,6] .= u_mp_ub.density
+    multipole_header = Matrix{String}(undef,1,6)
+    for i in 1:6
+        multipole_header[i] = ["potential x", "potential density", "velocity magnitude x", "velocity magnitude density", "Pn=0 x", "Pn=0 density"][i]
+    end
+    writedlm("data/compare_multipole_error_n$(n_bodies)_p$expansion_order.png", vcat(multipole_header,multipole_comparison), ','; header=true)
+
+    local_comparison=zeros(npoints,6)
+    local_comparison[:,1] .= u_l_uc.x
+    local_comparison[:,2] .= u_l_uc.density
+    local_comparison[:,3] .= u_l_uc_v.x
+    local_comparison[:,4] .= u_l_uc_v.density
+    local_comparison[:,5] .= u_l_ub.x
+    local_comparison[:,6] .= u_l_ub.density
+    local_header = Matrix{String}(undef,1,6)
+    for i in 1:6
+        local_header[i] = ["potential x", "potential density", "velocity magnitude x", "velocity magnitude density", "Pn=0 x", "Pn=0 density"][i]
+    end
+    writedlm("data/compare_local_error_n$(n_bodies)_p$expansion_order.png", vcat(local_header,local_comparison), ','; header=true)
+
+end
+#-----------------------------------#
+
+
+
+
+# fig = figure("error with expansion order 3")
+# fig.clear()
+# fig.add_subplot(111,xlabel="expansion order", ylabel="mean potential error")
+# ax = fig.get_axes()[0]
+# ax.plot(Ps, means_multipole)
+# # ax.plot(Ps, means_local)
+# ax.legend(["multipole error", "local error"])
 
 
 #=
@@ -1316,6 +1426,7 @@ me_l2, ma_l2, mi_l2, st_l2 = output_stuff(v_l2)
 end
 =#
 
+#=
 # explore multipole preintegration
 rvec = SVector{3}(5*sqrt(3),0,0)
 n_max = 10
@@ -1395,7 +1506,6 @@ iphi = collect(1:size(FastMultipole.MULTIPOLE_INTEGRALS,3))
 iθ = 4
 fig_az = vary_azimuth(FastMultipole.MULTIPOLE_INTEGRALS, iθ, iphi)
 
-#=
 
 # x axis adjacent
 #R = SVector{3}(2.0,0,0)
