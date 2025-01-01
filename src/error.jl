@@ -77,6 +77,13 @@ function dipole_from_multipole(expansion)
     return qx, qy, qz
 end
 
+function vortex_from_multipole(expansion)
+    ωx = -2 * expansion[2,2,3]
+    ωy = -2 * expansion[1,2,3]
+    ωz = expansion[1,2,2]
+    return ωx, ωy, ωz
+end
+
 function get_A_local(multipole_branch, r_vec, expansion_order)
     # extract expansion
     expansion = multipole_branch.multipole_expansion
@@ -156,8 +163,7 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
 
     # get s^(P+4)/r^(P+1)
     s_rinv = s * r_inv
-    s2 = s*s
-    scalar = s_rinv / s
+    scalar = r_inv * r_inv
     for n in 1:P
         scalar *= s_rinv
     end
@@ -170,7 +176,7 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
         # ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
         # scalar *= s_rinv
     # end
-    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q * (P+2) * r_inv
+    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q * (P+2)
 
     return abs(ε) * ONE_OVER_4π
 end
@@ -211,7 +217,7 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
 
     # get s^(P+4)/r^(P+1)
     s_rinv = s * r_inv
-    s2 = s*s
+    # s2 = s*s
     scalar = s_rinv / s
     for n in 1:P
         scalar *= s_rinv
@@ -228,6 +234,101 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Unifor
     ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q
 
     return abs(ε) * ONE_OVER_4π
+end
+
+function rotate(r̂)
+    ẑ = r̂
+    x̂ = SVector{3}(1.0,0,0) - dot(SVector{3}(1.0,0,0), r̂) * r̂
+    if iszero(x̂)
+        x̂ = SVector{3}(0.0,1.0,0.0) - dot(SVector{3}(0.0,1,0), r̂) * r̂
+    end
+    x̂ /= norm(x̂)
+    ŷ = cross(ẑ, x̂)
+    R = vcat(x̂', ŷ', ẑ')
+    R = SMatrix{3,3,eltype(r̂)}(x̂[1], ŷ[1], ẑ[1], x̂[2], ŷ[2], ẑ[2], x̂[3], ŷ[3], ẑ[3])
+    return R
+end
+
+function multipole_error(local_branch::Branch, multipole_branch::Branch, P, error_method::LambHelmholtzΧVelocity)
+    # extract fields
+    target_box = local_branch.target_box
+    source_center = multipole_branch.source_center
+    target_center = local_branch.target_center
+
+    # choose the closest point in the local branch
+    r⃗ = minimum_distance(source_center, target_center, target_box)
+
+    return multipole_error(r⃗, multipole_branch, P, error_method)
+end
+
+function multipole_error(r⃗::AbstractVector, multipole_branch::Branch, P, error_method::LambHelmholtzΧVelocity)
+
+    # extract fields
+    source_box = multipole_branch.source_box
+    multipole_expansion = multipole_branch.multipole_expansion
+
+    # target vector
+    r = norm(r⃗)
+    rinv = 1/r
+    r̂ = r⃗ * rinv
+
+    # get polar/azimuth angles for accessing error database
+    _, θr, ϕr = cartesian_to_spherical(r̂)
+    iθ = get_iθ_χ(θr)
+    iϕ = get_iϕ_χ(ϕr)
+
+    # rotate coordinate system
+    R = rotate(r̂)
+    r⃗ = R * r⃗
+
+    # length scale
+    iszero(source_box) && (return zero(r⃗[1]))
+    s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
+
+    # calculate vector strength of multipole branch
+    ωx, ωy, ωz = vortex_from_multipole(multipole_expansion)
+    ωx, ωy, ωz = R * SVector{3,eltype(source_box)}(ωx, ωy, ωz)
+
+    # estimate induced velocity by approximating a point vortex
+    # at the expansion center
+    vx = ωy * r⃗[3] - ωz * r⃗[2]
+    vy = ωz * r⃗[1] - ωx * r⃗[3]
+    vinv = 1/sqrt(vx*vx + vy*vy)
+    v̂x = vx*vinv
+    v̂y = vy*vinv
+
+    # initialize values
+    εχ_real = zero(eltype(source_box))
+    εχ_imag = zero(eltype(source_box))
+    s_over_r = s * rinv
+    snm1_over_rnp1 = rinv * rinv # P=0 -> n=1
+
+    for n in 2:P+1
+        snm1_over_rnp1 *= s_over_r
+    end
+
+    # predict error
+    for n in P+1:P+2
+        Iχx_real = MULTIPOLE_INTEGRALS_Χ[1,1,n,iθ,iϕ]
+        Iχx_imag = MULTIPOLE_INTEGRALS_Χ[2,1,n,iθ,iϕ]
+        Iχy_real = MULTIPOLE_INTEGRALS_Χ[1,2,n,iθ,iϕ]
+        Iχy_imag = MULTIPOLE_INTEGRALS_Χ[2,2,n,iθ,iϕ]
+
+        εχ_real += (Iχx_real * ωx + Iχy_real * ωy) * snm1_over_rnp1
+        εχ_imag += (Iχx_imag * ωx + Iχy_imag * ωy) * snm1_over_rnp1
+
+        # recurse
+        snm1_over_rnp1 *= s_over_r
+    end
+
+    # scale by estimated velocity direction
+    εχ_real_tmp = -εχ_real * v̂x + εχ_imag * v̂y
+    εχ_imag = -εχ_imag * v̂x + -εχ_real * v̂y
+
+    # norm of the complex result
+    εχ = sqrt(εχ_real_tmp * εχ_real_tmp + εχ_imag * εχ_imag) * ONE_OVER_4π
+
+    return εχ
 end
 
 function local_error(local_branch, multipole_branch, P, error_method::Union{EqualSpheres, UnequalSpheres, UnequalBoxes})

@@ -102,7 +102,7 @@ function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order
             S_n_m_real, S_n_m_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
             # scalar potential
-            if PS && !LH
+            if PS # && !LH
                 u += scalar * (S_n_m_real * ϕ_n_m_real - S_n_m_imag * ϕ_n_m_imag)
             end
 

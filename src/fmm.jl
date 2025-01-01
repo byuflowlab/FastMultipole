@@ -796,7 +796,7 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 """
 function fmm!(tree::Tree, systems;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false),
+    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false), check_dipole=true,
     expansion_order::Union{Int,Dynamic{<:Any,<:Any}}=5,
     multipole_threshold=0.4, reset_tree::Bool=true,
     lamb_helmholtz::Bool=false,
@@ -810,7 +810,7 @@ function fmm!(tree::Tree, systems;
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order)
+    m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, Val(check_dipole))
 
     # run fmm
     Pmax = get_Pmax(expansion_order)
@@ -864,7 +864,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false),
+    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false), check_dipole::Bool=true,
     expansion_order::Union{Int,Dynamic{<:Any,<:Any}}=5, multipole_threshold=0.4,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     lamb_helmholtz::Bool=false,
@@ -879,7 +879,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order)
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, Val(check_dipole))
 
     # extract max expansion order
     Pmax = get_Pmax(expansion_order)

@@ -9,9 +9,10 @@ using WriteVTK
 
 #------- CONSTANTS -------#
 
-const ONE_OVER_4π = 1/4/pi
+const ONE_OVER_4π = 1/(4*π)
 const ONE_THIRD = 1/3
-const π_over_2 = pi/2
+const π_over_2 = π/2
+const π2 = 2*π
 const DEBUG = Array{Bool,0}(undef)
 DEBUG[] = false
 
@@ -39,14 +40,24 @@ const ηs_mag = Float64[1.0]
 # preallocate error integrals
 const ε_MAX_N = 30
 const ε_NX = 100
+
+# scalar potential multipole error
 const ε_Nθ = 40
 const ε_Δθ = π_over_2 / ε_Nθ
 const ε_Nϕ = 10
 const ε_Δϕ = π / ε_Nϕ
+
+# scalar potential local error
 const ε_Nω = 100
 const ε_Δω = π_over_2 / ε_Nω
 const ε_Nγ = 80
 const ε_Δγ = π / ε_Nγ
+
+# Lamb-Helmholtz χ multipole error
+const ε_Nθ_χ = 80
+const ε_Δθ_χ = π / ε_Nθ_χ
+const ε_Nϕ_χ = 20
+const ε_Δϕ_χ = π2 / ε_Nϕ_χ
 
 include("error_preintegration.jl")
 
@@ -54,6 +65,8 @@ fpath = joinpath(@__DIR__, "multipole_integrals.csv")
 const MULTIPOLE_INTEGRALS = read_write_multipole(fpath)
 fpath = joinpath(@__DIR__, "local_integrals.csv")
 const LOCAL_INTEGRALS = read_write_local(fpath)
+fpath = joinpath(@__DIR__, "multipole_integrals_chi.csv")
+const MULTIPOLE_INTEGRALS_Χ = read_write_multipole_χ(fpath)
 
 #------- HEADERS AND EXPORTS -------#
 

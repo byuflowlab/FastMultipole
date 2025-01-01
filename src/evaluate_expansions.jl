@@ -74,7 +74,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
     Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
     # scalar potential
-    if PS && !LH # scalar potential is scrambled to preserve velocity when using Lamb-Helmholtz
+    if PS && !LH # scalar potential is transformed (and nonsensical) to preserve velocity when using Lamb-Helmholtz
         ϕ_n_m_real = local_expansion[1,1,i_n_m]
         ϕ_n_m_imag = local_expansion[2,1,i_n_m]
         u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag

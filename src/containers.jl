@@ -145,6 +145,8 @@ struct UniformCubes <: ErrorMethod end
 
 struct UniformCubesVelocity <: ErrorMethod end
 
+struct LambHelmholtzΧVelocity <: ErrorMethod end
+
 #------- expansion order -------#
 
 struct Dynamic{PMAX,ATOL} end

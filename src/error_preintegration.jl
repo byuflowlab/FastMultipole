@@ -57,6 +57,20 @@ function read_write_local(fpath)
     return local_integrals
 end
 
+function read_write_multipole_χ(fpath)
+    if isfile(fpath)
+        multipole_integrals_χ = read_file(fpath)
+        if size(multipole_integrals_χ) != (2,2,ε_MAX_N,ε_Nθ_χ,ε_Nϕ_χ)
+            multipole_integrals_χ = preintegrate_multipole_χ(ε_MAX_N, ε_Nθ_χ, ε_Nϕ_χ; s=1.0, θ_max=π, ϕ_max=2*π)
+            write_file(fpath, multipole_integrals_χ)
+        end
+    else
+        multipole_integrals_χ = preintegrate_multipole_χ(ε_MAX_N, ε_Nθ_χ, ε_Nϕ_χ; s=1.0, θ_max=π, ϕ_max=2*π)
+        write_file(fpath, multipole_integrals_χ)
+    end
+    return multipole_integrals_χ
+end
+
 #------- multipole error -------#
 
 function integrate_multipole(rvec, n_max, s, nx)
@@ -129,7 +143,9 @@ end
 
 function get_iθ(θr)
     θ = 0.0
-    θr > π_over_2 && (θr = π - θr)
+    if θr > π_over_2
+        θr = π - θr
+    end
     for i in 1:ε_Nθ
         if θ >= θr
             θ-θr > θr-θ+ε_Δθ && (return i-1)
@@ -137,12 +153,15 @@ function get_iθ(θr)
         end
         θ += ε_Δθ
     end
-    π-θr > θr-π+ε_Δθ && (return ε_Nθ-1)
+    π_over_2-θr > θr-π_over_2+ε_Δθ && (return ε_Nθ-1)
     return ε_Nθ
 end
 
 function get_iϕ(ϕr)
     # ϕr < 0.0 && (ϕr = -ϕr)
+    if ϕr > π
+        ϕr = 2π - ϕr
+    end
     ϕr = abs(ϕr)
     ϕ = 0.0
     for i in 1:ε_Nϕ
@@ -241,4 +260,143 @@ function get_iγ(γr)
     end
     π-γr > γr-π+ε_Δγ && (return ε_Nγ-1)
     return ε_Nγ
+end
+
+#------- Lamb-Helmholtz multipole error -------#
+
+function preintegrate_multipole_χ(r̂, n_max; s=1.0)
+    # rotate frame
+    _, _, _, R = rotate(r̂)
+
+    # preallocate results
+    ITns = zeros(Complex{Float64},2,n_max)
+
+    # perform integration
+    nx = 100
+    dx = dy = dz = s / nx
+    x0 = -s*0.5 + dx * 0.5
+    y0 = -s*0.5 + dy * 0.5
+    z0 = -s*0.5 + dz * 0.5
+    for x in range(x0, step=dx, length=nx)
+        for y in range(y0, step=dy, length=nx)
+            for z in range(z0, step=dz, length=nx)
+                ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(R * SVector{3}(x,y,z))
+                sθ, cθ = sincos(θ)
+                e2imϕ = exp(-2*im*ϕ)
+
+                # Legendre polynomial recursions
+                P_nm1_0 = 1.0
+
+                # n=1
+                ITns[1,1] += -im * abs(P_nm1_0)
+                ITns[2,1] += -abs(P_nm1_0)
+
+                # recurse
+                P_nm1_0 = cθ
+                P_nm2_0 = 1.0
+
+                # n=2
+                ITns[1,2] += -1.5 * ρ * im * abs(P_nm1_0)
+                ITns[2,2] += -1.5 * ρ * abs(P_nm1_0)
+
+                # next polynomial of order 0
+                n = 2
+                P_n_0 = ( (2*n-1) * cθ * P_nm1_0 - (n-1) * P_nm2_0 ) / n
+
+                # recurse (n=3)
+                P_nm2_0 = P_nm1_0
+                P_nm1_0 = P_n_0
+
+                # next polynomial of order 1 (n=2)
+                P_nm1_1 = -sθ
+                P_n_1 = (2*n-1) * cθ * P_nm1_1 / (n-1)
+
+                # recurse (n=3)
+                P_nm1_1 = P_n_1
+
+                # next polynomial of order 2 (n=3)
+                P_nm2_2 = 0.0
+                P_nm1_2 = 3 * sθ * sθ
+
+                # n>2
+                ρnm1 = ρ * ρ
+                for n in 3:n_max
+                    ITns[1,n] += ρnm1 * im * 0.5 * (-(n+1) * abs(P_nm1_0) + 1/n * abs(P_nm1_2) * e2imϕ)
+                    ITns[2,n] += ρnm1 * 0.5 * (-(n+1) * abs(P_nm1_0) - 1/n * abs(P_nm1_2) * e2imϕ)
+
+                    #--- recurse ---#
+
+                    # ρ^(n-1)
+                    ρnm1 *= ρ
+
+                    # order 0
+                    P_n_0 = ( (2*n-1) * cθ * P_nm1_0 - (n-1) * P_nm2_0 ) / n
+                    P_nm2_0 = P_nm1_0
+                    P_nm1_0 = P_n_0
+
+                    # order 2
+                    P_n_2 = ( (2*n-1) * cθ * P_nm1_2 - (n+1) * P_nm2_2 ) / (n-2)
+                    P_nm2_2 = P_nm1_2
+                    P_nm1_2 = P_n_2
+                end
+            end
+        end
+    end
+    dV = dx * dy * dz
+    V = dV * nx * nx * nx
+    dV_V = dV / V
+    ITns .*= dV_V
+
+    return ITns
+end
+
+function preintegrate_multipole_χ(n_max, nθ, nϕ; s=1.0, θ_max=π, ϕ_max=2*π)
+    ITns = zeros(Float64,2,2,n_max,nθ,nϕ)
+    container = zeros(Complex{Float64},2,n_max)
+    for (iϕ,ϕ) in enumerate(range(0.0, ϕ_max, nϕ))
+        @show ϕ
+        for (iθ,θ) in enumerate(range(0.0, θ_max, nθ))
+            @show θ
+            sθ, cθ = sincos(θ)
+            sϕ, cϕ = sincos(ϕ)
+            r̂ = SVector{3}(sθ * cϕ, sθ * sϕ, cθ)
+            container .= preintegrate_multipole_χ(r̂, n_max; s)
+            for n in 1:n_max
+                for i in 1:2 # z component is always zero
+                    ITns[1,i,n,iθ,iϕ] = real(container[i,n])
+                    ITns[2,i,n,iθ,iϕ] = imag(container[i,n])
+                end
+            end
+        end
+    end
+    return ITns
+end
+
+function get_iθ_χ(θr)
+    θ = 0.0
+    for i in 1:ε_Nθ_χ
+        if θ >= θr
+            θ-θr > θr-θ+ε_Δθ_χ && (return i-1)
+            return i
+        end
+        θ += ε_Δθ_χ
+    end
+    π-θr > θr-π+ε_Δθ_χ && (return ε_Nθ_χ-1)
+    return ε_Nθ_χ
+end
+
+function get_iϕ_χ(ϕr)
+    if ϕr < 0
+        ϕr += FastMultipole.π2
+    end
+    ϕ = 0.0
+    for i in 1:ε_Nϕ_χ
+        if ϕ >= ϕr
+            ϕ-ϕr > ϕr-ϕ+ε_Δϕ_χ && (return i-1)
+            return i
+        end
+        ϕ += ε_Δϕ_χ
+    end
+    FastMultipole.π2-ϕr > ϕr-FastMultipole.π2+ε_Δϕ_χ && (return ε_Nϕ_χ-1)
+    return ε_Nϕ_χ
 end

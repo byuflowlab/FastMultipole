@@ -291,6 +291,16 @@ velocity_n_m = zeros(2,3,size(target_branch.multipole_expansion,3))
 
 @test isapprox(v_l2b, v_analytic; atol=1e-12)
 
+# compute local coefficients directly
+target_branch_2 = deepcopy(target_branch)
+target_branch_2.local_expansion .= 0.0
+body_to_local_point!(Point{Source}, target_branch_2.local_expansion, target_branch_2.harmonics, masses[1,Position()] - target_branch_2.target_center, masses[1,Strength()], Val(expansion_order))
+
+velocity_n_m .= 0.0
+ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(x_target - target_center, target_branch_2.harmonics, velocity_n_m, target_branch_2.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
+
+@test isapprox(v_l2b_2, v_analytic; atol=1e-12)
+
 end
 
 @testset "body-to-multipole: point dipole" begin
@@ -401,11 +411,20 @@ velocity_n_m = zeros(2,3,size(target_branch.harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
 
 # evaluate multipole at target
-lamb_helmholtz = true
-ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(true,true,false), Val(expansion_order), Val(lamb_helmholtz))
+ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, branch.multipole_expansion, DerivativesSwitch(true,true,false), Val(expansion_order), lamb_helmholtz)
 
 @test isapprox(v_m2b, v_l2b; atol=1e-12)
 # @test isapprox(g_m2b, g_l2b; atol=1e-12) # this doesn't work for some reason
+
+# generate local expansion directly
+target_branch_2 = deepcopy(target_branch)
+target_branch_2.local_expansion .= 0.0
+body_to_local_point!(Point{Vortex}, target_branch_2.local_expansion, target_branch_2.harmonics, system[1,Position()] - target_branch_2.target_center, system[1,Strength()], Val(expansion_order))
+velocity_n_m .= 0.0
+ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(xt - target_center, target_branch_2.harmonics, velocity_n_m, target_branch_2.local_expansion, Val(expansion_order), lamb_helmholtz, DerivativesSwitch())
+
+@test isapprox(v_l2b_2, v_l2b; atol=1e-12)
+@test isapprox(g_l2b_2, g_l2b; atol=1e-12)
 
 # analytic result
 dx = xt-xs
