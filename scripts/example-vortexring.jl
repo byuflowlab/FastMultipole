@@ -17,6 +17,7 @@ import Elliptic
 import Roots
 import Cubature
 import LinearAlgebra: I, norm, cross
+import Printf: @printf
 
 modulepath = splitdir(@__FILE__)[1]         # Path to this module
 
@@ -24,12 +25,28 @@ modulepath = splitdir(@__FILE__)[1]         # Path to this module
 using StaticArrays
 include(joinpath(modulepath, "..", "test", "vortex.jl"))
 
+# Check whether this is called within a unit test or not
+try
+    istest
+catch
+    global istest = false
+end
 
 
 
 # -------------- USEFUL FUNCTIONS ----------------------------------------------
 "Number of particles used to discretized a ring"
 number_particles(Nphi, nc; extra_nc=0) = Int( Nphi * ( 1 + 8*sum(1:(nc+extra_nc)) ) )
+
+"Intervals of each ring"
+function calc_ring_invervals(nrings, Nphis, ncs, extra_ncs)
+    intervals = [0]
+    for ri in 1:nrings
+        Np = number_particles(Nphis[ri], ncs[ri]; extra_nc=extra_ncs[ri])
+        push!(intervals, intervals[end] + Np)
+    end
+    return intervals
+end
 
 "Analytic self-induced velocity of an inviscid ring"
 Uring(circulation, R, Rcross, beta) = circulation/(4*pi*R) * ( log(8*R/Rcross) - beta )
@@ -215,6 +232,50 @@ function vortexring(circulation::Real,
 end
 
 
+"""
+Calculate centroid, radius, and cross-section radius of all rings from the
+position of particles weighted by vortex strength.
+"""
+function calc_rings_weighted!(outZ, outR, outsgm, vortexparticles, nrings, intervals)
+
+    # Iterate over each ring
+    for ri in 1:nrings
+
+        # Calculate centroid
+        outZ[ri] .= 0
+        magGammatot = 0
+        for pi in (intervals[ri]+1):(intervals[ri+1])
+
+            P = vortexparticles.bodies[pi]
+            normGamma = norm(P.strength)
+            magGammatot += normGamma
+
+            for i in 1:3
+                outZ[ri][i] += normGamma*P.position[i]
+            end
+
+        end
+        outZ[ri] ./= magGammatot
+
+        # Calculate ring radius and cross-section radius
+        outR[ri], outsgm[ri] = 0, 0
+        for pi in (intervals[ri]+1):(intervals[ri+1])
+
+            P = vortexparticles.bodies[pi]
+            normGamma = norm(P.strength)
+
+            outR[ri] += normGamma*sqrt((P.position[1] - outZ[ri][1])^2 + (P.position[2] - outZ[ri][2])^2 + (P.position[3] - outZ[ri][3])^2)
+            outsgm[ri] += normGamma*P.sigma
+
+        end
+        outR[ri] /= magGammatot
+        outsgm[ri] /= magGammatot
+
+    end
+
+    return nothing
+end
+
 
 
 
@@ -223,8 +284,8 @@ end
 
 
 # -------------- SIMULATION PARAMETERS -----------------------------------------
-nsteps    = 1000                        # Number of time steps
-Rtot      = 2.0                         # (m) run simulation for equivalent
+nsteps    = istest ? 1 : 1000         # Number of time steps
+Rtot      = istest ? 0.00001 : 2.0        # (m) run simulation for equivalent
                                         #     time to this many radii
 
 nrings    = 1                           # Number of rings
@@ -273,19 +334,49 @@ dt = (Rtot/Uref) / nsteps         # (s) time step
 # Create folder to save simulation
 savepath = "example-vortexring"
 
-if isdir(savepath)
-    rm(savepath, recursive=true)
+if !istest
+    if isdir(savepath)
+        rm(savepath, recursive=true)
+    end
+    mkpath(savepath)
 end
-mkpath(savepath)
 
+# Run simulation
 convect!(vortexparticles, nsteps;
         # integration options
         integrate=Euler(dt),
         # fmm options
-        fmm_p=4, fmm_ncrit=50, fmm_multipole_threshold=0.5,
-        # fmm_p=43, fmm_ncrit=50, fmm_multipole_threshold=0.5,
-        direct=false,
-        # direct=true,
+        fmm_p=4, fmm_ncrit=50, fmm_multipole_threshold=0.4,
+        # direct=false,
+        direct=true,
         # save options
-        save=true, filename=joinpath(savepath, "vortexring"), compress=false,
+        save=!istest, filename=joinpath(savepath, "vortexring"), compress=false,
     )
+
+
+# --------------- COMPARE TO ANALYTIC SOLUTION ---------------------------------
+
+# Calculate centroid of ring by end of simulation
+tend = dt*nsteps                              # (s) simulation end time
+Z_vpm = [zeros(3) for ri in 1:nrings]         # Centroid position
+R_vpm, sgm_vpm = zeros(nrings), zeros(nrings) # Ring and cross section radii
+intervals = calc_ring_invervals(nrings, Nphis, ncs, extra_ncs)
+
+calc_rings_weighted!(Z_vpm, R_vpm, sgm_vpm, vortexparticles, nrings, intervals)
+
+# Calculate resulting ring velocity
+U_vpm = norm(Z_vpm[1] - Os[1]) / tend
+
+# Calculate analytic ring velocity
+U_ana = Uring(circulations[nref], Rs[nref], Rcrosss[nref], beta)
+
+# Error
+err = (U_vpm - U_ana) / U_ana
+
+@printf "%sVortex ring self-induced velocity verification\n"    "\n"*"\t"^1
+@printf "%sAnalytical velocity:\t\t%1.3f m/s\n"                 "\t"^2 U_ana
+@printf "%sResulting velocity:\t\t%1.3f m/s\n"                  "\t"^2 U_vpm
+@printf "%sError:\t\t\t\t%1.8f﹪\n"                              "\t"^2 err*100
+
+# Test result
+testresult = abs(err) < 0.01
