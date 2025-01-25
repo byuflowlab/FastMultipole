@@ -215,20 +215,3 @@ end
 
 end
 
-@testset "octree creation: accumulate charge" begin
-
-n_bodies = 101
-bodies = rand(8,n_bodies)
-system = Gravitational(bodies)
-
-tree = fmm.Tree(system; leaf_size=5, accumulate_charge=true)
-
-for i_branch in 1:length(tree.branches)
-    charge = 0.0
-    for i_body in tree.branches[i_branch].bodies_index
-        charge += system.bodies[i_body].strength
-    end
-    @test isapprox(charge, tree.branches[i_branch].charge; atol=1e-12)
-end
-
-end

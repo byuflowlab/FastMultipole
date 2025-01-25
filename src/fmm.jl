@@ -256,7 +256,7 @@ function nearfield_device!(target_systems, derivatives_switches, source_systems)
         source_bodies_index = get_bodies_index(source_systems)
         source_branch = Branch(source_bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
         sort_index, inverse_sort_index, leaf_size = dummy_sort_index(source_systems), dummy_sort_index(source_systems), maximum(source_bodies_index)
-        source_tree = Tree([source_branch], levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), leaf_size)
+        source_tree = Tree([source_branch], levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)
     end
 
     # build direct_list
@@ -269,22 +269,19 @@ end
 
 #------- UPWARD PASS -------#
 
-function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz, leaf_index) where {TF,P}
+function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order, lamb_helmholtz, leaf_index) where TF
 
     # try preallocating one container to be reused
-    Ts = zeros(TF, length_Ts(P))
-    eimϕs = zeros(TF, 2, P+1)
-    weights_tmp_1 = initialize_expansion(P, TF)
-    weights_tmp_2 = initialize_expansion(P, TF)
+    Ts = zeros(TF, length_Ts(expansion_order))
+    eimϕs = zeros(TF, 2, expansion_order+2)
+    weights_tmp_1 = initialize_expansion(expansion_order, TF)
+    weights_tmp_2 = initialize_expansion(expansion_order, TF)
 
     # multipole expansions
     for i_branch in leaf_index
         branch = branches[i_branch]
         body_to_multipole!(branch, systems, branch.harmonics, expansion_order)
     end
-
-    # if predicting error, accumulate charge TODO
-
 
     # loop over branches
     for i_branch in length(branches):-1:1 # no need to create a multipole expansion at the very top level
@@ -300,7 +297,7 @@ function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, syste
     end
 end
 
-function body_to_multipole_multithread!(branches::Vector{<:MultiBranch}, systems::Tuple, expansion_order::Val{P}, leaf_index, n_threads) where P
+function body_to_multipole_multithread!(branches::Vector{<:MultiBranch}, systems::Tuple, expansion_order, leaf_index, n_threads)
     ## load balance
     leaf_assignments = fill(1:0, length(systems), n_threads)
     for (i_system,system) in enumerate(systems)
@@ -348,7 +345,7 @@ function body_to_multipole_multithread!(branches::Vector{<:MultiBranch}, systems
     end
 end
 
-function body_to_multipole_multithread!(branches::Vector{<:SingleBranch}, system, expansion_order::Val{P}, leaf_index, n_threads) where P
+function body_to_multipole_multithread!(branches::Vector{<:SingleBranch}, system, expansion_order, leaf_index, n_threads)
     ## load balance
     leaf_assignments = fill(1:0, n_threads)
 
@@ -386,13 +383,13 @@ function body_to_multipole_multithread!(branches::Vector{<:SingleBranch}, system
     end
 end
 
-function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expansion_order::Val{P}, lamb_helmholtz, levels_index, n_threads) where {TF,P}
+function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
 
     # try preallocating one set of containers to be reused
-    Ts = [zeros(TF, length_Ts(P)) for _ in 1:n_threads]
-    eimϕs = [zeros(TF, 2, P+1) for _ in 1:n_threads]
-    weights_tmp_1 = [initialize_expansion(P, TF) for _ in 1:n_threads]
-    weights_tmp_2 = [initialize_expansion(P, TF) for _ in 1:n_threads]
+    Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, expansion_order+2) for _ in 1:n_threads]
+    weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
     # iterate over levels
     for i_level in length(levels_index):-1:2
@@ -450,29 +447,29 @@ end
 
 #------- horizontal pass -------#
 
-function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, source_branches, m2l_list, lamb_helmholtz, Pmax::Val{P}) where {TF,P}
+function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol) where TF
 
     # preallocate containers to be reused
-    weights_tmp_1 = initialize_expansion(P, TF)
-    weights_tmp_2 = initialize_expansion(P, TF)
-    Ts = zeros(TF, length_Ts(P))
-    eimϕs = zeros(TF, 2, P+1)
+    weights_tmp_1 = initialize_expansion(expansion_order, TF)
+    weights_tmp_2 = initialize_expansion(expansion_order, TF)
+    Ts = zeros(TF, length_Ts(expansion_order))
+    eimϕs = zeros(TF, 2, expansion_order+2)
 
-    for (i_target, j_source, expansion_order) in m2l_list
+    for (i_target, j_source) in m2l_list
         target_branch = target_branches[i_target]
         source_branch = source_branches[j_source]
         #weights_tmp_1 = target_branch.expansion_storage
         #weights_tmp_2 = source_branch.expansion_storage
-        multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+        multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_tol)
     end
 
 end
 
-function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, lamb_helmholtz, Pmax::Val{P}, n_threads) where {TF,P}
+function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads) where TF
 
     if n_threads == 1 # single thread
 
-        horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, lamb_helmholtz, Pmax)
+        horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol)
 
     else # multithread
 
@@ -482,18 +479,18 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
         assignments = 1:n_per_thread:length(m2l_list)
 
         # try preallocating one set of containers to be reused
-        Ts = [zeros(TF, length_Ts(P)) for _ in 1:n_threads]
-        eimϕs = [zeros(TF, 2, P+1) for _ in 1:n_threads]
-        weights_tmp_1 = [initialize_expansion(P, TF) for _ in 1:n_threads]
-        weights_tmp_2 = [initialize_expansion(P, TF) for _ in 1:n_threads]
+        Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
+        eimϕs = [zeros(TF, 2, expansion_order+2) for _ in 1:n_threads]
+        weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+        weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
         # execute tasks
         Threads.@threads for i_thread in 1:length(assignments)
             i_start = assignments[i_thread]
             i_stop = min(i_start+n_per_thread-1, length(m2l_list))
-            for (i_target, j_source, expansion_order) in m2l_list[i_start:i_stop]
+            for (i_target, j_source) in m2l_list[i_start:i_stop]
                 Threads.lock(target_branches[i_target].lock) do
-                    multipole_to_local!(target_branches[i_target], source_branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                    multipole_to_local!(target_branches[i_target], source_branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_tol)
                 end
             end
         end
@@ -504,12 +501,12 @@ end
 
 #------- DOWNWARD PASS -------#
 
-function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order::Val{P}, lamb_helmholtz, derivatives_switches) where {TF,P}
+function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order, lamb_helmholtz, derivatives_switches) where TF
     # try preallocating one container to be reused
-    Ts = zeros(TF, length_Ts(P))
-    eimϕs = zeros(TF, 2, P+1)
-    weights_tmp_1 = initialize_expansion(P, TF)
-    weights_tmp_2 = initialize_expansion(P, TF)
+    Ts = zeros(TF, length_Ts(expansion_order))
+    eimϕs = zeros(TF, 2, expansion_order+2)
+    weights_tmp_1 = initialize_expansion(expansion_order, TF)
+    weights_tmp_2 = initialize_expansion(expansion_order, TF)
     velocity_n_m = zeros(eltype(branches[1]), 2, 3, size(weights_tmp_1, 3))
 
     # loop over branches
@@ -524,13 +521,13 @@ function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, sys
     end
 end
 
-function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion_order::Val{P}, lamb_helmholtz, levels_index, n_threads) where {TF,P}
+function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
 
     # try preallocating one set of containers to be reused
-    Ts = [zeros(TF, length_Ts(P)) for _ in 1:n_threads]
-    eimϕs = [zeros(TF, 2, P+1) for _ in 1:n_threads]
-    weights_tmp_1 = [initialize_expansion(P, TF) for _ in 1:n_threads]
-    weights_tmp_2 = [initialize_expansion(P, TF) for _ in 1:n_threads]
+    Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, expansion_order+2) for _ in 1:n_threads]
+    weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
     # iterate over levels
     for i_level in 2:length(levels_index)
@@ -560,9 +557,9 @@ function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion
     return nothing
 end
 
-function local_to_body_multithread!(branches::Vector{<:Branch{TF}}, systems, derivatives_switches, expansion_order::Val{P}, lamb_helmholtz, leaf_index, n_threads) where {TF,P}
+function local_to_body_multithread!(branches::Vector{<:Branch{TF}}, systems, derivatives_switches, expansion_order, lamb_helmholtz, leaf_index, n_threads) where TF
     # try preallocating one set of containers to be reused
-    velocity_n_m = [initialize_velocity_n_m(P, TF) for _ in 1:n_threads]
+    velocity_n_m = [initialize_velocity_n_m(expansion_order, TF) for _ in 1:n_threads]
 
     # create assignments
     n_bodies = 0
@@ -664,8 +661,8 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 
 """
 function fmm!(target_systems, source_systems;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false),
-    expansion_order::Union{Int,Dynamic{<:Any,<:Any}}=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
+    ε_tol=nothing,
+    expansion_order::Int=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
@@ -674,17 +671,17 @@ function fmm!(target_systems, source_systems;
     source_shrink_recenter::Bool=false, target_shrink_recenter::Bool=false,
     save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree",
     nearfield_device::Bool=false
-) where PE
+)
     # check for duplicate systems
     target_systems = wrap_duplicates(target_systems, source_systems)
 
     # create trees
-    source_tree = Tree(source_systems; expansion_order=get_Pmax(expansion_order), leaf_size=leaf_size_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order=get_Pmax(expansion_order), leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
+    source_tree = Tree(source_systems; expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size=leaf_size_source, shrink_recenter=source_shrink_recenter)
+    target_tree = Tree(target_systems; expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
-        expansion_order, error_method, predict_error,
+        expansion_order, ε_tol,
         lamb_helmholtz,
         scalar_potential, velocity, velocity_gradient,
         multipole_threshold,
@@ -735,23 +732,22 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 
 """
 function fmm!(systems;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false),
-    expansion_order::Union{Int,Dynamic{<:Any,<:Any}}=5, leaf_size=50, multipole_threshold=0.4,
+    ε_tol=nothing,
+    expansion_order::Int=5, leaf_size=50, multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, shrink_recenter::Bool=false,
     save_tree::Bool=false, save_name="tree", nearfield_device::Bool=false
-) where PE
+)
 
     # create tree
-    tree = Tree(systems; expansion_order=get_Pmax(expansion_order), leaf_size, shrink_recenter)
+    tree = Tree(systems; expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size, shrink_recenter)
 
     # perform fmm
     m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;
-        error_method, predict_error,
-        expansion_order,
+        expansion_order, ε_tol,
         lamb_helmholtz,
         scalar_potential, velocity, velocity_gradient,
         multipole_threshold, reset_tree=false,
@@ -796,26 +792,25 @@ Dispatches `fmm!` using an existing `::Tree`.
 
 """
 function fmm!(tree::Tree, systems;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false), check_dipole=true,
-    expansion_order::Union{Int,Dynamic{<:Any,<:Any}}=5,
+    ε_tol=nothing,
+    expansion_order::Int=5,
     multipole_threshold=0.4, reset_tree::Bool=true,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_bodies::Bool=true, nearfield_device::Bool=false
-) where PE
+)
 
     # assemble derivatives switch
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, Val(check_dipole))
+    m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
-    Pmax = get_Pmax(expansion_order)
-    fmm!(tree, systems, m2l_list, direct_list, derivatives_switches, Val(Pmax);
-        predict_error,
+    fmm!(tree, systems, m2l_list, direct_list, derivatives_switches, expansion_order;
+        ε_tol,
         lamb_helmholtz,
         reset_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
@@ -864,8 +859,8 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 """
 function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false), check_dipole::Bool=true,
-    expansion_order::Union{Int,Dynamic{<:Any,<:Any}}=5, multipole_threshold=0.4,
+    ε_tol=nothing,
+    expansion_order::Int=5, multipole_threshold=0.4,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     lamb_helmholtz::Bool=false,
     reset_source_tree::Bool=true, reset_target_tree::Bool=true,
@@ -873,20 +868,17 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
     nearfield_device::Bool=false
-) where PE
+)
 
     # assemble derivatives switch
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, Val(check_dipole))
-
-    # extract max expansion order
-    Pmax = get_Pmax(expansion_order)
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches, Val(Pmax);
-        predict_error,
+    fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches, expansion_order;
+        ε_tol,
         lamb_helmholtz,
         reset_source_tree, reset_target_tree,
         nearfield, upward_pass, horizontal_pass, downward_pass,
@@ -921,16 +913,16 @@ Dispatches `fmm!` using an existing `::Tree`.
 - `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
 
 """
-function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches, Pmax::Val;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false),
+function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches, expansion_order;
+    ε_tol=nothing,
     lamb_helmholtz::Bool=false,
     reset_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     unsort_bodies::Bool=true, nearfield_device::Bool=false
-) where PE
+)
 
-    fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches, Pmax;
-        predict_error,
+    fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches, expansion_order;
+        ε_tol,
         lamb_helmholtz,
         reset_source_tree=reset_tree, reset_target_tree=false,
         nearfield, upward_pass, horizontal_pass, downward_pass,
@@ -984,14 +976,14 @@ Dispatches `fmm!` using existing `::Tree` objects.
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
 
 """
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_list, derivatives_switches, Pmax::Val;
-    error_method::ErrorMethod=UnequalBoxes(), predict_error::Val{PE}=Val(false),
+function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_list, derivatives_switches, expansion_order;
+    ε_tol=nothing,
     lamb_helmholtz::Bool=false,
     reset_source_tree::Bool=true, reset_target_tree::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
     nearfield_device::Bool=false
-) where PE
+)
 
     # check if systems are empty
     n_sources = get_n_bodies(source_systems)
@@ -1004,11 +996,11 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     if n_sources > 0 && n_targets > 0
 
         # precompute y-axis rotation by π/2 matrices (if not already done)
-        update_Hs_π2!(Hs_π2, Pmax)
+        update_Hs_π2!(Hs_π2, expansion_order)
 
         # precompute y-axis Wigner matrix normalization (if not already done)
-        update_ζs_mag!(ζs_mag, Pmax)
-        update_ηs_mag!(ηs_mag, Pmax)
+        update_ζs_mag!(ζs_mag, expansion_order)
+        update_ηs_mag!(ηs_mag, expansion_order)
 
         # reset multipole/local expansions
         reset_target_tree && (reset_expansions!(source_tree))
@@ -1025,23 +1017,23 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
-                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, Pmax, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
-                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, Pmax, n_threads_multipole)
-	                downward_pass && translate_locals_multithread!(target_tree.branches, Pmax, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
+                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
+                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads_multipole)
+	                downward_pass && translate_locals_multithread!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
                 end
 
             fetch(t1)
             fetch(t2)
 
             # local to body interaction
-            downward_pass && local_to_body_multithread!(branches, systems, derivatives_switch, Pmax, lamb_helmholtz, leaf_index, n_threads)
+            downward_pass && local_to_body_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, leaf_index, n_threads)
 
         else # standard nearfield function
 
             nearfield && nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list, n_threads)
-            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, Pmax, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads)
-            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, Pmax, n_threads)
-            downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, Pmax, lamb_helmholtz, target_tree.levels_index, target_tree.leaf_index, n_threads)
+            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads)
+            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
+            downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, expansion_order, lamb_helmholtz, target_tree.levels_index, target_tree.leaf_index, n_threads)
 
         end
 
@@ -1061,3 +1053,4 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     n_targets > 0 && unsort_target_bodies && unsort!(target_systems, target_tree)
 
 end
+

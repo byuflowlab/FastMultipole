@@ -1,5 +1,25 @@
 #------- GENERAL FUNCTIONS -------#
 
+#--- spherical coordinates ---#
+
+@inline function cartesian_to_spherical(x; EPSILON=1e-10)
+    return cartesian_to_spherical(x[1], x[2], x[3]; EPSILON)
+end
+
+@inline function cartesian_to_spherical(x, y, z; EPSILON=1e-10)
+    x2y2 = x*x + y*y
+    r2 = x2y2 + z*z
+    r = iszero(r2) ? r2 : sqrt(r2)
+    z_r = z/r
+    if r > 0
+        theta = x2y2 > 0 ? acos(z_r) : π * (z < 0)
+    else
+        theta = zero(r)
+    end
+    phi = iszero(x2y2) ? zero(x2y2) : atan(y, x)
+    return r, theta, phi
+end
+
 #--- z axis rotation matrices (diagonal) ---#
 
 function update_eimϕs!(eimϕs, ϕ, P)
@@ -13,6 +33,33 @@ function update_eimϕs!(eimϕs, ϕ, P)
         eimϕ_real = eimϕ_real * eiϕ_real - eimϕ_imag * eiϕ_imag
         eimϕ_imag = eimϕ_real_tmp * eiϕ_imag + eimϕ_imag * eiϕ_real
     end
+end
+
+"""
+Returns eiϕ_real, eiϕ_imag, eimϕ_real, and eimϕ_imag appropriate for inputs for n=1 in update_eimϕs_n!
+"""
+function update_eimϕs_0!(eimϕs, ϕ)
+    eiϕ_imag, eiϕ_real = sincos(ϕ)
+    eimϕ_real, eimϕ_imag = one(ϕ), zero(ϕ)
+    @inbounds eimϕs[1,1] = eimϕ_real
+    @inbounds eimϕs[2,1] = eimϕ_imag
+    return eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag
+end
+
+"""
+Returns eimϕ_real and eimϕ_imag for n
+"""
+function update_eimϕs_n!(eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, n)
+    # calculate eimϕ
+    eimϕ_real_tmp = eimϕ_real
+    eimϕ_real = eimϕ_real * eiϕ_real - eimϕ_imag * eiϕ_imag
+    eimϕ_imag = eimϕ_real_tmp * eiϕ_imag + eimϕ_imag * eiϕ_real
+
+    # update container
+    @inbounds eimϕs[1,n+1] = eimϕ_real
+    @inbounds eimϕs[2,n+1] = eimϕ_imag
+
+    return eimϕ_real, eimϕ_imag
 end
 
 #--- precompute y axis rotation matrices by π/2 ---#
@@ -155,14 +202,14 @@ function compute_Hs!(Hs, β, n_start, n_end)
     end
 end
 
-function update_Hs_π2!(Hs_π2, expansion_order::Val{P}) where P
+function update_Hs_π2!(Hs_π2, expansion_order)
     l = length(Hs_π2)
-    l_desired = length_Hs(P)
+    l_desired = length_Hs(expansion_order)
 
     if l_desired > l # we need to compute more matrices
         # determine how many we already have
         n_already, l_already = 0, 0
-        for n in 0:P
+        for n in 0:expansion_order
             l_already += (n+1)^2
             l_already == l && (n_already = n)
         end
@@ -170,7 +217,7 @@ function update_Hs_π2!(Hs_π2, expansion_order::Val{P}) where P
         # calculate the rest
         β = pi/2
         resize!(Hs_π2, l_desired)
-        compute_Hs!(Hs_π2, β, n_already+1, P)
+        compute_Hs!(Hs_π2, β, n_already+1, expansion_order)
 
     end # otherwise, we already have enough, so do nothing
 end
@@ -210,7 +257,6 @@ end
     end
 end
 
-#function update_Ts!(Ts, Hs_π2, β::TF, ::Val{expansion_order}) where {TF,expansion_order}
 function update_Ts!(Ts, Hs_π2, β::TF, expansion_order) where TF
     p = expansion_order
 
@@ -299,13 +345,107 @@ function update_Ts!(Ts, Hs_π2, β::TF, expansion_order) where TF
     end
 end
 
+"""
+Returns sβ, cβ, and _1_n appropriate for calling update_Ts_n! for n=1
+"""
+function update_Ts_0!(Ts, Hs_π2, β::TF, expansion_order) where TF
+
+    # rotate each expansion order
+    Ts[1] = one(eltype(Ts))
+
+    # other recursive values
+    sβ, cβ = sincos(β)
+    _1_n = -1.0
+
+    return sβ, cβ, _1_n
+end
+
+function update_Ts_n!(Ts, Hs_π2, sβ, cβ, _1_n, n)
+
+    # initialize recursive indices
+    i_H_start = length_Hs(n-1) + 1
+    i_H_end = i_H_start + length_H(n) - 1
+    i_T_start = length_Ts(n-1)+1
+    i_T_end = i_T_start + length_T(n) - 1
+
+    # TODO: i_H_end and i_T_end both use the term (n+1)(n+2)/6;
+    # could make this slightly more efficient (albeit less readable) by combining
+
+    # Wigner matrix about y axis by π/2
+    H_π2 = view(Hs_π2, i_H_start:i_H_end)
+
+    # Wigner matrix by β
+    T = view(Ts, i_T_start:i_T_end)
+
+    @inbounds for m in 0:n
+        H_π2_n_m_0 = H_π2[H_index(0,m)]
+        _1_mp_odd = 1.0
+        m_mp = m
+        _1_n_mp = _1_n
+
+        for mp in 0:m
+            H_π2_n_mp_0 = H_π2[H_index(0,mp)]
+            val_positive_mp = zero(eltype(Ts))
+            val_negative_mp = zero(eltype(Ts))
+            s_νm1_β = 0.0
+            c_νm1_β = 1.0
+            m_mp_even = iseven(m_mp)
+            scalar = get_scalar(m_mp)
+            _1_n_mp_ν = -_1_n_mp
+
+            for ν in 1:n
+                # sin and cos (νβ)
+                c_νβ = cβ * c_νm1_β - sβ * s_νm1_β
+                s_νβ = sβ * c_νm1_β + cβ * s_νm1_β
+
+                # alternating sine/cosine
+                sc_νβ_m_mp = m_mp_even ? scalar * c_νβ : scalar * s_νβ
+
+                # accumulate
+                i, j = minmax(mp,ν)
+                H_π2_n_mp_ν = H_π2[H_index(i,j)]
+                i, j = minmax(m,ν)
+                H_π2_n_m_ν = H_π2[H_index(i,j)]
+
+                # leverage symmetry to compute p/m mp
+                val = H_π2_n_mp_ν * H_π2_n_m_ν * sc_νβ_m_mp #
+                val_positive_mp += val
+                val_negative_mp += val * _1_n_mp_ν * _1_mp_odd #
+
+                # recurse
+                c_νm1_β = c_νβ
+                s_νm1_β = s_νβ
+                _1_n_mp_ν = -_1_n_mp_ν
+            end
+
+            val_positive_mp *= 2.0
+            val_negative_mp *= 2.0
+            scalar = m_mp_even ? scalar : 0.0
+            val = H_π2_n_m_0 * H_π2_n_mp_0 * scalar
+            val_positive_mp += val
+            val_negative_mp += val * _1_n_mp * _1_mp_odd #
+            T[T_index(mp,m)] = val_positive_mp
+            T[T_index(-mp,m)] = val_negative_mp
+
+            # recurse
+            _1_n_mp = -_1_n_mp
+            _1_mp_odd = -_1_mp_odd
+            m_mp += 1
+        end
+    end
+
+    # recurse
+    _1_n = -_1_n
+
+    return _1_n
+end
+
 #--- functions to actually rotate ---#
 
 """
 Performs a z-axis rotation of the supplied solid harmonic coefficients. Computes e^{imϕ} as well.
 """
 function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, P, ::Val{LH}) where LH
-#function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, expansion_order::Val{P}, ::Val{LH}) where {P,LH}
 
     update_eimϕs!(eimϕs, ϕ, P)
 
@@ -342,11 +482,55 @@ function rotate_z!(rotated_weights, source_weights, eimϕs, ϕ, P, ::Val{LH}) wh
     end
 end
 
+function rotate_z_0!(rotated_weights, source_weights, eimϕs, ϕ, P, ::Val{LH}) where LH
+
+    eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag = update_eimϕs_0!(eimϕs, ϕ)
+
+    # n = 0 (no change in the monopole term)
+    @inbounds rotated_weights[1,1,1] = source_weights[1,1,1]
+    @inbounds rotated_weights[2,1,1] = source_weights[2,1,1]
+    if LH
+        @inbounds rotated_weights[1,2,1] = source_weights[1,2,1]
+        @inbounds rotated_weights[2,2,1] = source_weights[2,2,1]
+    end
+
+    return eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag
+end
+
+"""
+Performs a z-axis rotation of the supplied solid harmonic coefficients. Computes e^{imϕ} as well.
+"""
+function rotate_z_n!(rotated_weights, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, ::Val{LH}, n) where LH
+
+    eimϕ_real, eimϕ_imag = update_eimϕs_n!(eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, n)
+
+    i_weight = (n * (n+1)) >> 1 + 1
+
+    @inbounds for m in 0:n
+        # get e^{imΔϕ}
+        eimϕ_real, eimϕ_imag = eimϕs[1,m+1], eimϕs[2,m+1]
+
+        # rotate coefficients
+        Xnm_real, Xnm_imag = source_weights[1,1,i_weight], source_weights[2,1,i_weight]
+        rotated_weights[1,1,i_weight] = Xnm_real * eimϕ_real - Xnm_imag * eimϕ_imag
+        rotated_weights[2,1,i_weight] = Xnm_real * eimϕ_imag + Xnm_imag * eimϕ_real
+        if LH
+            Xnm_real, Xnm_imag = source_weights[1,2,i_weight], source_weights[2,2,i_weight]
+            rotated_weights[1,2,i_weight] = Xnm_real * eimϕ_real - Xnm_imag * eimϕ_imag
+            rotated_weights[2,2,i_weight] = Xnm_real * eimϕ_imag + Xnm_imag * eimϕ_real
+        end
+
+        # increment index
+        i_weight += 1
+    end
+
+    return eimϕ_real, eimϕ_imag
+end
+
 """
 Assumes eimϕs have already been computed. DOES NOT overwrite rotated weights (unlike other rotate functions); rather, accumulates on top of it.
 """
 function back_rotate_z!(rotated_weights, source_weights, eimϕs, P, ::Val{LH}) where LH
-#function back_rotate_z!(rotated_weights, source_weights, eimϕs, expansion_order::Val{P}, ::Val{LH}) where {P,LH}
     i_weight = 1
 
     # n = 0 (no change in the monopole term)
@@ -387,22 +571,21 @@ function length_ζs(expansion_order)
     return div((p+1)*(p+2)*(2p+3),6)
 end
 
-#function update_ζs_mag!(ζs_mag, P)
-function update_ζs_mag!(ζs_mag, expansion_order::Val{P}) where P
+function update_ζs_mag!(ζs_mag, expansion_order)
     l = length(ζs_mag)
-    l_desired = length_ζs(P)
+    l_desired = length_ζs(expansion_order)
 
     if l_desired > l # we need to compute more matrices
         # determine how many we already have
         n_already, l_already = 0, 0
-        for n in 0:P
+        for n in 0:expansion_order
             l_already += (n+1)^2
             l_already == l && (n_already = n)
         end
 
         # calculate the rest
         resize!(ζs_mag, l_desired)
-        update_ζs_mag!(ζs_mag, n_already+1, P)
+        update_ζs_mag!(ζs_mag, n_already+1, expansion_order)
 
     end # otherwise, we already have enough, so do nothing
 end
@@ -462,7 +645,6 @@ end
 
 #--- functions to actually rotate ---#
 
-#function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, ::Val{P}, ::Val{LH}) where {P,LH}
 function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, P, ::Val{LH}) where LH
     # reset container
     rotated_weights .= zero(eltype(rotated_weights))
@@ -570,6 +752,113 @@ function _rotate_multipole_y!(rotated_weights, source_weights, Ts, ζs_mag, P, :
 end
 
 """
+The first time this function is called, it should receive i_ζ=0, i_T=0, and n=0. It will return i_ζ and i_T appropriate for n+1.
+"""
+function _rotate_multipole_y_n!(rotated_weights, source_weights, Ts, ζs_mag, P, ::Val{LH}, i_ζ, i_T, n) where LH
+    # reset container
+    in0 = (n * (n+1)) >> 1 + 1
+    rotated_weights[:,:,in0:in0+n] .= zero(eltype(rotated_weights))
+
+    for m in 0:n
+        val1_real = zero(eltype(Ts))
+        val1_imag = zero(eltype(Ts))
+        if LH
+            val2_real = zero(eltype(Ts))
+            val2_imag = zero(eltype(Ts))
+        end
+        i_ζ += n+1
+        i_ζ_mp = i_ζ
+
+        for mp in -n:0 # -m <= mp <= 0
+            # T_n^{m',m} = T_n^{m,m'} = T_n^{-m,-m'}
+            # @inline function T_index(mp, m)
+            #     return m*m + mp + m + 1
+            # end
+            i1, i2 = minmax(-mp,m)
+            T_mp_m = Ts[i_T + T_index(-i1,i2)]
+
+            # ζ_n^{m',m} = β_n^{m'} / β_n^m
+            ζ_real, ζ_imag = ζ_sign(ζs_mag[i_ζ_mp] * T_mp_m, mp, m)
+
+            # current weights
+            i_weight = harmonic_index(n, -mp)
+
+            # sum contribution
+            # (-1)^mp * complex conjugate for -mp
+            M_n_mp_real, M_n_mp_imag = source_weights[1,1,i_weight], -source_weights[2,1,i_weight]
+            if isodd(mp)
+                M_n_mp_real = -M_n_mp_real
+                M_n_mp_imag = -M_n_mp_imag
+            end
+            val1_real += M_n_mp_real * ζ_real - M_n_mp_imag * ζ_imag
+            val1_imag += M_n_mp_real * ζ_imag + M_n_mp_imag * ζ_real
+
+            if LH
+                # (-1)^mp * complex conjugate for -mp
+                M_n_mp_real, M_n_mp_imag = source_weights[1,2,i_weight], -source_weights[2,2,i_weight]
+                if isodd(mp)
+                    M_n_mp_real = -M_n_mp_real
+                    M_n_mp_imag = -M_n_mp_imag
+                end
+                val2_real += M_n_mp_real * ζ_real - M_n_mp_imag * ζ_imag
+                val2_imag += M_n_mp_real * ζ_imag + M_n_mp_imag * ζ_real
+            end
+
+            # decrement index
+            i_ζ_mp -= 1
+        end
+
+        # augment index back to m'=1
+        i_ζ_mp += 2
+
+        #for mp in 1:m # 0 < mp <= m
+        for mp in 1:n # mp > 0
+            # T_mp_m = T[T_index(mp,m)]
+            i1, i2 = minmax(mp,m)
+            T_mp_m = Ts[i_T + T_index(i1,i2)]
+            if n==0 && DEBUG[]
+                @show i_T + T_index(i1,i2)
+            end
+            #@show T_index(mp,m)
+
+            # ζ_n^{m',m} = β_n^{m'} / β_n^m
+            ζ_real, ζ_imag = ζ_sign(ζs_mag[i_ζ_mp] * T_mp_m, mp, m)
+
+            # current weights
+            i_weight = harmonic_index(n, mp)
+
+            # sum contribution
+            M_n_mp_real, M_n_mp_imag = source_weights[1,1,i_weight], source_weights[2,1,i_weight]
+            val1_real += M_n_mp_real * ζ_real - M_n_mp_imag * ζ_imag
+            val1_imag += M_n_mp_real * ζ_imag + M_n_mp_imag * ζ_real
+            if LH
+                M_n_mp_real, M_n_mp_imag = source_weights[1,2,i_weight], source_weights[2,2,i_weight]
+                val2_real += M_n_mp_real * ζ_real - M_n_mp_imag * ζ_imag
+                val2_imag += M_n_mp_real * ζ_imag + M_n_mp_imag * ζ_real
+            end
+
+            # increment index
+            i_ζ_mp += 1
+        end
+
+        # update rotated_weights
+        i = harmonic_index(n,m)
+        rotated_weights[1,1,i] += val1_real
+        rotated_weights[2,1,i] += val1_imag
+        if LH
+            rotated_weights[1,2,i] += val2_real
+            rotated_weights[2,2,i] += val2_imag
+        end
+    end
+
+    # next T matrix
+    np1 = n+1
+    i_T += np1*np1
+
+    return i_ζ, i_T
+end
+
+"""
 Rotate solid harmonic weights about the y axis by θ. Note that Hs_π2 and ζs_mag must be updated a priori, but Ts is updated en situ. Resets rotated_weights before computing.
 """
 function rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, P, lamb_helmholtz)
@@ -597,21 +886,21 @@ function length_ηs(expansion_order)
 end
 
 #function update_ηs_mag!(ηs_mag, P)
-function update_ηs_mag!(ηs_mag, expansion_order::Val{P}) where P
+function update_ηs_mag!(ηs_mag, expansion_order)
     l = length(ηs_mag)
-    l_desired = length_ηs(P)
+    l_desired = length_ηs(expansion_order)
 
     if l_desired > l # we need to compute more matrices
         # determine how many we already have
         n_already, l_already = 0, 0
-        for n in 0:P
+        for n in 0:expansion_order
             l_already += (n+1)^2
             l_already == l && (n_already = n)
         end
 
         # calculate the rest
         resize!(ηs_mag, l_desired)
-        update_ηs_mag!(ηs_mag, n_already+1, P)
+        update_ηs_mag!(ηs_mag, n_already+1, expansion_order)
 
     end # otherwise, we already have enough, so do nothing
 end
@@ -672,7 +961,6 @@ end
 #--- functions to actually rotate ---#
 
 function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, P, ::Val{LH}) where LH
-#function _rotate_local_y!(rotated_weights, source_weights, Ts, Hs_π2, ηs_mag, ::Val{P}, ::Val{LH}) where {P,LH}
     # reset container
     rotated_weights .= zero(eltype(rotated_weights))
 

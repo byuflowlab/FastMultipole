@@ -100,7 +100,7 @@ function get_nm1(harmonics, index, n, m, i_nm1_m, _1_m)
     return x_nm1_mm1_real, x_nm1_mm1_imag, x_nm1_m_real, x_nm1_m_imag, x_nm1_mp1_real, x_nm1_mp1_imag
 end
 
-function calculate_q!(harmonics, ξ_real, ξ_imag, η_real, η_imag, z, ::Val{P}) where P
+function calculate_q!(harmonics, ξ_real, ξ_imag, η_real, η_imag, z, expansion_order)
 
     #--- n = 0, m = 0 ---#
 
@@ -110,7 +110,7 @@ function calculate_q!(harmonics, ξ_real, ξ_imag, η_real, η_imag, z, ::Val{P}
     i += 1
 
     #--- n > 0 ---#
-    for n in 1:P
+    for n in 1:expansion_order
         i_nm1_m = i - n
         _1_m = 1.0
         for m in 0:n
@@ -134,7 +134,7 @@ assumes q has already been calculated
 
 If X0_real is replaced with X0_real + Xv_real, etc., the result becomes jnm instead of pnm, as used for panels.
 """
-function calculate_pj!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::Val{P}) where P
+function calculate_pj!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, expansion_order)
     #--- n = 0, m = 0 ---#
 
     i = 1
@@ -143,7 +143,7 @@ function calculate_pj!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::
     i += 1
 
     #--- n > 0 ---#
-    for n in 1:P
+    for n in 1:expansion_order
         i_nm1_m = i - n
         _1_m = 1
         for m in 0:n
@@ -171,7 +171,7 @@ assumes j has already been calculated
 
 Note: if X0_real is replaced with X0_real + Xw_real, etc., this becomes bnm (as used for volumes) instead of inm (as used for panels)
 """
-function calculate_ib!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::Val{P}) where P
+function calculate_ib!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, expansion_order)
     #--- n = 0, m = 0 ---#
 
     i = 1
@@ -180,7 +180,7 @@ function calculate_ib!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::
     i += 1
 
     #--- n > 0 ---#
-    for n in 1:P
+    for n in 1:expansion_order
         i_nm1_m = i - n
         _1_m = 1
         for m in 0:n
@@ -203,7 +203,7 @@ function calculate_ib!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::
     end
 end
 
-function calculate_a!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::Val{P}) where P
+function calculate_a!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, expansion_order)
     #--- n = 0, m = 0 ---#
 
     i = 1
@@ -212,7 +212,7 @@ function calculate_a!(harmonics, ξ0_real, ξ0_imag, η0_real, η0_imag, z0, ::V
     i += 1
 
     #--- n > 0 ---#
-    for n in 1:P
+    for n in 1:expansion_order
         i_nm1_m = i - n
         _1_m = 1
         for m in 0:n
@@ -239,7 +239,7 @@ end
 """
 assumes source expansion coefficients have already been calculated
 """
-function source_to_dipole!(harmonics, i_dipole, i_source, qx, qy, qz, ::Val{P}) where P
+function source_to_dipole!(harmonics, i_dipole, i_source, qx, qy, qz, expansion_order)
 
     #--- n = 0 ---#
 
@@ -249,7 +249,7 @@ function source_to_dipole!(harmonics, i_dipole, i_source, qx, qy, qz, ::Val{P}) 
     #--- n > 0 ---#
 
     i = 2
-    for n in 1:P
+    for n in 1:expansion_order
         i_nm1_m = i - n
         _1_m = 1
         for m in 0:n
@@ -271,14 +271,14 @@ end
 """
 my novel derivation
 """
-function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength, i_source, multiplier, expansion_order::Val{P}) where P
+function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength, i_source, multiplier, expansion_order)
 
     #--- first potential ϕ ---#
 
     vx, vy, vz = strength
 
     i = 1
-    for n in 0:P
+    for n in 0:expansion_order
         _1_m = 1.0
         _1_np1 = 1.0/(n+1)
         for m in 0:n
@@ -304,7 +304,7 @@ function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength,
     #--- second potential χ ---#
 
     i = 2
-    for n in 1:P
+    for n in 1:expansion_order
         i_nm1_m = i - n
         _1_m = 1.0
         _1_over_n = 1.0/n
@@ -327,7 +327,7 @@ end
 """
 might be slightly faster than mirrored_source_to_vortex
 """
-function source_to_vortex_point!(multipole_coefficients, harmonics, strength, Δx, i_source, i_dipole, expansion_order::Val{P}) where P
+function source_to_vortex_point!(multipole_coefficients, harmonics, strength, Δx, i_source, i_dipole, expansion_order)
 
     #--- first scalar potential ---#
 
@@ -338,7 +338,7 @@ function source_to_vortex_point!(multipole_coefficients, harmonics, strength, Δ
     # update coefficients
     _1_n = -1.0
     i = 2
-    for n in 1:P
+    for n in 1:expansion_order
         _1_n_m = _1_n
         _1_np1 = -1.0/(n+1)
         for m in 0:n
@@ -359,7 +359,7 @@ function source_to_vortex_point!(multipole_coefficients, harmonics, strength, Δ
     # update coefficients
     _1_n = -1.0
     i = 2
-    for n in 1:P
+    for n in 1:expansion_order
         _1_n_m = _1_n
         _1_over_n = -1.0/n
         for m in 0:n
@@ -375,7 +375,7 @@ end
 
 #--- point elements ---#
 
-@inline function body_to_multipole!(element::Type{<:Point}, system, branch, bodies_index, harmonics, expansion_order::Val)
+@inline function body_to_multipole!(element::Type{<:Point}, system, branch, bodies_index, harmonics, expansion_order)
 
     # extract containers
     center = branch.source_center
@@ -393,7 +393,7 @@ end
 
 end
 
-@inline function body_to_multipole_point!(::Type{Point{Source}}, multipole_coefficients, harmonics, Δx, strength, expansion_order::Val{P}) where P
+@inline function body_to_multipole_point!(::Type{Point{Source}}, multipole_coefficients, harmonics, Δx, strength, expansion_order)
 
     # transform to ξ, η, z
     ξ_real, ξ_imag, η_real, η_imag, z = xyz_to_ξηz(Δx)
@@ -409,7 +409,7 @@ end
     # update coefficients
     _1_n = 1.0
     i = 1
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             multipole_coefficients[1,1,i] += harmonics[1,1,i] * _1_n_m * strength
@@ -421,7 +421,7 @@ end
     end
 end
 
-@inline function body_to_multipole_point!(::Type{Point{Dipole}}, multipole_coefficients, harmonics, Δx, strength, expansion_order::Val{P}) where P
+@inline function body_to_multipole_point!(::Type{Point{Dipole}}, multipole_coefficients, harmonics, Δx, strength, expansion_order)
 
     # transform to ξ, η, z
     ξ_real, ξ_imag, η_real, η_imag, z = xyz_to_ξηz(Δx)
@@ -442,7 +442,7 @@ end
     # update coefficients
     _1_n = 1.0
     i = 1
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             multipole_coefficients[1,1,i] += harmonics[1,i_dipole,i] * _1_n_m
@@ -455,7 +455,7 @@ end
 
 end
 
-@inline function body_to_multipole_point!(::Type{Point{Vortex}}, multipole_coefficients, harmonics, Δx, strength, expansion_order::Val{P}) where P
+@inline function body_to_multipole_point!(::Type{Point{Vortex}}, multipole_coefficients, harmonics, Δx, strength, expansion_order)
 
     ## transform to ξ, η, z
     #ξ_real, ξ_imag, η_real, η_imag, z = xyz_to_ξηz(Δx)
@@ -483,7 +483,7 @@ end
 
 #--- filament elements ---#
 
-@inline function body_to_multipole!(element::Type{<:Filament}, system, branch, bodies_index, harmonics, expansion_order::Val)
+@inline function body_to_multipole!(element::Type{<:Filament}, system, branch, bodies_index, harmonics, expansion_order)
     # extract containers
     center = branch.source_center
     multipole_coefficients = branch.multipole_expansion
@@ -501,7 +501,7 @@ end
     end
 end
 
-function body_to_multipole_filament!(::Type{Filament{Source}}, multipole_coefficients, harmonics, x0, xu, strength, expansion_order::Val{P}) where P
+function body_to_multipole_filament!(::Type{Filament{Source}}, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -530,7 +530,7 @@ function body_to_multipole_filament!(::Type{Filament{Source}}, multipole_coeffic
     # update expansion coefficients
     i = 1
     _1_n = 1.0
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             # set coefficients
@@ -545,7 +545,7 @@ function body_to_multipole_filament!(::Type{Filament{Source}}, multipole_coeffic
     end
 end
 
-function body_to_multipole_filament!(::Type{Filament{Dipole}}, multipole_coefficients, harmonics, x0, xu, strength, expansion_order::Val{P}) where P
+function body_to_multipole_filament!(::Type{Filament{Dipole}}, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -578,7 +578,7 @@ function body_to_multipole_filament!(::Type{Filament{Dipole}}, multipole_coeffic
     # update expansion coefficients
     i = 1
     _1_n = 1.0
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             # set coefficients
@@ -593,7 +593,7 @@ function body_to_multipole_filament!(::Type{Filament{Dipole}}, multipole_coeffic
     end
 end
 
-function body_to_multipole_filament!(::Type{Filament{Vortex}}, multipole_coefficients, harmonics, x0, xu, strength, expansion_order::Val{P}) where P
+function body_to_multipole_filament!(::Type{Filament{Vortex}}, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
 
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(-x0)
@@ -622,7 +622,7 @@ end
 
 #--- panel elements ---#
 
-@inline function body_to_multipole!(element::Type{<:Panel}, system, branch, bodies_index, harmonics, expansion_order::Val)
+@inline function body_to_multipole!(element::Type{<:Panel}, system, branch, bodies_index, harmonics, expansion_order)
     # extract containers
     center = branch.source_center
     multipole_coefficients = branch.multipole_expansion
@@ -642,7 +642,7 @@ end
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order::Val{P}) where P
+function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -681,7 +681,7 @@ function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients,
     # update expansion coefficients
     i = 1
     _1_n = 1.0
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             # set coefficients
@@ -696,7 +696,7 @@ function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients,
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order::Val{P}) where P
+function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -738,7 +738,7 @@ function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients,
     # update expansion coefficients
     i = 1
     _1_n = 1.0
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             # set coefficients
@@ -753,7 +753,7 @@ function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients,
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Vortex}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order::Val{P}) where P
+function body_to_multipole_panel!(::Type{Panel{Vortex}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(-x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(-xu)

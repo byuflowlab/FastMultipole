@@ -33,7 +33,10 @@ end
 function generate_vortex(seed, n_bodies; strength_scale=1/n_bodies)
     Random.seed!(seed)
     position = rand(3, n_bodies)
-    strength = rand(3, n_bodies) .* strength_scale
+    strength = rand(3, n_bodies)
+    strength .-= 0.5
+    strength .*= 2
+    strength .*= strength_scale
     return VortexParticles(position, strength)
 end
 

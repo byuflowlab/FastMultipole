@@ -19,6 +19,9 @@ function minimum_distance(center1, center2, box2::SVector{3,<:Any})
     return SVector{3}(Δx, Δy, Δz)
 end
 
+"""
+Vector from center 2 to the corner of box2 closest to center.
+"""
 function closest_corner(center1, center2, box2::SVector{3,<:Any})
     Δxc, Δyc, Δzc = center1 - center2
     bx, by, bz = box2
@@ -56,56 +59,46 @@ end
     return r_min, r_max, ρ_min, ρ_max
 end
 
-@inline function get_r_ρ(local_branch, multipole_branch, separation_distance_squared, ::EqualSpheres)
-    # see Section 3.5.2, Pringle, 1994
-    # but normalized by a different mean potential
-    # to remove the singularity
-    separation_distance = sqrt(separation_distance_squared)
-    r_max = multipole_branch.source_radius # should I use source or target radius?
-    r_min = separation_distance - r_max
-    ρ_max = r_max
-    ρ_min = r_min
-
-    return r_min, r_max, ρ_min, ρ_max
-end
-
-function dipole_from_multipole(expansion)
-    # dipole term
-    qx = -2 * expansion[2,1,3]
-    qy = -2 * expansion[1,1,3]
-    qz = expansion[1,1,2]
-    return qx, qy, qz
-end
-
-function vortex_from_multipole(expansion)
-    ωx = -2 * expansion[2,2,3]
-    ωy = -2 * expansion[1,2,3]
-    ωz = expansion[1,2,2]
-    return ωx, ωy, ωz
-end
-
-function get_A_local(multipole_branch, r_vec, expansion_order)
-    # extract expansion
-    expansion = multipole_branch.multipole_expansion
-
-    # monopole term
-    q_monopole = expansion[1,1,1]
-
-    # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(expansion)
-
-    # scaling factor
-    rx, ry, rz = r_vec
-    r2 = rx*rx + ry*ry + rz*rz
-    Q = max(abs(q_monopole), (expansion_order+1) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
-
-    Q = q_monopole
-    return Q
-end
+# function dipole_from_multipole(expansion)
+#     # dipole term
+#     qx = -2 * expansion[2,1,3]
+#     qy = -2 * expansion[1,1,3]
+#     qz = expansion[1,1,2]
+#     return qx, qy, qz
+# end
+#
+# function vortex_from_multipole(expansion)
+#     ωx = -2 * expansion[2,2,3]
+#     ωy = -2 * expansion[1,2,3]
+#     ωz = expansion[1,2,2]
+#     return ωx, ωy, ωz
+# end
+#
+# function get_A_local(multipole_branch, r_vec, expansion_order)
+#     # extract expansion
+#     expansion = multipole_branch.multipole_expansion
+#
+#     # monopole term
+#     q_monopole = expansion[1,1,1]
+#
+#     # dipole term
+#     q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(expansion)
+#
+#     # scaling factor
+#     rx, ry, rz = r_vec
+#     r2 = rx*rx + ry*ry + rz*rz
+#     Q = max(abs(q_monopole), (expansion_order+1) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) / r2)
+#
+#     Q = q_monopole
+#     return Q
+# end
 
 #--- actual error prediction functions ---#
 
-function multipole_error(local_branch, multipole_branch, P, error_method::Union{EqualSpheres, UnequalSpheres, UnequalBoxes})
+function multipole_error(local_branch, multipole_branch, P, error_method::Union{UnequalSpheres, UnequalBoxes}, ::Val{LH}) where LH
+
+    @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
+
     # get distances
     Δx, Δy, Δz = local_branch.target_center - multipole_branch.source_center
     separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
@@ -122,216 +115,74 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Union{
     return abs(ε) * ONE_OVER_4π
 end
 
-function multipole_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes})
+function multipole_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes}, ::Val{LH}) where LH
+    @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
     return 3 / (2*P+8) * multipole_error(local_branch, multipole_branch, P, UnequalSpheres())
     #return 3 / (2*P+8) * sqrt(2/(2*P+3)) * multipole_error(local_branch, multipole_branch, P, UnequalSpheres())
 end
 
-function multipole_error(local_branch, multipole_branch, P, error_method::UniformCubesVelocity)
-    # extract fields
-    source_box = multipole_branch.source_box
-    target_box = local_branch.target_box
-    source_center = multipole_branch.source_center
-    target_center = local_branch.target_center
+"""
+    Multipole coefficients up to expansion order `P+1` must be added to `multipole_branch` before calling this function.
+"""
+function multipole_error(local_branch, multipole_branch, P, error_method::RotatedCoefficients, lamb_helmholtz::Val)
 
-    # choose the closest point in the local branch
-    r_vec = minimum_distance(source_center, target_center, target_box)
+    # vector from multipole center to local center
+    t⃗ = local_branch.target_center - multipole_branch.source_center
 
-    # length scale
-    iszero(source_box) && (return zero(r_vec[1]))
-    s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
+    # multipole max error location
+    Δx, Δy, Δz = minimum_distance(multipole_branch.source_center, local_branch.target_center, local_branch.target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
 
-    # monopole term
-    q_monopole = multipole_branch.multipole_expansion[1,1,1]
-
-    # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
-    q_dipole_2 = q_dipole_x * q_dipole_x + q_dipole_y * q_dipole_y + q_dipole_z * q_dipole_z
-
-    # determine whether monopole/dipole dominates
-    rx, ry, rz = r_vec
-    r2 = rx*rx + ry*ry + rz*rz
-    r_inv_2 = 1/r2
-    r_inv = sqrt(r_inv_2)
-    q_dot_r̂ = (q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) * r_inv
-    Q = max(abs(q_monopole), r_inv * sqrt(q_dot_r̂ * q_dot_r̂ * (P+3) * (P+3) + r_inv_2 * (q_dipole_2 - q_dot_r̂ * q_dot_r̂)))
-
-    # get polar/azimuth angles for accessing error database
-    _, θr, ϕr = cartesian_to_spherical(r_vec)
-    iθ = get_iθ(θr)
-    iϕ = get_iϕ(ϕr)
-
-    # get s^(P+4)/r^(P+1)
-    s_rinv = s * r_inv
-    scalar = r_inv * r_inv
-    for n in 1:P
-        scalar *= s_rinv
-    end
-
-    # n_max = P+1
-
-    # compute error
-    # ε = 0.0
-    # for n in P+1:n_max
-        # ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
-        # scalar *= s_rinv
-    # end
-    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q * (P+2)
-
-    return abs(ε) * ONE_OVER_4π
+    # calculate error
+    return multipole_error(t⃗, r_mp, multipole_branch.multipole_expansion, P, error_method)
 end
 
-function multipole_error(local_branch, multipole_branch, P, error_method::UniformCubes)
-    # extract fields
-    source_box = multipole_branch.source_box
-    target_box = local_branch.target_box
-    source_center = multipole_branch.source_center
-    target_center = local_branch.target_center
+function multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_helmholtz)
+    # ensure enough multipole coefficients exist
+    Nmax = (-3 + Int(sqrt(9 - 4*(2-2*size(multipole_expansion,3))))) >> 1
+    @assert P < Nmax "Error method `RotatedCoefficients` can only predict error up to one lower expansion order than multipole coefficients have been computed; expansion order P=$P was requested, but branches only contain coefficients up to $Nmax"
 
-    # choose the closest point in the local branch
-    r_vec = minimum_distance(source_center, target_center, target_box)
+    # container for rotated multipole coefficients
+    nmax = P + 1
+    weights_tmp_1 = Array{eltype(multipole_expansion)}(undef, 2, 2, (nmax*(nmax+1))>>1 + nmax + 1)
+    weights_tmp_2 = Array{eltype(multipole_expansion)}(undef, 2, 2, (nmax*(nmax+1))>>1 + nmax + 1)
+    eimϕs = zeros(eltype(multipole_expansion), 2, nmax+1)
+    Ts = zeros(eltype(multipole_expansion), length_Ts(nmax))
 
-    # length scale
-    iszero(source_box) && (return zero(r_vec[1]))
-    s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
+    # rotate coefficients
+    _, θ, ϕ = cartesian_to_spherical(t⃗)
 
-    # monopole term
-    q_monopole = multipole_branch.multipole_expansion[1,1,1]
+    # rotate about z axis
+    rotate_z!(weights_tmp_1, multipole_expansion, eimϕs, ϕ, nmax, lamb_helmholtz)
 
-    # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
+    # rotate about y axis
+    # NOTE: the method used here results in an additional rotatation of π about the new z axis
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, nmax, lamb_helmholtz)
 
-    # determine whether monopole/dipole dominates
-    rx, ry, rz = r_vec
-    r2 = rx*rx + ry*ry + rz*rz
-    r_inv = 1/sqrt(r2)
-    Q = max(abs(q_monopole), (P+2) * abs(q_dipole_x*r_vec[1] + q_dipole_y*r_vec[2] + q_dipole_z*r_vec[3]) * r_inv * r_inv)
-    # if Q == abs(q_monopole)
-    #     println("monopole")
-    # end
-
-    # get polar/azimuth angles for accessing error database
-    _, θr, ϕr = cartesian_to_spherical(r_vec)
-    iθ = get_iθ(θr)
-    iϕ = get_iϕ(ϕr)
-
-    # get s^(P+4)/r^(P+1)
-    s_rinv = s * r_inv
-    # s2 = s*s
-    scalar = s_rinv / s
-    for n in 1:P
-        scalar *= s_rinv
+    # multipole error
+    in0 = (P*(P+1))>>1 + 1
+    ϕn0 = weights_tmp_2[1,1,in0]
+    ϕn1_real = weights_tmp_2[1,1,in0+1]
+    ϕn1_imag = weights_tmp_2[2,1,in0+1]
+    if LH
+        χn1_real = weights_tmp_2[1,2,in0+1]
+        χn1_imag = weights_tmp_2[2,2,in0+1]
     end
 
-    # n_max = P+1
-
-    # compute error
-    # ε = 0.0
-    # for n in P+1:n_max
-        # ε += FastMultipole.MULTIPOLE_INTEGRALS[n,iθ,iϕ] * scalar
-        # scalar *= s_rinv
-    # end
-    ε = FastMultipole.MULTIPOLE_INTEGRALS[P+1,iθ,iϕ] * scalar * Q
-
-    return abs(ε) * ONE_OVER_4π
-end
-
-function rotate(r̂)
-    ẑ = r̂
-    x̂ = SVector{3}(1.0,0,0) - dot(SVector{3}(1.0,0,0), r̂) * r̂
-    if iszero(x̂)
-        x̂ = SVector{3}(0.0,1.0,0.0) - dot(SVector{3}(0.0,1,0), r̂) * r̂
-    end
-    x̂ /= norm(x̂)
-    ŷ = cross(ẑ, x̂)
-    R = vcat(x̂', ŷ', ẑ')
-    R = SMatrix{3,3,eltype(r̂)}(x̂[1], ŷ[1], ẑ[1], x̂[2], ŷ[2], ẑ[2], x̂[3], ŷ[3], ẑ[3])
-    return R
-end
-
-function multipole_error(local_branch::Branch, multipole_branch::Branch, P, error_method::LambHelmholtzΧVelocity)
-    # extract fields
-    target_box = local_branch.target_box
-    source_center = multipole_branch.source_center
-    target_center = local_branch.target_center
-
-    # choose the closest point in the local branch
-    r⃗ = minimum_distance(source_center, target_center, target_box)
-
-    return multipole_error(r⃗, multipole_branch, P, error_method)
-end
-
-function multipole_error(r⃗::AbstractVector, multipole_branch::Branch, P, error_method::LambHelmholtzΧVelocity)
-
-    # extract fields
-    source_box = multipole_branch.source_box
-    multipole_expansion = multipole_branch.multipole_expansion
-
-    # target vector
-    r = norm(r⃗)
-    rinv = 1/r
-    r̂ = r⃗ * rinv
-
-    # get polar/azimuth angles for accessing error database
-    _, θr, ϕr = cartesian_to_spherical(r̂)
-    iθ = get_iθ_χ(θr)
-    iϕ = get_iϕ_χ(ϕr)
-
-    # rotate coordinate system
-    R = rotate(r̂)
-    r⃗ = R * r⃗
-
-    # length scale
-    iszero(source_box) && (return zero(r⃗[1]))
-    s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
-
-    # calculate vector strength of multipole branch
-    ωx, ωy, ωz = vortex_from_multipole(multipole_expansion)
-    ωx, ωy, ωz = R * SVector{3,eltype(source_box)}(ωx, ωy, ωz)
-
-    # estimate induced velocity by approximating a point vortex
-    # at the expansion center
-    vx = ωy * r⃗[3] - ωz * r⃗[2]
-    vy = ωz * r⃗[1] - ωx * r⃗[3]
-    vinv = 1/sqrt(vx*vx + vy*vy)
-    v̂x = vx*vinv
-    v̂y = vy*vinv
-
-    # initialize values
-    εχ_real = zero(eltype(source_box))
-    εχ_imag = zero(eltype(source_box))
-    s_over_r = s * rinv
-    snm1_over_rnp1 = rinv * rinv # P=0 -> n=1
-
-    for n in 2:P+1
-        snm1_over_rnp1 *= s_over_r
+    # calculate multipole error
+    np1!_over_r_mp_np2 = Float64(factorial(big(nmax+1))) / r_mp^(nmax+2)
+    ε_mp = (sqrt(ϕn1_real * ϕn1_real + ϕn1_imag * ϕn1_imag) + abs(ϕn0)) * np1!_over_r_mp_np2
+    if LH
+        ε_mp += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * np1!_over_r_mp_np2 * r_mp
     end
 
-    # predict error
-    for n in P+1:P+2
-        Iχx_real = MULTIPOLE_INTEGRALS_Χ[1,1,n,iθ,iϕ]
-        Iχx_imag = MULTIPOLE_INTEGRALS_Χ[2,1,n,iθ,iϕ]
-        Iχy_real = MULTIPOLE_INTEGRALS_Χ[1,2,n,iθ,iϕ]
-        Iχy_imag = MULTIPOLE_INTEGRALS_Χ[2,2,n,iθ,iϕ]
-
-        εχ_real += (Iχx_real * ωx + Iχy_real * ωy) * snm1_over_rnp1
-        εχ_imag += (Iχx_imag * ωx + Iχy_imag * ωy) * snm1_over_rnp1
-
-        # recurse
-        snm1_over_rnp1 *= s_over_r
-    end
-
-    # scale by estimated velocity direction
-    εχ_real_tmp = -εχ_real * v̂x + εχ_imag * v̂y
-    εχ_imag = -εχ_imag * v̂x + -εχ_real * v̂y
-
-    # norm of the complex result
-    εχ = sqrt(εχ_real_tmp * εχ_real_tmp + εχ_imag * εχ_imag) * ONE_OVER_4π
-
-    return εχ
+    return ε_mp * ONE_OVER_4π
 end
 
-function local_error(local_branch, multipole_branch, P, error_method::Union{EqualSpheres, UnequalSpheres, UnequalBoxes})
+function local_error(local_branch, multipole_branch, P, error_method::Union{UnequalSpheres, UnequalBoxes}, lamb_helmholtz)
+
+    @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
+
     # get distances
     Δx, Δy, Δz = local_branch.target_center - multipole_branch.source_center
     separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
@@ -351,7 +202,10 @@ function local_error(local_branch, multipole_branch, P, error_method::Union{Equa
     return abs(ε) * ONE_OVER_4π
 end
 
-function local_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes})
+function local_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes}, lamb_helmholtz)
+
+    @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
+
     # get distances
     Δx, Δy, Δz = local_branch.target_center - multipole_branch.source_center
     separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
@@ -427,116 +281,66 @@ function local_error(local_branch, multipole_branch, P, error_method::Union{Unif
     return abs(ε_local) * ONE_OVER_4π
 end
 
-function local_error(local_branch, multipole_branch, expansion_order, error_method::UniformCubes)
-    # extract fields
-    source_box = multipole_branch.source_box
-    target_box = local_branch.target_box
-    source_center = multipole_branch.source_center
-    target_center = local_branch.target_center
-    P = expansion_order
+"""
+    Multipole coefficients up to expansion order `P+1` must be added to `multipole_branch` before calling this function.
+"""
+function local_error(local_branch, multipole_branch, P, error_method::RotatedCoefficients, lamb_helmholtz::Val)
 
-    # choose the closest point in the local branch
-    r_vec = closest_corner(source_center, target_center, target_box)
-    rx, ry, rz = r_vec
-    r = sqrt(rx*rx + ry*ry + rz*rz)
-    r_inv = 1/r
+    # vector from multipole center to local center
+    t⃗ = local_branch.target_center - multipole_branch.source_center
 
-    # monopole term
-    q_monopole = multipole_branch.multipole_expansion[1,1,1]
-
-    # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
-
-    # determine whether monopole/dipole dominates
-    q_dot_r̂ = (q_dipole_x * rx + q_dipole_y * ry + q_dipole_z * rz) * r_inv
-    Q = max(abs(q_monopole), (P+1) * q_dot_r̂ * r_inv)
-
-    # get polar/azimuth angles for accessing error database
-    s = sum(target_box) * 0.666666666666666
-    Rx, Ry, Rz = source_center - target_center
-    R = sqrt(Rx*Rx + Ry*Ry + Rz*Rz)
-    Rinv = 1/R
-    ω = asin(s * 0.5 * Rinv)
-    iω = get_iω(ω)
-    cθ = (Rx*rx + Ry*ry + Rz*rz) * Rinv / r # cos(θ)
-    γ = acos(cθ)
-    iγ = get_iγ(γ)
-
-    # prepare recursive factors
-    r_over_R = r * Rinv
-    scalar = Rinv * r_over_R
-    for n in 1:P
-        scalar *= r_over_R
-    end
+    # local max error location
+    r_l = sum(target_branch.target_box) * 0.33333333333333333333 * sqrt(3)
 
     # calculate error
-    ε = 0.0
-    for n in P+1:P+2
-        ε += LOCAL_INTEGRALS[n,iω,iγ] * scalar
-        scalar *= r_over_R
-    end
-
-    # scale by charge and return
-    return abs(ε) * Q * ONE_OVER_4π
+    return local_error(t⃗, r_l, multipole_branch.multipole_expansion, P, error_method, lamb_helmholtz)
 end
 
-function local_error(local_branch, multipole_branch, expansion_order, error_method::UniformCubesVelocity)
-    # extract fields
-    source_box = multipole_branch.source_box
-    target_box = local_branch.target_box
-    source_center = multipole_branch.source_center
-    target_center = local_branch.target_center
-    P = expansion_order
+function local_error(t⃗, r_l, multipole_expansion, P, error_method, lamb_helmholtz::Val{LH}) where LH
+    # ensure enough multipole coefficients exist
+    Nmax = (-3 + Int(sqrt(9 - 4*(2-2*size(multipole_expansion,3))))) >> 1
+    @assert P < Nmax "Error method `RotatedCoefficients` can only predict error up to one lower expansion order than multipole coefficients have been computed; expansion order P=$P was requested, but branches only contain coefficients up to $Nmax"
 
-    # choose the closest point in the local branch
-    r_vec = closest_corner(source_center, target_center, target_box)
-    rx, ry, rz = r_vec
-    r = sqrt(rx*rx + ry*ry + rz*rz)
-    r_inv = 1/r
+    # container for rotated multipole coefficients
+    nmax = P + 1
+    weights_tmp_1 = Array{eltype(multipole_expansion)}(undef, 2, 2, (nmax*(nmax+1))>>1 + nmax + 1)
+    weights_tmp_2 = Array{eltype(multipole_expansion)}(undef, 2, 2, (nmax*(nmax+1))>>1 + nmax + 1)
+    eimϕs = zeros(eltype(multipole_expansion), 2, nmax+1)
+    Ts = zeros(eltype(multipole_expansion), length_Ts(nmax))
 
-    # monopole term
-    q_monopole = multipole_branch.multipole_expansion[1,1,1]
+    # rotate coefficients
+    r, θ, ϕ = cartesian_to_spherical(t⃗)
 
-    # dipole term
-    q_dipole_x, q_dipole_y, q_dipole_z = dipole_from_multipole(multipole_branch.multipole_expansion)
-    q_dipole_2 = q_dipole_x * q_dipole_x + q_dipole_y * q_dipole_y + q_dipole_z * q_dipole_z
+    # rotate about z axis
+    rotate_z!(weights_tmp_1, multipole_expansion, eimϕs, ϕ, nmax, lamb_helmholtz)
 
-    # determine whether monopole/dipole dominates
-    q_dot_r̂ = (q_dipole_x * rx + q_dipole_y * ry + q_dipole_z * rz) * r_inv
-    Q = max(abs(q_monopole), r_inv * sqrt((P*P-1) * q_dot_r̂ * q_dot_r̂ + q_dipole_2))
+    # rotate about y axis
+    # NOTE: the method used here results in an additional rotatation of π about the new z axis
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, nmax, lamb_helmholtz)
 
-    # get polar/azimuth angles for accessing error database
-    s = sum(target_box) * 0.666666666666666
-    Rx, Ry, Rz = source_center - target_center
-    R = sqrt(Rx*Rx + Ry*Ry + Rz*Rz)
-    Rinv = 1/R
-    ω = asin(s * 0.5 * Rinv)
-    iω = get_iω(ω)
-    cθ = (Rx*rx + Ry*ry + Rz*rz) * Rinv / r # cos(θ)
-    γ = acos(cθ)
-    iγ = get_iγ(γ)
+    # get local coefficients
+    # extract degree n, order 0-1 coefficients for error prediction
+    # this function also performs the lamb-helmholtz transformation
+    n!_t_np1 = factorial(nmax) / r^(n+1)
+    ϕn0_real, ϕn1_real, ϕn1_imag, χn1_real, χn1_imag = translate_multipole_to_local_z_m01_n(weights_tmp_2, r, 1.0/r, lamb_helmholtz, n!_t_np1, nmax)
 
-    # prepare recursive factors
-    r_over_R = r * Rinv
-    scalar = Rinv * r_over_R
-    for n in 1:P
-        scalar *= r_over_R
+    # other values
+    r_l_nm1_over_nm1! = r_l^(nmax - 1) / Float64(factorial(big(nmax-1)))
+
+    # calculate local error
+    ε_l = (abs(ϕn1_real) + abs(ϕn1_imag) + abs(ϕn0_real)) * r_l_nm1_over_nm1!
+    if LH
+        ε_l += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * r_l_nm1_over_nm1! * r_l
     end
 
-    # calculate error
-    ε = 0.0
-    for n in P+1:P+3
-        ε += LOCAL_INTEGRALS[n,iω,iγ] * scalar * n
-        scalar *= r_over_R
-    end
+    # calculate local error
 
-    # scale by charge and return
-    return abs(ε) * Q * ONE_OVER_4π * r_inv # * r # * r to account for lamb-helmholtz decomp
+    return ε_l * ONE_OVER_4π
 end
 
-function error(local_branch, multipole_branch, expansion_order, error_method)
-    ε_multipole = multipole_error(local_branch, multipole_branch, expansion_order, error_method)
-    ε_local = local_error(local_branch, multipole_branch, expansion_order, error_method)
-    return max(ε_multipole, ε_local)
+function error(local_branch, multipole_branch, expansion_order, error_method, lamb_helmholtz)
+    ε_multipole = multipole_error(local_branch, multipole_branch, expansion_order, error_method, lamb_helmholtz)
+    ε_local = local_error(local_branch, multipole_branch, expansion_order, error_method, lamb_helmholtz)
+    return ε_multipole + ε_local
 end
 

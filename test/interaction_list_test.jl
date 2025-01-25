@@ -6,9 +6,8 @@ bodies = rand(8,n_bodies)
 masses = Gravitational(bodies)
 tree = Tree(masses; leaf_size = 100)
 mac = 0.5
-expansion_order = 0
 
-m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, mac, true, true, true, UnequalSpheres(), expansion_order)
+m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, mac, true, true, true)
 
 source_sorted_direct_list = FastMultipole.sort_by_source(direct_list, tree.branches)
 for i in 2:length(source_sorted_direct_list)

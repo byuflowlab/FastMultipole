@@ -173,7 +173,7 @@ function multipole_to_local!(local_branch, multipole_branch, expansion_order, la
     Hs_π2 = [1.0]
     FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
     Ts = zeros(FastMultipole.length_Ts(expansion_order))
-    eimϕs = zeros(2, expansion_order+1)
+    eimϕs = zeros(2, expansion_order+2)
     weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
     weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -236,52 +236,111 @@ function multipole_local_error(local_branch::SingleBranch, local_system, multipo
         multipole_branch.multipole_expansion .= 0.0
         FastMultipole.body_to_multipole!(multipole_branch, multipole_system, multipole_branch.harmonics, Val(20))
         potential_direct = [evaluate_multipole(local_system[i,Position()], multipole_branch, 20, true)[1] for i in local_branch.bodies_index]
-        if FastMultipole.DEBUG[]
-            @show potential_direct
-        end
     end
 
     # multipole expansion
-    multipole_branch.multipole_expansion .= 0.0
-    FastMultipole.body_to_multipole!(multipole_branch, multipole_system, multipole_branch.harmonics, Val(expansion_order))
+    # multipole_branch.multipole_expansion .= 0.0
+    # FastMultipole.body_to_multipole!(multipole_branch, multipole_system, multipole_branch.harmonics, Val(expansion_order))
 
     # multipole error
     lamb_helmholtz = body_type == Point{Vortex}
     potential_mp = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order, lamb_helmholtz)[1] for i in local_branch.bodies_index]
-    if FastMultipole.DEBUG[]
-        @show potential_mp
-    end
     velocity_mp = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+
+    # check contributions of ϕ vs χ
+    ϕ = deepcopy(multipole_branch.multipole_expansion[:,1,:])
+    multipole_branch.multipole_expansion[:,1,:] .= 0.0
+    velocity_mp_χ = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+    multipole_branch.multipole_expansion[:,1,:] .= ϕ
+    χ = deepcopy(multipole_branch.multipole_expansion[:,2,:])
+    multipole_branch.multipole_expansion[:,2,:] .= 0.0
+    velocity_mp_ϕ = [evaluate_multipole(local_system[i,Position()], multipole_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+    multipole_branch.multipole_expansion[:,2,:] .= χ
+    mags_ϕ = [norm(this_v) for this_v in velocity_mp_ϕ]
+    mags_χ = [norm(this_v) for this_v in velocity_mp_χ]
+    mags_mp = [norm(this_v) for this_v in velocity_mp]
+
+    ϕ_contributions = mags_ϕ ./ mags_mp
+    χ_contributions = mags_χ ./ mags_mp
+
+    ϕmean = mean(ϕ_contributions)
+    ϕstd = std(ϕ_contributions)
+    χmean = mean(χ_contributions)
+    χstd = std(χ_contributions)
+
+    # @show ϕmean, ϕstd, χmean, χstd
+
     error_mp = absolute_error(potential_direct, potential_mp)
     error_mp_velocity = absolute_error(velocity_direct, velocity_mp)
 
     # local expansion
-    if body_type == Point{Source}
+    if body_type == Point{Source} || body_type == Point{Vortex}
         local_branch.local_expansion .= 0.0
         x_l = local_branch.target_center
         for i in multipole_branch.bodies_index
             Δx = multipole_system[i,Position()] - x_l
-            body_to_local_point!(body_type, local_branch.local_expansion, local_branch.harmonics, Δx, multipole_system[i, Strength()], Val(expansion_order))
+            body_to_local_point!(body_type, local_branch.local_expansion, local_branch.harmonics, Δx, multipole_system[i, Strength()], Val(20))
         end
 
         # local error
-        lamb_helmholtz = false
+        lamb_helmholtz = body_type == Point{Vortex} ? true : false
         potential_l = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[1] for i in local_branch.bodies_index]
         velocity_l = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
         error_l = absolute_error(potential_direct, potential_l)
         error_l_velocity = absolute_error(velocity_direct, velocity_l)
+
+        #=
+        # check relative contribution
+        ϕ = deepcopy(local_branch.local_expansion[:,1,:])
+        χ = deepcopy(local_branch.local_expansion[:,2,:])
+        local_branch.local_expansion[:,1,:] .= 0.0
+        velocity_l_χ = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+        local_branch.local_expansion[:,1,:] .= ϕ
+        local_branch.local_expansion[:,2,:] .= 0.0
+        velocity_l_ϕ = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+        local_branch.local_expansion[:,2,:] .= χ
+
+        mags_ϕ = [norm(this_v) for this_v in velocity_l_ϕ]
+        mags_χ = [norm(this_v) for this_v in velocity_l_χ]
+        mags_l = [norm(this_v) for this_v in velocity_l]
+
+        i = findfirst((x)->x==maximum(abs.(error_l_velocity)), abs.(error_l_velocity))
+        # println("\nChecking relative local contribution:")
+        # @show norm(mags_ϕ[i] / mags_χ[i])
+        =#
     end
 
     # overall error
+    ϕχ20 = deepcopy(local_branch.local_expansion)
     local_branch.local_expansion .= 0.0
     multipole_to_local!(local_branch, multipole_branch, expansion_order, Val(lamb_helmholtz))
     potential_o = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[1] for i in local_branch.bodies_index]
     velocity_o = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+    χ = deepcopy(local_branch.local_expansion[:,2,:])
+    local_branch.local_expansion[:,2,:] .= 0.0
+    velocity_o_ϕ = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+    local_branch.local_expansion[:,2,:] .= χ
+    ϕ = deepcopy(local_branch.local_expansion[:,1,:])
+    local_branch.local_expansion[:,1,:] .= 0.0
+    velocity_o_χ = [evaluate_local(local_system[i,Position()], local_branch, expansion_order, lamb_helmholtz)[2] for i in local_branch.bodies_index]
+    local_branch.local_expansion[:,1,:] .= ϕ
+
+    # println("\nChecking local contributors")
+    mags_ϕ = [norm(this_v) for this_v in velocity_o_ϕ]
+    mags_χ = [norm(this_v) for this_v in velocity_o_χ]
+    mags_o = [norm(this_v) for this_v in velocity_o]
+    ratio_ϕ = mags_ϕ ./ mags_o
+    # @show mean(abs.(ratio_ϕ))
+    # @show std(abs.(ratio_ϕ))
+    ratio_χ = mags_χ ./ mags_o
+    # @show mean(abs.(ratio_χ))
+    # @show std(abs.(ratio_χ))
+
     error_o = absolute_error(potential_direct, potential_o)
     error_o_velocity = absolute_error(velocity_direct, velocity_o)
 
 
-    if body_type !== Point{Source}
+    if body_type !== Point{Source} && body_type !== Point{Vortex}
         error_l = abs.(error_o) .- abs.(error_mp)
         dV_mp = [velocity_direct[i] - velocity_mp[i] for i in eachindex(velocity_mp)]
         dV_o = [velocity_direct[i] - velocity_o[i] for i in eachindex(velocity_o)]
@@ -290,10 +349,13 @@ function multipole_local_error(local_branch::SingleBranch, local_system, multipo
         # error_l_velocity = abs.(error_o_velocity) .- abs.(error_mp_velocity)
     end
 
+    local_branch.local_expansion .= ϕχ20
+
     return error_mp, error_l, error_o, error_mp_velocity, error_l_velocity, error_o_velocity
 end
 
 function mymax(vect)
+    #=
     mp, mn = 0.0, 0.0
     for v in vect
         mp = max(v,mp)
@@ -304,9 +366,344 @@ function mymax(vect)
     else
         return mn
     end
+    =#
+    return maximum(abs.(vect))
 end
 
-function test_error(local_branch, local_system, multipole_branch, multipole_system, expansion_order::Int)
+"""
+Note that \$\\Delta C\$ should be provided in the evaluation vector r⃗ rotated frame, and the source box is approximated as a sphere.
+"""
+function ϕχ_integrals(ΔC, R, nmax, s=1.0; method=1)
+
+    # lengths
+    target_radius = s * 0.5
+    dx = s / 100
+
+    # rotation details
+    # sθ, cθ = sincos(ẑθ)
+    # sϕ, cϕ = sincos(ẑϕ)
+    # Ĉz = SVector{3}(sθ*cϕ, sθ*sϕ, cθ)
+    # sθ, cθ = sincos(ẑθ+π*0.5)
+    # Ĉx = SVector{3}(sθ*cϕ, sθ*sϕ, cθ)
+    # Ĉy = cross(Ĉz, Ĉx)
+
+    # Ĉx = SVector{3,eltype(ΔC)}(R[1,1],R[2,1],R[3,1])
+    # Ĉy = SVector{3,eltype(ΔC)}(R[1,2],R[2,2],R[3,2])
+    # Ĉz = SVector{3,eltype(ΔC)}(R[1,3],R[2,3],R[3,3])
+
+    # if FastMultipole.DEBUG[]
+    #     @show Ĉx Ĉy Ĉz
+    # end
+
+    Ĉz = ΔC / norm(ΔC)
+    Ĉx = SVector{3}(1.0,0,0) - Ĉz * Ĉz[1]
+    Ĉx /= norm(Ĉx)
+    Ĉy = cross(Ĉz, Ĉx)
+
+    @assert isapprox(dot(Ĉx,Ĉy), 0.0; atol=1e-12)
+    @assert isapprox(dot(Ĉy,Ĉz), 0.0; atol=1e-12)
+    @assert isapprox(dot(Ĉx,Ĉz), 0.0; atol=1e-12)
+
+    # integration bounds
+    x⃗ = -target_radius * Ĉx + dx * 0.5 * Ĉx
+    δx⃗ = Ĉx * dx
+    y⃗0 = -target_radius * Ĉy + dx * 0.5 * Ĉy
+    δy⃗ = Ĉy * dx
+    z⃗0 = -target_radius * Ĉz + dx * 0.5 * Ĉz
+    δz⃗ = Ĉz * dx
+
+    # preallocate integrals
+    res = zeros(Complex{Float64},7,nmax)
+    Φₙ = 0.0 + 0im
+    Φₙ0 = 0.0 + 0im
+    Φₙ1 = 0.0 + 0im
+    Φₙ2 = 0.0 + 0im
+    Χₙ0 = 0.0 + 0im
+    Χₙ1 = 0.0 + 0im
+    Χₙ2 = 0.0 + 0im
+
+    # perform integration
+    for ix in 1:100
+        y⃗ = y⃗0
+        for iy in 1:100
+            z⃗ = z⃗0
+            for iz in 1:100
+                ρ⃗ = ΔC + x⃗ + y⃗ + z⃗
+                if norm(ρ⃗ - ΔC) <= target_radius # || true
+                    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                    ρnp1 = ρ * ρ
+                    ρnp2 = ρ * ρnp1
+                    eimϕ = exp(-im*ϕ)
+                    my_eimϕ = abs(real(eimϕ)) + im * abs(imag(eimϕ))
+                    e2imϕ = eimϕ * eimϕ
+                    my_e2imϕ = abs(real(e2imϕ)) + im * abs(imag(e2imϕ))
+                    sθ, cθ = sincos(θ)
+
+                    # legendre polynomials, n=1
+                    P_nm1_0 = 1.0
+                    P_n_0 = cθ
+
+                    P_nm1_1 = 0.0
+                    P_n_1 = -sθ
+
+                    P_nm1_2 = 0.0
+                    P_n_2 = 0.0
+                    P_np1_2 = 3 * sθ * sθ
+
+                    # update integrals
+                    for n in 1:nmax
+
+                        # next legendre polynomials
+                        P_np1_0 = ( (2*n+1) * cθ * P_n_0 - n * P_nm1_0 ) / (n+1)
+                        P_np1_1 = ( (2*n+1) * cθ * P_n_1 - (n+1) * P_nm1_1 ) / n
+                        P_np2_2 = ( (2*n+3) * cθ * P_np1_2 - (n+3) * P_n_2 ) / n
+
+                        #=
+                        @assert isapprox(Plm(cθ,n,1), P_n_1; atol=1e-12)
+                        @assert isapprox(Plm(cθ,n,0), P_n_0; atol=1e-12)
+                        if n > 1
+                            @assert isapprox(Plm(cθ,n,2), P_n_2; atol=1e-12)
+                        end
+                        @assert isapprox(Plm(cθ,n+1,0), P_np1_0; atol=1e-12)
+                        @assert isapprox(Plm(cθ,n+1,1), P_np1_1; atol=1e-12)
+                        @assert isapprox(Plm(cθ,n+1,2), P_np1_2; atol=1e-12)
+                        =#
+
+                        # update integrals
+                        if method == 1
+                            res[1,n] += im / ρnp1 * P_n_1 * eimϕ
+                            res[2,n] += (n+1) * 0.5 / ρnp1 * P_n_0
+                            res[3,n] += 1.0 / (n*ρnp1) * P_n_1 * eimϕ
+                            res[4,n] += 1.0 / (2*n*ρnp1) * P_n_2 * e2imϕ
+                            res[5,n] += n * 0.5 / ρnp2 * P_np1_0
+                            res[6,n] += n / ((n+1)*ρnp2) * P_np1_1 * eimϕ
+                            res[7,n] += 0.5 / ((n+1)*ρnp2) * P_np1_2 * e2imϕ
+
+                        elseif method == 2
+                            res[1,n] += im / ρnp1 * abs(P_n_1) * (real(my_eimϕ) - im*imag(my_eimϕ))
+                            res[2,n] += (n+1) * 0.5 / ρnp1 * abs(P_n_0)
+                            res[3,n] += 1.0 / (n*ρnp1) * abs(P_n_1) * my_eimϕ
+                            res[4,n] += 1.0 / (2*n*ρnp1) * abs(P_n_2) * my_e2imϕ
+                            res[5,n] += n * 0.5 / ρnp2 * abs(P_np1_0)
+                            res[6,n] += n / ((n+1)*ρnp2) * abs(P_np1_1) * my_eimϕ
+                            res[7,n] += 0.5 / ((n+1)*ρnp2) * abs(P_np1_2) * my_e2imϕ
+                        end
+
+                        # recurse
+                        ρnp1 *= ρ
+                        ρnp2 *= ρ
+
+                        # Pn0
+                        P_nm1_0 = P_n_0
+                        P_n_0 = P_np1_0
+
+                        # Pn1
+                        P_nm1_1 = P_n_1
+                        P_n_1 = P_np1_1
+
+                        # Pn2
+                        P_nm1_2 = P_n_2
+                        P_n_2 = P_np1_2
+                        P_np1_2 = P_np2_2
+
+                    end
+                end
+                z⃗ += δz⃗
+            end
+            y⃗ += δy⃗
+        end
+        x⃗ += δx⃗
+    end
+
+    # volume
+    V = 4/3*pi*target_radius*target_radius*target_radius
+
+    res .*= dx * dx * dx / V
+    #res[6,:] .*= im
+
+    #=
+    # ϕ error
+    Φₙ  *= dx * dx * dx / V
+    Φₙ0 *= dx * dx * dx / V
+    Φₙ1 *= dx * dx * dx / V
+    Φₙ2 *= dx * dx * dx / V
+
+    # χ error
+    Χₙ0 *= dx * dx * dx / V
+    Χₙ1 *= dx * dx * dx / V * im
+    Χₙ2 *= dx * dx * dx / V
+    =#
+
+    #return Φₙ, Φₙ0, Φₙ1, Φₙ2, Χₙ0, Χₙ1, Χₙ2
+    return res
+end
+
+function get_ϕχ_error(ΔC, target_radius, ω⃗, n, v̂, r, R; method=2)
+
+    ωx, ωy, ωz = ω⃗
+    vx, vy, vz = v̂
+
+    Φₙ, Φₙ0, Φₙ1, Φₙ2, Χₙ0, Χₙ1, Χₙ2 = ϕχ_integrals(ΔC, R, n, target_radius * 2; method)[:,end]
+
+    if FastMultipole.DEBUG[]
+        Φₙs, Φₙ0s, Φₙ1s, Φₙ2s, Χₙ0s, Χₙ1s, Χₙ2s = ϕχ_integrals(ΔC, R, n, 1.0; method)[:,end]
+        Φₙz, Φₙ0z, Φₙ1z, Φₙ2z, Χₙ0z, Χₙ1z, Χₙ2z = ϕχ_integrals(ΔC, R, n, 3.0; method)[:,end]
+        s = target_radius * 2
+        @show Φₙs, Φₙz
+        @show Φₙ0s, Φₙ0z
+        @show Φₙ1s, Φₙ1z
+        @show Φₙ2s, Φₙ2z
+        @show Χₙ0s, Χₙ0z
+        @show Χₙ1s, Χₙ1z
+        @show Χₙ2s, Χₙ2z
+    end
+
+    #=
+    @assert isapprox(Inϕ, Φₙ; atol=1e-6) "Inϕ = $Inϕ, Φₙ=$Φₙ"
+    @assert isapprox(Inϕ0, Φₙ0; atol=1e-6)
+    @assert isapprox(Inϕ1, Φₙ1; atol=1e-6)
+    @assert isapprox(Inϕ2, Φₙ2; atol=1e-6)
+    @assert isapprox(Inχ0, Χₙ0; atol=1e-6)
+    @assert isapprox(Inχ1, Χₙ1; atol=1e-6) "Inχ1 = $Inχ1, Χₙ1 = $Χₙ1"
+    @assert isapprox(Inχ2, Χₙ2; atol=1e-6)
+    =#
+
+    val = vy * (ωx * (real(Φₙ2) + real(Φₙ0)) + ωy * (imag(Φₙ0) - imag(Φₙ2)) + ωz * real(Φₙ1))
+    val += vx * (ωx * (imag(Φₙ2) + imag(Φₙ0)) + ωy * (real(Φₙ2) - real(Φₙ0)) + ωz * imag(Φₙ1))
+    val += vz * (ωx * real(Φₙ) - ωy * imag(Φₙ))
+    val *= r^(n-1)
+
+    valϕ = val
+    val += (vx + im*vy) * ( (ωy+im*ωx)*Χₙ0 - (ωy-im*ωx)*Χₙ2 + ωz*Χₙ1 ) * r^n
+    valχ = val - valϕ
+
+    if method == 1
+        ωx = abs(ωx)
+        ωy = abs(ωy)
+        ωz = abs(ωz)
+        vx = abs(vx)
+        vy = abs(vy)
+        Φₙ = abs(Φₙ)
+        Φₙ0 = abs(Φₙ0)
+        Φₙ1 = abs(Φₙ1)
+        Φₙ2 = abs(Φₙ2)
+        Χₙ0 = abs(Χₙ0)
+        Χₙ1 = abs(Χₙ1)
+        Χₙ2 = abs(Χₙ2)
+        val = vy * (ωx * (Φₙ2 + Φₙ0) + ωy * (Φₙ0 + Φₙ2) + ωz * Φₙ1)
+        val += vx * (ωx * (Φₙ2 + Φₙ0) + ωy * (Φₙ2 + Φₙ0) + ωz * Φₙ1)
+        val += vz * (ωx * Φₙ + ωy * Φₙ)
+        val *= r^(n-1)
+
+        valϕ = val
+        val += (vx + vy) * ( (ωy+ωx)*Χₙ0 + (ωy+ωx)*Χₙ2 + ωz*Χₙ1 ) * r^n
+        valχ = val - valϕ
+
+    elseif method == 2
+        ωx = abs(ωx)
+        ωy = abs(ωy)
+        ωz = abs(ωz)
+
+        # due to ϕ
+        val = (ωy * (real(Φₙ2) + real(Φₙ0)) + ωx * (imag(Φₙ2) + imag(Φₙ0)) + ωz * imag(Φₙ1) )# v̂x
+        val += (ωx * (real(Φₙ2) + real(Φₙ0)) + ωy * (imag(Φₙ2) + imag(Φₙ0)) + ωz * real(Φₙ1) )# v̂y
+        val += (ωx * real(Φₙ) + ωy * imag(Φₙ) )# v̂z
+        val *= r^(n-1)
+
+        # due to χ
+        # += here before vvv
+        valχ = (ωy * (Χₙ0 + Χₙ2) + im * ωx * real(Χₙ0 + Χₙ2) + ωx * imag(Χₙ0 + Χₙ2) + ωz * Χₙ1 )# v̂x
+        valχ += (ωx * (Χₙ0 + Χₙ2) + im * ωy * real(Χₙ0 + Χₙ2) + ωy * imag(Χₙ0 + Χₙ2) + im * ωz * real(Χₙ1) + ωz * imag(Χₙ1) )# v̂y
+
+        Χx = abs(Χₙ0+Χₙ2)
+        Χy = Χx
+        Χz = abs(Χₙ1)
+        valχ = abs(ωx) * Χx + abs(ωy) * Χy + abs(ωz) * Χz
+
+        if FastMultipole.DEBUG[]
+            println("Working (slow) method (rotated frame):")
+            @show Χx Χy Χz
+        end
+
+
+        valχ *= r^n
+
+        # combined
+        val += valχ
+
+    end
+
+    return val
+end
+
+function local_error_ϕχ(local_branch, multipole_branch, expansion_order)
+    # extract fields
+    source_center = multipole_branch.source_center
+    target_center = local_branch.target_center
+    source_box = multipole_branch.source_box
+    target_box = local_branch.target_box
+
+    # calculate vector strength of multipole branch
+    ωx, ωy, ωz = FastMultipole.vortex_from_multipole(multipole_branch.multipole_expansion)
+    ω⃗ = SVector{3}(ωx, ωy, ωz)
+
+    # rotate coordinate system
+    r⃗ = FastMultipole.closest_corner(source_center, target_center, target_box)
+
+    r = norm(r⃗)
+    r̂ = r⃗ / r
+    R = FastMultipole.rotate(r̂)
+    r⃗ = R * r⃗
+    #=
+    ẑ = SVector{3,eltype(r⃗)}(R[1,3],R[2,3],R[3,3])
+    _, ẑθ, ẑϕ = FastMultipole.cartesian_to_spherical(ẑ)
+    if ẑϕ < 0.0
+        ẑϕ += 2π
+    end
+
+    @assert 0.0 <= ẑθ <= π
+    @assert 0.0 <= ẑϕ <= 2*π "ϕ = $ẑϕ"
+
+    # ẑθ = mod(ẑθ, FastMultipole.π2)
+    # ẑϕ = mod(ẑϕ, FastMultipole.π2)
+
+    if FastMultipole.DEBUG[]
+        @show ẑθ ẑϕ
+        this_x = R * SVector{3}(1.0,0,0)
+        this_y = R * SVector{3}(0,1.0,0)
+        this_z = R * SVector{3}(0,0,1.0)
+        @show this_x this_y this_z
+    end
+    =#
+
+    # length scale
+    iszero(source_box) && (return zero(r))
+    s = (source_box[1] + source_box[2] + source_box[3]) * 0.6666666666666666
+
+    # rotate vortex strength into evaluation frame
+    ω⃗ = R * SVector{3,eltype(source_box)}(ωx, ωy, ωz)
+
+    # estimate induced velocity by approximating a point vortex
+    # at the expansion center
+    vx = ω⃗[2] * r⃗[3] - ω⃗[3] * r⃗[2]
+    vy = ω⃗[3] * r⃗[1] - ω⃗[1] * r⃗[3]
+    vz = ω⃗[1] * r⃗[2] - ω⃗[2] * r⃗[1]
+    vinv = 1/sqrt(vx*vx + vy*vy + vz*vz)
+    v̂x = vx*vinv
+    v̂y = vy*vinv
+    v̂z = vz*vinv
+    v̂ = SVector{3,typeof(v̂x)}(v̂x, v̂y, v̂z)
+
+    # ϕχ velocity
+    εϕχ = 0.0 + 0im
+    for n in expansion_order+1:expansion_order+1
+        εϕχ += get_ϕχ_error(R * (source_center-target_center), mean(source_box), ω⃗, n, v̂, r, R; method=2)
+    end
+
+    return norm(εϕχ/4/pi)
+end
+
+function test_error(local_branch, local_system, multipole_branch, multipole_system, expansion_order::Int, i_m2l)
     # experimental error
     if typeof(multipole_system) <: Gravitational
         body_type = Point{Source}
@@ -339,86 +736,21 @@ function test_error(local_branch, local_system, multipole_branch, multipole_syst
     ev_mp_uc = multipole_error(local_branch, multipole_branch, expansion_order, UniformCubesVelocity())
     ev_l_uc = local_error(local_branch, multipole_branch, expansion_order, UniformCubesVelocity())
 
-    # LambHelmholtz potential
+    # LambHelmholtz χ potential
     e_mp_lh = multipole_error(local_branch, multipole_branch, expansion_order, FastMultipole.LambHelmholtzΧVelocity())
+    e_l_lh = local_error(local_branch, multipole_branch, expansion_order, FastMultipole.LambHelmholtzΧVelocity())
+    # e_l_lh = local_error_ϕχ(local_branch, multipole_branch, expansion_order)
 
-    return mymax(e_mp), mymax(e_l), mymax(e_o), mymax(ev_mp), mymax(ev_l), mymax(ev_o), ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc, ev_mp_uc, ev_l_uc, e_mp_lh
-end
+    mp_ratio = maximum(abs.(ev_mp)) / e_mp_lh
+    l_ratio = maximum(abs.(ev_l)) / e_l_lh
 
-function test_rms_error(R, r_multipole, r_local, nx_source_bodies, nx_target_bodies, expansion_order)
-    source_bodies = zeros(7,nx_source_bodies^3)
-    i = 1
-    for x in range(-r_multipole, r_multipole, nx_source_bodies)
-        for y in range(-r_multipole, r_multipole, nx_source_bodies)
-            for z in range(-r_multipole, r_multipole, nx_source_bodies)
-                source_bodies[1:3,i] .= x, y, z
-                i += 1
-            end
-        end
-    end
-    source_bodies[5,:] .= 1.0
+    # if l_ratio > 10
+    #     println("\ni_m2l: $i_m2l")
+    #     @show maximum(abs.(ev_l)) / e_l_lh maximum(abs.(ev_mp)) / e_mp_lh
+    #     println()
+    # end
 
-    target_bodies = zeros(7,nx_target_bodies^3)
-    i = 1
-    for x in range(R[1]-r_local, R[1]+r_local, nx_target_bodies)
-        for y in range(R[2]-r_local, R[2]+r_local, nx_target_bodies)
-            for z in range(R[3]-r_local, R[3]+r_local, nx_target_bodies)
-                target_bodies[1:3,i] .= x, y, z
-                i += 1
-            end
-        end
-    end
-
-    bodies = hcat(source_bodies, target_bodies)
-    system = Gravitational(bodies)
-    root = Branch(1:size(bodies,2), 0, 2:3, 0, 1, R/2, 0.5*norm(R)+max(r_multipole,r_local), 0.5*norm(R)+max(r_multipole,r_local), SVector{6}(0.0,0,0,0,0,0), SVector{3}(0.0,0,0), expansion_order)
-    source_branch = Branch(1:nx_source_bodies^3, 0, 1:0, 0, 1, SVector{3}(0.0,0,0), r_multipole*sqrt(3.0), r_multipole*sqrt(3.0), SVector{6}(-1.0,1.0,-1.0,1.0,-1.0,1.0)*r_multipole, SVector{3}(1.0,1.0,1.0)*r_multipole, expansion_order)
-    target_branch = Branch(nx_source_bodies^3+1:nx_source_bodies^3+nx_target_bodies^3, 0, 1:0, 0, 1, R, r_local*sqrt(3.0), r_local*sqrt(3.0), SVector{6}(-1.0,1.0,-1.0,1.0,-1.0,1.0)*r_local, SVector{3}(1.0,1.0,1.0)*r_local, expansion_order)
-
-    # experimental error
-    e_mp, e_l, e_o = multipole_local_error(target_branch, system, source_branch, system, expansion_order)
-    FastMultipole.evaluate_local!(system, target_branch, Val(expansion_order), Val(false), DerivativesSwitch())
-
-    #--- visualize error with paraview ---#
-
-    system_copy = deepcopy(system)
-    system_copy.potential .= 0.0
-    for i_source in source_branch.bodies_index
-        x_source = system_copy.bodies[i_source].position
-        q = system_copy.bodies[i_source].strength
-        for i_target in target_branch.bodies_index
-            x_target = system_copy.bodies[i_target].position
-            system_copy.potential[1,i_target] += q/norm(x_source-x_target)/(4*pi)
-        end
-    end
-
-    # local error
-    local_potential = deepcopy(system.potential[1,:])
-    local_error = local_potential .- system_copy.potential[1,:]
-    system.potential[1,:] .-= system_copy.potential[1,:]
-    for i in 1:get_n_bodies(system)
-        if iszero(system.potential[1,i])
-            system.potential[1,i] = 1e-16
-        end
-    end
-    tree = Tree([root, source_branch, target_branch], [1:1, 2:3], [3], collect(1:size(bodies,2)), collect(1:size(bodies,2)), system_copy, Val(expansion_order), size(target_bodies,2))
-    FastMultipole.visualize_bodies("local_error_check", system, tree)
-
-
-    # multipole error
-    system.potential .= 0.0
-    evaluate_multipole!(system, 1+nx_source_bodies^3:get_n_bodies(system), source_branch.multipole_expansion, DerivativesSwitch(), Val(expansion_order), source_branch.source_center)
-    multipole_potential = deepcopy(system.potential[1,:])
-    multipole_error = multipole_potential .- system_copy.potential[1,:]
-    system.potential[1,:] .-= system_copy.potential[1,:]
-    for i in 1:get_n_bodies(system)
-        if iszero(system.potential[1,i])
-            system.potential[1,i] = 1e-16
-        end
-    end
-    FastMultipole.visualize_bodies("multipole_error_check", system, tree)
-
-    return system, system_copy, multipole_potential, local_potential, e_mp, e_l, e_o
+    return mymax(e_mp), mymax(e_l), mymax(e_o), mymax(ev_mp), mymax(ev_l), mymax(ev_o), ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc, ev_mp_uc, ev_l_uc, e_mp_lh, e_l_lh
 end
 
 function closest_corner(target_branch, source_branch)
@@ -514,15 +846,6 @@ function closest_point(target_branch, source_branch)
     end
 
     return xt
-end
-
-function f_gpt(r, s, n)
-    term1 = (-2 * (s * sqrt(2) / 2)^(n + 3)) / (n + 3) + (3 / 2) * s * (s * sqrt(2) / 2)^(n + 2) / (n + 2)
-    term2 = (-2 * (s / 2)^(n + 3)) / (n + 3) + (3 / 2) * s * (s / 2)^(n + 2) / (n + 2)
-    term3 = ((s * 3 * sqrt(6) - 4) / (2 * s * (sqrt(3) - sqrt(2)))) * (s * sqrt(3) / 2)^(n + 3) / (n + 3) - ((3 * sqrt(2) - 4) / (s * (sqrt(3) - sqrt(2)))) * (s * sqrt(3) / 2)^(n + 4) / (n + 4)
-    term4 = ((s * 3 * sqrt(6) - 4) / (2 * s * (sqrt(3) - sqrt(2)))) * (s * sqrt(2) / 2)^(n + 3) / (n + 3) - ((3 * sqrt(2) - 4) / (s * (sqrt(3) - sqrt(2)))) * (s * sqrt(2) / 2)^(n + 4) / (n + 4)
-
-    return (1 / r^(n + 1)) * (term1 - term2 + term3 - term4)
 end
 
 function multipole_preintegration(rvec, n_max, s, nx)
@@ -1208,10 +1531,7 @@ end
 function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold=0.5, leaf_size=30, shrink_recenter=true, r=true)
     tree = Tree(system; expansion_order=20, leaf_size, shrink_recenter)
     m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, true, true, true, UnequalSpheres(), expansion_order, Val(true))
-    leaf_sizes = Int64[]
-    for b in tree.branches
-        push!(leaf_sizes, length(b.bodies_index))
-    end
+
     errs_mp, errs_l, errs_o = Float64[], Float64[], Float64[]
     errs_mp_v, errs_l_v, errs_o_v = Float64[], Float64[], Float64[]
     ubs_mp_us, ubs_l_us = Float64[], Float64[]
@@ -1221,13 +1541,14 @@ function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold
     errs_mp_uc, errs_l_uc = Float64[], Float64[]
     errs_mp_uc_v, errs_l_uc_v = Float64[], Float64[]
     errs_mp_r, errs_l_r = Float64[], Float64[]
-    errs_lh = Float64[]
+    errs_mp_lh = Float64[]
+    errs_l_lh = Float64[]
     i_m2l = 1
-    print_every = Int(ceil(length(m2l_list) / 100))
+    print_every = Int(ceil(length(m2l_list) / 10))
     @show length(m2l_list)
     for (i_target, i_source, P) in m2l_list
-        # println("\n========== i_m2l = $i_m2l ==========\n")
-        if i_m2l == 5
+
+        if i_m2l == 28
             FastMultipole.DEBUG[] = true
         end
         if i_m2l % print_every == 0
@@ -1235,8 +1556,11 @@ function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold
         end
         local_branch = tree.branches[i_target]
         multipole_branch = tree.branches[i_source]
-        e_mp, e_l, e_o, e_mp_v, e_l_v, e_o_v, ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc, ev_mp_uc, ev_l_uc, e_lh = test_error(local_branch, system, multipole_branch, system, P)
-
+        if i_m2l == 9 || true
+            e_mp, e_l, e_o, e_mp_v, e_l_v, e_o_v, ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc, ev_mp_uc, ev_l_uc, e_mp_lh, e_l_lh = test_error(local_branch, system, multipole_branch, system, P, i_m2l)
+        else
+            e_mp, e_l, e_o, e_mp_v, e_l_v, e_o_v, ub_mp_us, ub_l_us, ub_mp_uus, ub_l_uus, ub_mp_ub, ub_l_ub, ub_mp_uub, ub_l_uub, e_mp_uc, e_l_uc, ev_mp_uc, ev_l_uc, e_mp_lh, e_l_lh = 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+        end
         # settings
         if r
             e_mp_r, e_l_r = rectangle_error(local_branch, system, multipole_branch, system, P; m_method="loop", l_method="loop")
@@ -1244,7 +1568,7 @@ function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold
             e_mp_r = e_l_r = 0.0
         end
 
-        if i_m2l == 5
+        if i_m2l == 28
             FastMultipole.DEBUG[] = false
         end
         i_m2l += 1
@@ -1268,10 +1592,18 @@ function test_error_from_m2l_list(system; expansion_order=5, multipole_threshold
         push!(errs_l_uc_v, ev_l_uc)
         push!(errs_mp_r, e_mp_r)
         push!(errs_l_r, e_l_r)
-        push!(errs_lh, e_lh)
+        push!(errs_mp_lh, e_mp_lh)
+        push!(errs_l_lh, e_l_lh)
     end
 
-    return errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_lh, errs_mp_r, errs_l_r
+    # source_xs = [system[i,FastMultipole.Position()] for i in 923:966]
+    # source_Γs = [system[i,FastMultipole.Strength()] for i in 923:966]
+    # target_x = system[336,FastMultipole.Position()]
+
+    # @show source_xs source_Γs target_x
+    # @show target_x
+
+    return errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_mp_lh, errs_l_lh, errs_mp_r, errs_l_r
 end
 
 
@@ -1338,6 +1670,8 @@ n_bodies = 2000
 Random.seed!(123)
 bodies = rand(7,n_bodies)
 bodies[4,:] .= 0.0
+bodies[5:7,:] .*= 2
+bodies[5:7,:] .-= 0.5
 # bodies[5,:] .-= 0.5 # coulombic interaction (positive and negative charges)
 # system = Gravitational(bodies)
 
@@ -1348,10 +1682,9 @@ system = generate_vortex(123, n_bodies)
 expansion_order = 4
 
     # multipole_threshold, leaf_size = 0.5, 100
-    multipole_threshold, leaf_size = 0.5, 260
+    multipole_threshold, leaf_size = 0.5, 26
 
-    errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_lh, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order, multipole_threshold, leaf_size, shrink_recenter=true, r=true) # leaf_size=260
-
+    errs_mp, errs_l, errs_o, errs_mp_v, errs_l_v, errs_o_v, ubs_mp_us, ubs_l_us, ubs_mp_uus, ubs_l_uus, ubs_mp_ub, ubs_l_ub, ubs_mp_uub, ubs_l_uub, errs_mp_uc, errs_l_uc, errs_mp_uc_v, errs_l_uc_v, errs_mp_lh, errs_l_lh, errs_mp_r, errs_l_r = test_error_from_m2l_list(system; expansion_order, multipole_threshold, leaf_size, shrink_recenter=true, r=false) # leaf_size=260
 
     #------- get data for paper -------#
 
@@ -1359,11 +1692,64 @@ expansion_order = 4
     v_mp_l = (abs.(errs_mp) .+ abs.(errs_l)) ./ errs_o
     output_stuff(v_mp_l; verbose=true)
 
+    # remove zeros
+    this_zero = 1e-16
+    threshold = 1e-12
+    for i in eachindex(errs_mp)
+        if abs(errs_mp_v[i]) < threshold
+            errs_mp_v[i] = this_zero
+        end
+        if abs(errs_l_v[i]) < threshold
+            errs_l_v[i] = this_zero
+        end
+        if abs(errs_o_v[i]) < threshold
+            errs_o_v[i] = this_zero
+        end
+        if abs(errs_mp[i]) < threshold
+            errs_mp[i] = this_zero
+        end
+        if abs(errs_l[i]) < threshold
+            errs_l[i] = this_zero
+        end
+        if abs(errs_o[i]) < threshold
+            errs_o[i] = this_zero
+        end
+        if abs(errs_mp_uc[i]) < threshold
+            errs_mp_uc[i] = errs_mp[i]
+        end
+        if abs(errs_mp_uc_v[i]) < threshold
+            errs_mp_uc_v[i] = errs_mp_v[i]
+        end
+        if abs(ubs_mp_ub[i]) < threshold
+            ubs_mp_ub[i] = errs_mp[i]
+        end
+        if abs(errs_mp_lh[i]) < threshold
+            errs_mp_lh[i] = errs_mp_v[i]
+        end
+        if abs(errs_l_uc[i]) < threshold
+            errs_l_uc[i] = errs_l[i]
+        end
+        if abs(errs_l_uc_v[i]) < threshold
+            errs_l_uc_v[i] = errs_l_v[i]
+        end
+        if abs(ubs_l_ub[i]) < threshold
+            ubs_l_ub[i] = errs_l[i]
+        end
+        if abs(errs_l_lh[i]) < threshold
+            errs_l_lh[i] = errs_l_v[i]
+        end
+    end
+
     # log scale comparison
     v_mp_uc = log10.(abs.(errs_mp ./ errs_mp_uc))#)
     v_mp_uc_v = log10.(abs.(errs_mp_v ./ errs_mp_uc_v))#)
     v_mp_ub = log10.(abs.(errs_mp ./ ubs_mp_ub))#)
-    v_mp_lh = log10.(abs.(errs_mp_v ./ errs_lh))#)
+    v_mp_lh = log10.(abs.(errs_mp_v ./ errs_mp_lh))#)
+    v_l_lh = log10.(abs.(errs_l_v ./ errs_l_lh))#)
+    v_o_lh = log10.(abs.(errs_o_v) ./ (abs.(errs_l_lh) .+ abs.(errs_mp_lh)))
+    # v_o_lh = log10.((abs.(errs_l_v) .+ abs.(errs_mp_v)) ./ (abs.(errs_l_lh) .+ abs.(errs_mp_lh)))
+
+    @show minimum(abs.(errs_l_v ./ errs_l_lh))
 
     v_l_uc = log10.(abs.(errs_l ./ errs_l_uc))#)
     v_l_uc_v = log10.(abs.(errs_l_v ./ errs_l_uc_v))#)
@@ -1384,6 +1770,8 @@ expansion_order = 4
     else
         # lamb-helmholtz error
         u_mp_lh = kde(v_mp_lh; npoints)
+        u_l_lh = kde(v_l_lh; npoints)
+        u_o_lh = kde(v_o_lh; npoints)
     end
 
     # make preliminary plots
@@ -1408,11 +1796,11 @@ expansion_order = 4
         savefig("figs/compare_multipole_error_n$(n_bodies)_p$(expansion_order)_lh.png")
     end
 
+    fig2 = figure("local error")
+    fig2.clear()
+    fig2.add_subplot(111, xlabel="relative prediction error", ylabel="density")
+    ax = fig2.get_axes()[0]
     if typeof(system) <: Gravitational
-        fig2 = figure("local error")
-        fig2.clear()
-        fig2.add_subplot(111, xlabel="relative prediction error", ylabel="density")
-        ax = fig2.get_axes()[0]
         ax.plot(u_l_uc.x, u_l_uc.density)
         ax.plot(u_l_uc_v.x, u_l_uc_v.density)
         ax.plot(u_l_ub.x, u_l_ub.density)
@@ -1420,6 +1808,25 @@ expansion_order = 4
         ax.set_xlim([-4.0,1.5])
         legend(["potential", "velocity magnitude", "setting "*L"P_n=1"])
         savefig("figs/compare_local_error_n$(n_bodies)_p$expansion_order.png")
+    else
+        ax.plot(u_l_lh.x, u_l_lh.density)
+        ax.set_xticks([-3.0,-2.0,-1.0,0.0,1.0], labels=["0.001",".01", "0.1", "1", "10"])
+        ax.set_xlim([-4.0,1.5])
+        legend(["χ velocity magnitude"])
+        savefig("figs/compare_local_error_n$(n_bodies)_p$(expansion_order)_lh.png")
+    end
+
+    fig3 = figure("total error")
+    fig3.clear()
+    fig3.add_subplot(111, xlabel="relative prediction error", ylabel="density")
+    ax = fig3.get_axes()[0]
+    if typeof(system) <: Gravitational
+        a = nothing
+    else
+        ax.plot(u_o_lh.x, u_o_lh.density)
+        ax.set_xticks([-3.0,-2.0,-1.0,0.0,1.0], labels=["0.001",".01", "0.1", "1", "10"])
+        ax.set_xlim([-4.0,1.5])
+        savefig("figs/compare_total_error_n$(n_bodies)_p$(expansion_order)_lh.png")
     end
 
     if typeof(system) <: Gravitational

@@ -1,18 +1,18 @@
 #--- create interaction lists ---#
 
-function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, check_dipole)
+function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # prepare containers
-    m2l_list = Vector{Tuple{Int32,Int32,Int64}}(undef,0)
+    m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
 
     # populate lists
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced), error_method, expansion_order, check_dipole)
+    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
 
     return m2l_list, direct_list
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, error_method::ErrorMethod, expansion_order, check_dipole) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
@@ -22,7 +22,7 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
 
     # get r_min, r_max, ρ_min, ρ_max here, based on error method
-    # r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance_squared, error_method)
+    # r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance_squared)
 
     #    # Barba's multipole acceptance test- slightly different than mine
     #    summed_radii = target_branch.target_radius + source_branch.source_radius
@@ -34,18 +34,17 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
     #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
         if ff
-            P = get_P(Δx, Δy, Δz, target_branch, source_branch, expansion_order, error_method, check_dipole)
-            push!(m2l_list, (i_target, j_source, P))
+            push!(m2l_list, SVector{2}(i_target, j_source))
         end
     elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
         nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, check_dipole)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
     else # source is not a leaf AND target is a leaf or is smaller
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order, check_dipole)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
     end
 end
@@ -127,7 +126,7 @@ end
     end
 end
 
-function InteractionList(direct_list, target_systems, target_tree::Tree, source_systems, source_tree::Tree{TF,<:Any}, derivatives_switches) where TF
+function InteractionList(direct_list, target_systems, target_tree::Tree, source_systems, source_tree::Tree{TF}, derivatives_switches) where TF
     # unpack tree
     leaf_index = source_tree.leaf_index
 

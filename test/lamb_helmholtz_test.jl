@@ -118,9 +118,9 @@ end
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -130,7 +130,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 
 lamb_helmholtz = Val(true)
 
-FastMultipole.multipole_to_multipole!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.multipole_to_multipole!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 # test result
 i, i_compressed = 1, 1
@@ -173,9 +173,9 @@ vector_to_expansion!(branch.multipole_expansion, weights_2, 2, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -230,9 +230,9 @@ vector_to_expansion!(branch.local_expansion, weights_2, 2, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -243,7 +243,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(true)
 
 # translate expansion
-FastMultipole.local_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, Val(expansion_order), lamb_helmholtz)
+FastMultipole.local_to_local!(translated_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 i, i_compressed = 1, 1
 for n in 0:7
@@ -282,9 +282,9 @@ vector_to_expansion!(branch.multipole_expansion, multipole_weights_2, 2, expansi
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -303,7 +303,7 @@ FastMultipole.multipole_to_local!(local_branch, branch, weights_tmp_1, weights_t
 # evaluate local expansion
 Δx = x_target - local_branch.target_center
 velocity_n_m = zeros(2,3,size(local_branch.multipole_expansion, 3))
-ϕ, v, vg = FastMultipole.evaluate_local(Δx, local_branch.harmonics, velocity_n_m, local_branch.local_expansion, Val(expansion_order), lamb_helmholtz, derivatives_switch)
+ϕ, v, vg = FastMultipole.evaluate_local(Δx, local_branch.harmonics, velocity_n_m, local_branch.local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 
 Δx = x_target - x_source
 velocity = -cross(Δx, Γ) / norm(Δx)^3 / (4*pi)

@@ -13,7 +13,7 @@ function evaluate_multipole!(system, branch::SingleBranch, harmonics, expansion_
     evaluate_multipole!(system, branch.bodies_index, harmonics, branch.multipole_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
-function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order::Val{P}, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {P,PS,VS,GS}
+function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     for i_body in bodies_index
         scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,POSITION] - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
         PS && (system[i_body, SCALAR_POTENTIAL] += scalar_potential)
@@ -38,9 +38,9 @@ function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansio
     end
 end
 
-function evaluate_multipole(x_target, source_center, multipole_expansion, derivatives_switch, expansion_order::Val{P}, lamb_helmholtz=Val(false)) where P
+function evaluate_multipole(x_target, source_center, multipole_expansion, derivatives_switch, expansion_order, lamb_helmholtz=Val(false))
     Δx = x_target - source_center
-    harmonics = initialize_harmonics(P+2)
+    harmonics = initialize_harmonics(expansion_order+2)
     return evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
@@ -52,12 +52,12 @@ function check_S(r,θ,ϕ,n,m)
     end
 end
 
-function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order::Val{P}, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {P,LH,PS,VS,GS}
+function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {LH,PS,VS,GS}
     # convert to spherical coordinates
     r, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
 
     # expansion basis is the irregular solid harmonics
-    FastMultipole.irregular_harmonics!(harmonics, r, θ, ϕ, Val(P+2))
+    FastMultipole.irregular_harmonics!(harmonics, r, θ, ϕ, expansion_order+2)
 
     #--- declare/reset variables ---#
 
@@ -77,7 +77,7 @@ function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order
 
     _1_m = -1.0
 
-    for n in 0:P
+    for n in 0:expansion_order
         for m in 0:n
 
             # update index

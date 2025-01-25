@@ -66,7 +66,7 @@ end
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))

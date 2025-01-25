@@ -1,7 +1,7 @@
 #####
 ##### tree constructor
 #####
-function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_recenter=false, accumulate_charge=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false)
+function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false)
     # ensure `system` isn't empty; otherwise return an empty tree
     if get_n_bodies(system) > 0
         # initialize variables
@@ -57,13 +57,6 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_r
         invert_index!(sort_index_buffer, sort_index)
         inverse_sort_index = sort_index_buffer # reuse the buffer as the inverse index
 
-        # accumulate charge (for error prediction and dynamic expansion order)
-        if accumulate_charge
-            for i_level in length(levels_index):-1:1
-                accumulate_charge!(branches, system, levels_index[i_level])
-            end
-        end
-
         # shrink and recenter branches to account for bodies of nonzero radius
         shrink_recenter && shrink_recenter!(branches, levels_index, system)
 
@@ -86,7 +79,7 @@ function Tree(system; expansion_order=7, leaf_size=100, n_divisions=20, shrink_r
         # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(system, leaf_size) : dummy_direct_cost_estimate(system, leaf_size)
 
         # assemble tree
-        tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), leaf_size)#, cost_parameters)
+        tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)#, cost_parameters)
 
     else
         tree = EmptyTree(system)
@@ -122,7 +115,7 @@ function EmptyTree(system)
     sort_index = Int[]
     inverse_sort_index = Int[]
     buffer = nothing
-    expansion_order = Val(-1)
+    expansion_order = -1
     leaf_size = -1
     return Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)
 end
@@ -135,7 +128,7 @@ function EmptyTree(system::Tuple)
     sort_index_list = Tuple(Int[] for _ in 1:N)
     inverse_sort_index = Tuple(Int[] for _ in 1:N)
     buffer = nothing
-    expansion_order = Val(-1)
+    expansion_order = -1
     leaf_size = -1
     return Tree(branches, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, expansion_order, leaf_size)
 end
@@ -858,126 +851,126 @@ end
 
 #--- accumulate charge ---#
 
-"""
-    accumulate_charge!(branches, systems, branch_index)
-
-Computes the sum of the absolute value of body source strengths, as well as the sum of the L2 norm of the dipole strengths, and store them in each branch, inheriting values from child branches if available.
-
-"""
-function accumulate_charge!(branches::AbstractVector{<:Branch{TF}}, systems, branch_index) where TF
-
-    # loop over branches
-    for i_branch in branch_index
-        branch = branches[i_branch]
-
-        # inherit from child branches
-        if branch.n_branches > 0
-            charge = zero(TF)
-            dipole = zero(TF)
-            for i_child in branch.branch_index
-                child = branches[i_child]
-                charge += child.charge
-                dipole += child.dipole
-            end
-
-            # replace branch
-            replace_branch!(branches, i_branch, charge, dipole)
-
-        # compute based on bodies directly
-        else
-            accumulate_charge_bodies!(branches, i_branch, systems)
-        end
-    end
-end
-
-"""
-    accumulate_charge!(branch, systems)
-
-Computes the sum of the absolute value of body source strengths, as well as the sum of the L2 norm of the dipole strengths, based on source bodies directly, and store them in each branch.
-
-"""
-function accumulate_charge_bodies!(branches::Vector{SingleBranch{TF}}, i_branch, system) where TF
-    # reset multipole expansion, just in case
-    branch = branches[i_branch]
-    branch.multipole_expansion .= zero(TF)
-
-    # only need through p=1 for this
-    expansion_order = Val(1)
-
-    # accumulate charge and dipole
-    charge = zero(TF)
-    dipole = zero(TF)
-
-    # loop over bodies
-    for i_body in branch.bodies_index
-
-        # reset required expansions
-        branch.multipole_expansion[1:2,1:2,1:3] .= zero(TF)
-
-        # multipole coefficients
-        body_to_multipole!(system, branch, i_body:i_body, branch.harmonics, expansion_order)
-
-        # get effective charge
-        charge += abs(branch.multipole_expansion[1,1,1])
-
-        # get effective dipole moment
-        qz = branch.multipole_expansion[1,1,2]
-        qy = branch.multipole_expansion[1,1,3] * 2.0
-        qx = branch.multipole_expansion[2,1,3] * 2.0
-        dipole += sqrt(qx*qx + qy*qy + qz*qz)
-    end
-
-    # reset multipole expansion again
-    branch.multipole_expansion .= zero(TF)
-
-    # replace branch
-    replace_branch!(branches, i_branch, charge, dipole)
-
-end
-
-function accumulate_charge_bodies!(branches::Vector{MultiBranch{TF,N}}, i_branch, systems) where {TF,N}
-    # reset multipole expansion, just in case
-    branch = branches[i_branch]
-    branch.multipole_expansion .= zero(TF)
-
-    # only need through p=1 for this
-    expansion_order = Val(1)
-
-    # accumulate charge and dipole
-    charge = zero(TF)
-    dipole = zero(TF)
-
-    # loop over systems
-    for i_system in 1:N
-        system = systems[i_system]
-
-        # loop over bodies
-        for i_body in branch.bodies_index[i_system]
-
-            # reset required expansions
-            branch.multipole_expansion[1:2,1:2,1:3] .= zero(TF)
-
-            # multipole coefficients
-            body_to_multipole!(system, branch, i_body:i_body, branch.harmonics, expansion_order)
-
-            # get effective charge
-            charge += abs(branch.multipole_expansion[1,1,1])
-
-            # get effective dipole moment
-            qz = branch.multipole_expansion[1,1,2]
-            qy = branch.multipole_expansion[1,1,3] * 2.0
-            qx = branch.multipole_expansion[2,1,3] * 2.0
-            dipole += sqrt(qx*qx + qy*qy + qz*qz)
-        end
-    end
-
-    # reset multipole expansion again
-    branch.multipole_expansion .= zero(TF)
-
-    # replace branch
-    replace_branch!(branches, i_branch, charge, dipole)
-
-end
+# """
+#     accumulate_charge!(branches, systems, branch_index)
+#
+# Computes the sum of the absolute value of body source strengths, as well as the sum of the L2 norm of the dipole strengths, and store them in each branch, inheriting values from child branches if available.
+#
+# """
+# function accumulate_charge!(branches::AbstractVector{<:Branch{TF}}, systems, branch_index) where TF
+#
+#     # loop over branches
+#     for i_branch in branch_index
+#         branch = branches[i_branch]
+#
+#         # inherit from child branches
+#         if branch.n_branches > 0
+#             charge = zero(TF)
+#             dipole = zero(TF)
+#             for i_child in branch.branch_index
+#                 child = branches[i_child]
+#                 charge += child.charge
+#                 dipole += child.dipole
+#             end
+#
+#             # replace branch
+#             replace_branch!(branches, i_branch, charge, dipole)
+#
+#         # compute based on bodies directly
+#         else
+#             accumulate_charge_bodies!(branches, i_branch, systems)
+#         end
+#     end
+# end
+#
+# """
+#     accumulate_charge!(branch, systems)
+#
+# Computes the sum of the absolute value of body source strengths, as well as the sum of the L2 norm of the dipole strengths, based on source bodies directly, and store them in each branch.
+#
+# """
+# function accumulate_charge_bodies!(branches::Vector{SingleBranch{TF}}, i_branch, system) where TF
+#     # reset multipole expansion, just in case
+#     branch = branches[i_branch]
+#     branch.multipole_expansion .= zero(TF)
+#
+#     # only need through p=1 for this
+#     expansion_order = 1
+#
+#     # accumulate charge and dipole
+#     charge = zero(TF)
+#     dipole = zero(TF)
+#
+#     # loop over bodies
+#     for i_body in branch.bodies_index
+#
+#         # reset required expansions
+#         branch.multipole_expansion[1:2,1:2,1:3] .= zero(TF)
+#
+#         # multipole coefficients
+#         body_to_multipole!(system, branch, i_body:i_body, branch.harmonics, expansion_order)
+#
+#         # get effective charge
+#         charge += abs(branch.multipole_expansion[1,1,1])
+#
+#         # get effective dipole moment
+#         qz = branch.multipole_expansion[1,1,2]
+#         qy = branch.multipole_expansion[1,1,3] * 2.0
+#         qx = branch.multipole_expansion[2,1,3] * 2.0
+#         dipole += sqrt(qx*qx + qy*qy + qz*qz)
+#     end
+#
+#     # reset multipole expansion again
+#     branch.multipole_expansion .= zero(TF)
+#
+#     # replace branch
+#     replace_branch!(branches, i_branch, charge, dipole)
+#
+# end
+#
+# function accumulate_charge_bodies!(branches::Vector{MultiBranch{TF,N}}, i_branch, systems) where {TF,N}
+#     # reset multipole expansion, just in case
+#     branch = branches[i_branch]
+#     branch.multipole_expansion .= zero(TF)
+#
+#     # only need through p=1 for this
+#     expansion_order = 1
+#
+#     # accumulate charge and dipole
+#     charge = zero(TF)
+#     dipole = zero(TF)
+#
+#     # loop over systems
+#     for i_system in 1:N
+#         system = systems[i_system]
+#
+#         # loop over bodies
+#         for i_body in branch.bodies_index[i_system]
+#
+#             # reset required expansions
+#             branch.multipole_expansion[1:2,1:2,1:3] .= zero(TF)
+#
+#             # multipole coefficients
+#             body_to_multipole!(system, branch, i_body:i_body, branch.harmonics, expansion_order)
+#
+#             # get effective charge
+#             charge += abs(branch.multipole_expansion[1,1,1])
+#
+#             # get effective dipole moment
+#             qz = branch.multipole_expansion[1,1,2]
+#             qy = branch.multipole_expansion[1,1,3] * 2.0
+#             qx = branch.multipole_expansion[2,1,3] * 2.0
+#             dipole += sqrt(qx*qx + qy*qy + qz*qz)
+#         end
+#     end
+#
+#     # reset multipole expansion again
+#     branch.multipole_expansion .= zero(TF)
+#
+#     # replace branch
+#     replace_branch!(branches, i_branch, charge, dipole)
+#
+# end
 
 #--- helper function ---#
 
@@ -1032,7 +1025,7 @@ function initialize_velocity_n_m(expansion_order, type=Float64)
 end
 
 function initialize_harmonics(expansion_order, type=Float64)
-    p = expansion_order+2 # +1 to allow for evaluate_multipole!()
+    p = expansion_order+2
     n_harmonics = harmonic_index(p,p)
     return zeros(type, 2, 2, n_harmonics)
 end

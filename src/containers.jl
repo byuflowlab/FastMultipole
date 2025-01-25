@@ -131,8 +131,6 @@ struct ExpansionSwitch{SP,VP} end
 
 abstract type ErrorMethod end
 
-struct EqualSpheres <: ErrorMethod end
-
 struct UnequalSpheres <: ErrorMethod end
 
 struct UnequalBoxes <: ErrorMethod end
@@ -141,17 +139,7 @@ struct UniformUnequalSpheres <: ErrorMethod end
 
 struct UniformUnequalBoxes <: ErrorMethod end
 
-struct UniformCubes <: ErrorMethod end
-
-struct UniformCubesVelocity <: ErrorMethod end
-
-struct LambHelmholtzΧVelocity <: ErrorMethod end
-
-#------- expansion order -------#
-
-struct Dynamic{PMAX,ATOL} end
-
-Dynamic(PMAX,ATOL) = Dynamic{PMAX,ATOL}()
+struct RotatedCoefficients <: ErrorMethod end
 
 #------- octree creation -------#
 
@@ -271,33 +259,33 @@ Base.eltype(::SingleBranch{TF}) where TF = TF
 
 Supertype of all octree structures with `TF` the floating point type and `P` the expansion order.
 """
-abstract type Tree{TF,P} end
+abstract type Tree{TF} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
+struct MultiTree{TF,N,TB} <: Tree{TF}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
-    expansion_order::Val{P}
+    expansion_order::Int64
     leaf_size::Int64    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     # cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB,P} <: Tree{TF,P}
+struct SingleTree{TF,TB} <: Tree{TF}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index::Vector{Int64}
     inverse_sort_index::Vector{Int64}
     buffer::TB
-    expansion_order::Val{P}
+    expansion_order::Int64
     leaf_size::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
     # cost_parameters::Float64

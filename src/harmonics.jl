@@ -6,29 +6,11 @@
     return (n * (n+1))>>1 + m + 1
 end
 
-@inline function cartesian_to_spherical(x; EPSILON=1e-10)
-    return cartesian_to_spherical(x[1], x[2], x[3]; EPSILON)
-end
-
-@inline function cartesian_to_spherical(x, y, z; EPSILON=1e-10)
-    x2y2 = x*x + y*y
-    r2 = x2y2 + z*z
-    r = iszero(r2) ? r2 : sqrt(r2)
-    z_r = z/r
-    if r > 0
-        theta = x2y2 > 0 ? acos(z_r) : π * (z < 0)
-    else
-        theta = zero(r)
-    end
-    phi = iszero(x2y2) ? zero(x2y2) : atan(y, x)
-    return r, theta, phi
-end
-
 #=
 Gumerov's normalization:
 (-1)^n * im^abs(m) * r^n * Plm(cos(θ),n,abs(m)) * exp(im*m*ϕ) / factorial(n+abs(m))
 =#
-function regular_harmonics!(harmonics, ρ::TF, θ::TF, ϕ::TF, expansion_order::Val{P}) where {TF,P}
+function regular_harmonics!(harmonics, ρ::TF, θ::TF, ϕ::TF, expansion_order) where TF
     y, x = sincos(θ)
     fact = 1.0
     pn = 1.0 # Legendre polynomial of degree n, order 0
@@ -37,7 +19,7 @@ function regular_harmonics!(harmonics, ρ::TF, θ::TF, ϕ::TF, expansion_order::
     i_eim_real, i_eim_imag = 1.0, 0.0 # i^m e^(i * m * phi) = e^[i m (ϕ+π/2)]
 
     # evaluate
-    for m=0:P # n=m
+    for m=0:expansion_order # n=m
         p = pn
         i = harmonic_index(m, m)
         ρm_p = ρm * p
@@ -50,7 +32,7 @@ function regular_harmonics!(harmonics, ρ::TF, θ::TF, ϕ::TF, expansion_order::
         p = x * (2 * m + 1) * p1
         ρm *= ρ
         ρn = ρm
-        for n=m+1:P # n>m in here
+        for n=m+1:expansion_order # n>m in here
             i = harmonic_index(n, m)
             ρn /= -(n + m)
             ρn_p = ρn * p
@@ -79,7 +61,7 @@ end
 Gumerov's normalization:
 (-1)^m * im^abs(m) * r^(-n-1) * Plm(cos(θ),n,abs(m)) * exp(im*m*ϕ) * factorial(n-abs(m))
 =#
-function irregular_harmonics!(harmonics, ρ, θ, ϕ::TF, expansion_order::Val{P}) where {TF,P}
+function irregular_harmonics!(harmonics, ρ, θ, ϕ::TF, expansion_order) where TF
     y, x = sincos(θ)
     fact = 1.0 # 2m+1 (odd integers)
     pn = 1 # Legendre polynomial of degree n, order n
@@ -88,7 +70,7 @@ function irregular_harmonics!(harmonics, ρ, θ, ϕ::TF, expansion_order::Val{P}
     i_ei_imag, i_ei_real = sincos(ϕ+π/2) # i e^(iϕ) = e^[i(ϕ+π/2)]
     i_eim_real, i_eim_imag = 1.0, 0.0 # i^m e^(i * m * phi) = e^[i m (ϕ+π/2)]
 
-    for m=0:P # n=m
+    for m=0:expansion_order # n=m
         p = pn
         i = harmonic_index(m, m)
         ρm_p = ρm * p
@@ -100,7 +82,7 @@ function irregular_harmonics!(harmonics, ρ, θ, ϕ::TF, expansion_order::Val{P}
         p = x * (2 * m + 1) * p1
         ρm *= -one_over_ρ
         ρn = -ρm
-        for n=m+1:P # n>m
+        for n=m+1:expansion_order # n>m
             i = harmonic_index(n, m)
             ρn_p = ρn * p
             harmonics[1,1,i] = ρn_p * i_eim_real

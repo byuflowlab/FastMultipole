@@ -1,4 +1,4 @@
-function body_to_local_point!(::Type{Point{Source}}, local_coefficients, harmonics, Δx, strength, expansion_order::Val{P}) where P
+function body_to_local_point!(::Type{Point{Source}}, local_coefficients, harmonics, Δx, strength, expansion_order)
 
     # invert the sign of the strength so v=∇ϕ instead of v=-∇ϕ
     # this will allow induced velocities to be added to those induced by vortex elements
@@ -12,7 +12,7 @@ function body_to_local_point!(::Type{Point{Source}}, local_coefficients, harmoni
     # update coefficients
     _1_n = 1.0
     i = 1
-    for n in 0:P
+    for n in 0:expansion_order
         _1_n_m = _1_n
         for m in 0:n
             local_coefficients[1,1,i] += harmonics[1,1,i] * _1_n_m * strength
@@ -31,20 +31,19 @@ function Snm(ρ,θ,ϕ,n,m)
     return (1.0*im)^(-abs(m)) * Float64(factorial(big(n-abs(m)))) / ρ^(n+1) * Plm(cos(θ),n,abs(m)) * exp(im*m*ϕ)
 end
 
-function body_to_local_point!(::Type{Point{Vortex}}, local_coefficients, harmonics::AbstractArray{TF}, Δx, strength, expansion_order::Val{P}) where {TF,P}
+function body_to_local_point!(::Type{Point{Vortex}}, local_coefficients, harmonics::AbstractArray{TF}, Δx, strength, expansion_order) where TF
 
     # extract strength
     ωx, ωy, ωz = strength
 
     # irregular harmonics
     ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
-    FastMultipole.irregular_harmonics!(harmonics, ρ, θ, ϕ, Val(P+1))
+    FastMultipole.irregular_harmonics!(harmonics, ρ, θ, ϕ, expansion_order+1)
 
     # update ϕnm
     i = 2 # ϕ00 = 0
     _1_n = -1.0
-    println("\nFastMultipole code:\n")
-    for n in 1:P
+    for n in 1:expansion_order
         _1_m = 1.0
         for m in 0:n
             # intermediate variables
@@ -70,7 +69,7 @@ function body_to_local_point!(::Type{Point{Vortex}}, local_coefficients, harmoni
     # update χnm
     i = 1
     _1_np1 = -1.0
-    for n in 0:P
+    for n in 0:expansion_order
         _1_m = 1.0
         for m in 0:n
             # intermediate variables

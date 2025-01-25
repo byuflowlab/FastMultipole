@@ -2,8 +2,9 @@ using Random
 using LegendrePolynomials
 using Statistics
 
-include("../test/vortex.jl")
-include("../test/evaluate_multipole.jl")
+include("vortex.jl")
+include("evaluate_multipole.jl")
+include("bodytolocal.jl")
 
 function flatten_derivatives!(jacobian)
     # velocity
@@ -191,7 +192,7 @@ end
 
 # IΧ2 = preintegrate_multipole_χ(30, ε_Nθ_χ, ε_Nϕ_χ)
 # FastMultipole.write_file("src/multipole_integrals_chi.csv", IΧ2)
-const IΧ = FastMultipole.read_file("src/multipole_integrals_chi.csv")
+# const IΧ = FastMultipole.read_file("src/multipole_integrals_chi.csv")
 
 function multipole_check(x_target, n_sources; seed=123, expansion_order=5, method="final χ", χ_method = "loop", v_method="loop")
     # source system
@@ -265,6 +266,7 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
 
     v̂x = dot(vtrue, x̂) / norm(vtrue)
     v̂y = dot(vtrue, ŷ) / norm(vtrue)
+    v̂z = dot(vtrue, ẑ) / norm(vtrue)
 
     # rotated system
     rotated_position = similar(position)
@@ -288,9 +290,10 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
     @show R * vtrue - vtruer
 
     # calculate v using single sum over n
+    vmag = 0.0
+    vmag_nov = 0.0
     if method == "simplest ϕ"
         v̂ = v / norm(v)
-        vmag = 0.0
         inm = 3
         r = norm(x_target - source_center)
 
@@ -335,6 +338,40 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
         end
         vmag /= 4 * pi
 
+    elseif method == "rotated ϕ"
+
+        in0 = 2
+        for n in 1:expansion_order
+            ϕn0 = 0.0 + 0im
+            ϕn1 = 0.0 + 0im
+            for i in rotated_branch.bodies_index
+                ρ⃗ = rotated_system[i,Position()] - rotated_branch.source_center
+                ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                this_ωxr, this_ωyr, this_ωzr = rotated_system[i,Strength()]
+
+                # ϕn0
+                Φₙ0 = ρ^n * Plm(cos(θ),n,1) * exp(im*ϕ)
+                ϕn0 += Float64(1/factorial(big(n+1))) * (this_ωyr * real(Φₙ0) - this_ωxr * imag(Φₙ0))
+
+                # ϕn1
+                this_Plm = n >= 2 ? Plm(cos(θ),n,2) : 0.0
+                Φₙ1x = n*0.5 * ρ^n * Plm(cos(θ),n,0) + 0.5 * ρ^n * this_Plm * exp(-2*im*ϕ) / (n+1)
+                Φₙ1y = -im*n*0.5 * ρ^n * Plm(cos(θ),n,0) + im*0.5 * ρ^n * this_Plm * exp(-2*im*ϕ) / (n+1)
+                this_Plm = n >= 1 ? Plm(cos(θ),n,1) : 0.0
+                Φₙ1z = ρ^n * this_Plm * exp(-im*ϕ) / (n+1)
+                ϕn1 += Float64(1/factorial(big(n+1))) * (this_ωxr * Φₙ1x + this_ωyr * Φₙ1y + this_ωzr * Φₙ1z)
+
+            end
+
+            ϕn0_test = rotated_branch.multipole_expansion[1,1,in0] + im * rotated_branch.multipole_expansion[2,1,in0]
+            ϕn1_test = rotated_branch.multipole_expansion[1,1,in0+1] + im * rotated_branch.multipole_expansion[2,1,in0+1]
+            println()
+            @show n ϕn0 / ϕn0_test
+            @show ϕn1 / ϕn1_test
+
+            in0 += n+1
+        end
+
     elseif method == "final ϕ"
 
         vmag = 0.0
@@ -346,6 +383,7 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
         for n in 0:expansion_order
             # m=0
             ϕn0 = branch.multipole_expansion[1,1,in0] + branch.multipole_expansion[2,1,in0]*im
+
             Sn1m = factorial(n+1) / r^(n+2)
             vmag += ϕn0 * -v̂[3]*Sn1m
 
@@ -363,6 +401,7 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
     elseif method == "final χ"
 
         vmag = 0.0
+        vmag_nov = 0.0
         v̂ = vtruer / norm(vtruer) # all quantities in rotated frame
         this_r⃗ = R * (x_target - source_center)
         r, θ, ϕ = FastMultipole.cartesian_to_spherical(this_r⃗)
@@ -375,17 +414,20 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
             Sn1_check = Snm(r,θ,ϕ,n,0)
             @assert isapprox(Sn1,Sn1_check;rtol=1e-10) "Sn1 = $(Sn1), Sn1_check=$Sn1_check"
             vmag += -χn1 * (v̂[1] + im*v̂[2]) * (n+1) * Float64(factorial(big(n))) / r^(n+1)
+            vmag_nov += -abs(χn1) * (n+1) * Float64(factorial(big(n))) / r^(n+1)
 
             # recurse indices
             in1 += n+1
         end
 
         vmag /= 4*pi
+        vmag_nov /= 4*pi
 
     end
 
-    @show vmag norm(v) norm(vtrue) norm(vtruer)
+    @show vmag vmag_nov norm(v) norm(vtrue) norm(vtruer)
 
+    # return vmag_nov / norm(vtrue)
 
     # calculate error
     εϕ, εχ = 0.0, 0.0
@@ -400,17 +442,17 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
     εχ *= -(v̂x + im*v̂y) / 4 / pi
 
     println("\nChecking error estimate with known χ")
-    @show εχ
-    @show norm(εχ) / norm(v-vtrue)
+    # @show εχ
+    # @show norm(εχ) / norm(v-vtrue)
 
     ω⃗_check = SVector{3}(0.0,0,0)
     for i_source in branch.bodies_index
         ω⃗_check += source_system[i_source, FastMultipole.Strength()]
     end
-    println("\nEstimating ω")
-    @show sum(abs.(ω⃗ - ω⃗_check))
-    @show sum(abs.(ω⃗r - R * ω⃗_check))
-    @show ω⃗r
+    # println("\nEstimating ω")
+    # @show sum(abs.(ω⃗ - ω⃗_check))
+    # @show sum(abs.(ω⃗r - R * ω⃗_check))
+    # @show ω⃗r
 
     εχ2 = 0.0
     εχ_loop = 0.0
@@ -440,9 +482,9 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
                         # ITnx += ρ^(n-1) * im * 0.5 * (-(n+1) * Plm(cos(θ),n-1,0) + 1/n * Plm(cos(θ),n-1,2) * exp(-2*im*ϕ))
                         # ITny += ρ^(n-1) * 0.5 * (-(n+1) * Plm(cos(θ),n-1,0) - 1/n * Plm(cos(θ),n-1,2) * exp(-2*im*ϕ))
                         # ITnz += ρ^(n-1) * (1 + 1/n) * im * Plm(cos(θ),n-1,1) * exp(-im*ϕ)
-                        ITnx += ρ^(n-1) * im * 0.5 * (-(n+1) * abs(Plm(cos(θ),n-1,0)) + 1/n * abs(Plm(cos(θ),n-1,2)) * exp(-2*im*ϕ))
-                        ITny += ρ^(n-1) * 0.5 * (-(n+1) * abs(Plm(cos(θ),n-1,0)) - 1/n * abs(Plm(cos(θ),n-1,2)) * exp(-2*im*ϕ))
-                        ITnz += ρ^(n-1) * (1 + 1/n) * im * abs(Plm(cos(θ),n-1,1)) * exp(-im*ϕ)
+                        ITnx += ρ^(n-1) * im * 0.5 * (-(n+1) * abs(Plm(cos(θ),n-1,0)) + 1/n * abs(Plm(cos(θ),n-1,2)) ) * -im #* exp(-2*im*ϕ))
+                        ITny += ρ^(n-1) * 0.5 * (-(n+1) * abs(Plm(cos(θ),n-1,0)) - 1/n * abs(Plm(cos(θ),n-1,2)) )# * exp(-2*im*ϕ))
+                        ITnz += ρ^(n-1) * (1 + 1/n) * im * abs(Plm(cos(θ),n-1,1)) # * exp(-im*ϕ)
                     end
                 end
             end
@@ -452,10 +494,26 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
             ITny *= dV / V # / Float64(factorial(big(n+1)))
             ITnz *= dV / V # / Float64(factorial(big(n+1)))
 
-            @show n, ITnx, ITny, ITnz
+            println("\nMultipole Integration:")
+            # @show n, ITnx, ITny, ITnz ωxr ωyr ωzr
 
             # χn1 = Complex{Float64}(ωxr * ITnx + ωyr * ITny + ωzr * ITnz)
-            χn1 = Complex{Float64}(ωxr * ITnx + ωyr * ITny) # + ωzr * ITnz)
+            χn1 = Complex{Float64}(ωxr * ITnx + ωyr * ITny + ωzr * ITnz)
+
+            in1 = 3
+            for n in 2:expansion_order+1
+                # recurse indices
+                in1 += n
+            end
+
+
+            χn1_true = rotated_branch.multipole_expansion[1,2,in1] + rotated_branch.multipole_expansion[2,2,in1]*im
+
+            @show χn1
+            @show χn1_true
+            # @show χn1+ωzr*ITnz
+            println()
+
 
         elseif χ_method == "preintegration"
 
@@ -523,15 +581,602 @@ function multipole_check(x_target, n_sources; seed=123, expansion_order=5, metho
     return ϕ, v, v_analytic, εϕ, εχ, branch, source_system
 end
 
-x_target = SVector{3}(0.0,1.0,1.0) + SVector{3}(0.5,0.5,0.5)
+function Snm(ρ,θ,ϕ,n,m)
+    return (1.0*im)^(-abs(m)) * Float64(factorial(big(n-abs(m)))) / ρ^(n+1) * Plm(cos(θ),n,abs(m)) * exp(im*m*ϕ)
+end
+
+function body_to_local_check(target_branch, Δx, ω⃗, P)
+    harmonics = target_branch.harmonics
+    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
+    ωx, ωy, ωz = ω⃗
+
+    thisϕ = deepcopy(target_branch.local_expansion)
+    thisϕ .= 0.0
+    i = 1
+
+    println("\nDEBUGGING\n")
+    @show ρ θ ϕ
+    for n in 0:P
+        @show n
+        for m in 0:n
+            # ϕnm
+            Snm_a = abs(-m-1) <= n ? Snm(ρ,θ,ϕ,n,-m-1) : 0.0 + 0im
+            Snm_b = abs(-m+1) <= n ? Snm(ρ,θ,ϕ,n,-m+1) : 0.0 + 0im
+            Snm_c = Snm(ρ,θ,ϕ,n,-m)
+            ϕnm = -(-1)^n/n * (0.5 * (ωx+im*ωy) * (n-m) * Snm_a - 0.5*(ωx-im*ωy) * (n+m) * Snm_b - im * ωz * m * Snm_c)
+            thisϕ[1,1,i] = real(ϕnm)
+            thisϕ[2,1,i] = imag(ϕnm)
+
+            # χnm
+            Snm_a = abs(-m+1) <= n+1 ? Snm(ρ,θ,ϕ,n+1,-m+1) : 0.0 + 0im
+            Snm_b = abs(-m-1) <= n+1 ? Snm(ρ,θ,ϕ,n+1,-m-1) : 0.0 + 0im
+            Snm_c = abs(-m) <= n+1 ? Snm(ρ,θ,ϕ,n+1,-m) : 0.0 + 0im
+            if m == 1 && n<4
+                @show Snm_a Snm_b Snm_c
+            end
+            χnm = (-1)^(n+1)/(n+1) * (0.5*(ωy+im*ωx)*Snm_a - 0.5*(ωy-im*ωx)*Snm_b - ωz*Snm_c)
+            thisϕ[1,2,i] = real(χnm)
+            thisϕ[2,2,i] = imag(χnm)
+
+            # recurse index
+            i += 1
+        end
+    end
+
+    return thisϕ
+end
+
+function complexify(arr::Matrix)
+    return arr[1,:] .+ im .* arr[2,:]
+end
+
+function estimate_ϕn0(source_center, source_box, ω⃗, target_center, n)
+
+    ωx, ωy, ωz = ω⃗
+    s = mean(source_box) * 2
+    dx = s / 100
+    x0 = source_center[1] - s*0.5 + dx*0.5
+    y0 = source_center[2] - s*0.5 + dx*0.5
+    z0 = source_center[3] - s*0.5 + dx*0.5
+    Inϕ = 0.0 + 0im
+    for x in range(x0, step=dx, length=100)
+        for y in range(y0, step=dx, length=100)
+            for z in range(z0, step=dx, length=100)
+                ρ⃗ = SVector{3}(x,y,z) - target_center
+                ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                Inϕ += im / ρ^(n+1) * Plm(cos(θ),n,1) * exp(-im*ϕ)
+            end
+        end
+    end
+    Inϕ *= dx * dx * dx / (s*s*s)
+    # println("\nϕn0 integrals:")
+    # @show n Inϕ
+    return ωx * (-1)^n * Float64(factorial(big(n-1))) * real(Inϕ) - ωy * (-1)^n * Float64(factorial(big(n-1))) * imag(Inϕ)
+end
+
+function estimate_ϕn1(source_center, source_box, ω⃗, target_center, n)
+
+    ωx, ωy, ωz = ω⃗
+    s = mean(source_box) * 2
+    dx = s / 100
+    x0 = source_center[1] - s*0.5 + dx*0.5
+    y0 = source_center[2] - s*0.5 + dx*0.5
+    z0 = source_center[3] - s*0.5 + dx*0.5
+    Inϕ0 = 0.0 + 0im
+    Inϕ1 = 0.0 + 0im
+    Inϕ2 = 0.0 + 0im
+    for x in range(x0, step=dx, length=100)
+        for y in range(y0, step=dx, length=100)
+            for z in range(z0, step=dx, length=100)
+                ρ⃗ = SVector{3}(x,y,z) - target_center
+                ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                Inϕ0 += (n+1) * 0.5 / ρ^(n+1) * Plm(cos(θ),n,0)
+                Inϕ1 += 1.0 / (n*ρ^(n+1)) * Plm(cos(θ),n,1) * exp(-im*ϕ)
+                Plm2 = n > 1 ? Plm(cos(θ),n,2) : 0.0
+                Inϕ2 += 1.0 / (2*n*ρ^(n+1)) * Plm2 * exp(-2*im*ϕ)
+            end
+        end
+    end
+    # println("\nϕn1 integrals:")
+    # @show n Inϕ0 Inϕ1 Inϕ2
+    Inϕ0 *= dx * dx * dx / (s*s*s)
+    Inϕ1 *= dx * dx * dx / (s*s*s)
+    Inϕ2 *= dx * dx * dx / (s*s*s)
+
+    return (-1)^(n+1) * Float64(factorial(big(n-1))) * ( (ωx+im*ωy)*Inϕ2 + (ωx-im*ωy)*Inϕ0 + ωz*Inϕ1 )
+end
+
+function get_ϕ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=false)
+
+    ωx, ωy, ωz = ω⃗
+    vx, vy, vz = v̂
+    s = mean(source_box) * 2
+    dx = s / 100
+    x0 = source_center[1] - s*0.5 + dx*0.5
+    y0 = source_center[2] - s*0.5 + dx*0.5
+    z0 = source_center[3] - s*0.5 + dx*0.5
+    Inϕ = 0.0 + 0im
+    Inϕ0 = 0.0 + 0im
+    Inϕ1 = 0.0 + 0im
+    Inϕ2 = 0.0 + 0im
+    println("ϕerror:")
+    for x in range(x0, step=dx, length=100)
+        for y in range(y0, step=dx, length=100)
+            for z in range(z0, step=dx, length=100)
+                if !sphere || norm(SVector{3}(x,y,z)-source_center) <= s*0.5
+                    ρ⃗ = SVector{3}(x,y,z) - target_center
+                    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                    Inϕ += im / ρ^(n+1) * abs(Plm(cos(θ),n,1)) * exp(-im*ϕ)
+                    Inϕ0 += (n+1) * 0.5 / ρ^(n+1) * abs(Plm(cos(θ),n,0))
+                    Inϕ1 += 1.0 / (n*ρ^(n+1)) * abs(Plm(cos(θ),n,1)) * exp(-im*ϕ)
+                    Plm2 = n > 1 ? abs(Plm(cos(θ),n,2)) : 0.0
+                    Inϕ2 += 1.0 / (2*n*ρ^(n+1)) * Plm2 * exp(-2*im*ϕ)
+                end
+            end
+        end
+    end
+
+    V = sphere ? 4/3*pi*(s*0.5)^3 : s * s * s
+    Inϕ *= dx * dx * dx / V
+    Inϕ0 *= dx * dx * dx / V
+    Inϕ1 *= dx * dx * dx / V
+    Inϕ2 *= dx * dx * dx / V
+
+    val = vy * (ωx * (real(Inϕ2) + real(Inϕ0)) + ωy * (imag(Inϕ0) - imag(Inϕ2)) + ωz * real(Inϕ1))
+    val += vx * (ωx * (imag(Inϕ2) + imag(Inϕ0)) + ωy * (real(Inϕ2) - real(Inϕ0)) + ωz * imag(Inϕ1))
+    val += vz * (ωx * real(Inϕ) - ωy * imag(Inϕ))
+    val *= r^(n-1)
+
+    return val
+end
+
+function estimate_χn1(source_center, source_box, ω⃗, target_center, n)
+
+    ωx, ωy, ωz = ω⃗
+    s = mean(source_box) * 2
+    dx = s / 100
+    x0 = source_center[1] - s*0.5 + dx*0.5
+    y0 = source_center[2] - s*0.5 + dx*0.5
+    z0 = source_center[3] - s*0.5 + dx*0.5
+    Inχ0 = 0.0 + 0im
+    Inχ1 = 0.0 + 0im
+    Inχ2 = 0.0 + 0im
+    for x in range(x0, step=dx, length=100)
+        for y in range(y0, step=dx, length=100)
+            for z in range(z0, step=dx, length=100)
+                ρ⃗ = SVector{3}(x,y,z) - target_center
+                ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                Inχ0 += n * 0.5 / ρ^(n+2) * Plm(cos(θ),n+1,0)
+                Inχ1 += n / ((n+1)*ρ^(n+2)) * Plm(cos(θ),n+1,1) * exp(-im*ϕ)
+                Inχ2 += 0.5 / ((n+1)*ρ^(n+2)) * Plm(cos(θ),n+1,2) * exp(-2*im*ϕ)
+            end
+        end
+    end
+    # println("\nχn1 integrals:")
+    # @show n Inχ0 Inχ1 Inχ2
+    Inχ0 *= dx * dx * dx / (s*s*s)
+    Inχ1 *= dx * dx * dx / (s*s*s) * im
+    Inχ2 *= dx * dx * dx / (s*s*s)
+
+    return (-1)^(n+1) * Float64(factorial(big(n-1))) * ( (ωy+im*ωx)*Inχ0 + (ωy-im*ωx)*Inχ2 + ωz*Inχ1 )
+end
+
+function get_χ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=false)
+
+    ωx, ωy, ωz = ω⃗
+    vx, vy, vz = v̂
+    s = mean(source_box) * 2
+    dx = s / 100
+    x0 = source_center[1] - s*0.5 + dx*0.5
+    y0 = source_center[2] - s*0.5 + dx*0.5
+    z0 = source_center[3] - s*0.5 + dx*0.5
+    Inχ0 = 0.0 + 0im
+    Inχ1 = 0.0 + 0im
+    Inχ2 = 0.0 + 0im
+    for x in range(x0, step=dx, length=100)
+        for y in range(y0, step=dx, length=100)
+            for z in range(z0, step=dx, length=100)
+                if !sphere || norm(SVector{3}(x,y,z)-source_center) <= s*0.5
+                    ρ⃗ = SVector{3}(x,y,z) - target_center
+                    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                    Inχ0 += n * 0.5 / ρ^(n+2) * abs(Plm(cos(θ),n+1,0))
+                    Inχ1 += n / ((n+1)*ρ^(n+2)) * abs(Plm(cos(θ),n+1,1)) * exp(-im*ϕ)
+                    Inχ2 += 0.5 / ((n+1)*ρ^(n+2)) * abs(Plm(cos(θ),n+1,2)) * exp(-2*im*ϕ)
+                end
+            end
+        end
+    end
+
+    # println("\nχn1 integrals:")
+    V = sphere ? 4/3*π*(s*0.5)^3 : s * s * s
+    Inχ0 *= dx * dx * dx / V
+    Inχ1 *= dx * dx * dx / V * im
+    Inχ2 *= dx * dx * dx / V
+
+    val = (vx + im*vy) * ( (ωy+im*ωx)*Inχ0 - (ωy-im*ωx)*Inχ2 + ωz*Inχ1 ) * r^n
+
+    return val
+end
+
+function get_ϕχ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=false)
+
+    ωx, ωy, ωz = ω⃗
+    vx, vy, vz = v̂
+    s = mean(source_box) * 2
+    dx = s / 100
+    x0 = source_center[1] - s*0.5 + dx*0.5
+    y0 = source_center[2] - s*0.5 + dx*0.5
+    z0 = source_center[3] - s*0.5 + dx*0.5
+    Inϕ = 0.0 + 0im
+    Inϕ0 = 0.0 + 0im
+    Inϕ1 = 0.0 + 0im
+    Inϕ2 = 0.0 + 0im
+    Inχ0 = 0.0 + 0im
+    Inχ1 = 0.0 + 0im
+    Inχ2 = 0.0 + 0im
+    println("ϕχerror:")
+    for x in range(x0, step=dx, length=100)
+        for y in range(y0, step=dx, length=100)
+            for z in range(z0, step=dx, length=100)
+                if !sphere || norm(SVector{3}(x,y,z)-source_center) <= s*0.5
+                    ρ⃗ = SVector{3}(x,y,z) - target_center
+                    ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(ρ⃗)
+                    Inϕ += im / ρ^(n+1) * abs(Plm(cos(θ),n,1)) * exp(-im*ϕ)
+                    Inϕ0 += (n+1) * 0.5 / ρ^(n+1) * abs(Plm(cos(θ),n,0))
+                    Inϕ1 += 1.0 / (n*ρ^(n+1)) * abs(Plm(cos(θ),n,1)) * exp(-im*ϕ)
+                    Plm2 = n > 1 ? abs(Plm(cos(θ),n,2)) : 0.0
+                    Inϕ2 += 1.0 / (2*n*ρ^(n+1)) * Plm2 * exp(-2*im*ϕ)
+                    Inχ0 += n * 0.5 / ρ^(n+2) * abs(Plm(cos(θ),n+1,0))
+                    Inχ1 += n / ((n+1)*ρ^(n+2)) * abs(Plm(cos(θ),n+1,1)) * exp(-im*ϕ)
+                    Inχ2 += 0.5 / ((n+1)*ρ^(n+2)) * abs(Plm(cos(θ),n+1,2)) * exp(-2*im*ϕ)
+                end
+            end
+        end
+    end
+
+    # volume
+    V = sphere ? 4/3*pi*(s*0.5)^3 : s * s * s
+
+    # ϕ error
+    Inϕ *= dx * dx * dx / V
+    Inϕ0 *= dx * dx * dx / V
+    Inϕ1 *= dx * dx * dx / V
+    Inϕ2 *= dx * dx * dx / V
+
+    val = vy * (ωx * (real(Inϕ2) + real(Inϕ0)) + ωy * (imag(Inϕ0) - imag(Inϕ2)) + ωz * real(Inϕ1))
+    val += vx * (ωx * (imag(Inϕ2) + imag(Inϕ0)) + ωy * (real(Inϕ2) - real(Inϕ0)) + ωz * imag(Inϕ1))
+    val += vz * (ωx * real(Inϕ) - ωy * imag(Inϕ))
+    val *= r^(n-1)
+
+    # χ error
+    Inχ0 *= dx * dx * dx / V
+    Inχ1 *= dx * dx * dx / V * im
+    Inχ2 *= dx * dx * dx / V
+
+    val += (vx + im*vy) * ( (ωy+im*ωx)*Inχ0 - (ωy-im*ωx)*Inχ2 + ωz*Inχ1 ) * r^n
+
+    return val
+end
+
+function local_check(x_target, dx_local, n_sources; seed=123, expansion_order=5, methodϕ="loop", methodχ = "loop", v_method="loop")
+
+    Random.seed!(seed)
+    position = rand(3,n_sources) .* 2
+    # position[:,1] .= [1.0,1.0,1.0]
+    strength = rand(3,n_sources)
+    # strength[:,1] .= [1.0,0,0]
+    source_system = VortexParticles(position, strength)
+
+    return local_check(x_target, dx_local, source_system; seed, expansion_order, methodϕ, methodχ, v_method)
+end
+
+function local_check(x_target, dx_local, source_system::VortexParticles; seed=123, expansion_order=5, methodϕ="loop", methodχ = "loop", v_method="loop")
+
+    # source branch
+    bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:n_sources, 0, 1:0, 0, 1
+    source_center = SVector{3}(0.5,0.5,0.5) * 2
+    source_radius = 0.5 * sqrt(3) * 2
+    source_box = SVector{3}(0.5,0.5,0.5) * 2
+    # source_center = target_center = SVector{3}(0.5,0.5,0.5)
+    # source_radius = target_radius = 0.5 * sqrt(3)
+    # source_box = target_box = SVector{3}(0.5,0.5,0.5)
+
+    source_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, source_center, source_radius, source_radius, source_box, source_box, expansion_order+20)
+
+    # multipole expansion
+    FastMultipole.body_to_multipole!(source_branch, source_system, source_branch.harmonics, Val(expansion_order+20))
+    _, v_mp, _ = evaluate_multipole(x_target, source_center, source_branch.multipole_expansion, DerivativesSwitch(false,true,false), Val(expansion_order+20), Val(true))
+
+    # target system
+    target_system = FastMultipole.ProbeSystem([x_target]; scalar_potential=true, velocity=true)
+
+    # target branch
+    target_center = x_target - dx_local
+    target_radius = norm(dx_local)
+    target_box = SVector{3}(abs(dx_local[1]), abs(dx_local[2]), abs(dx_local[3]))
+    target_branch = Branch(1:1, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, target_radius, target_radius, target_box, target_box, expansion_order+20)
+
+    # check local coefficients
+    weights_tmp_1 =
+    Ts = zeros(FastMultipole.length_Ts(expansion_order+10))
+    eimϕs = zeros(Float64, 2, expansion_order+11)
+    weights_tmp_1 = initialize_expansion(expansion_order+10, Float64)
+    weights_tmp_2 = initialize_expansion(expansion_order+10, Float64)
+    velocity_n_m = zeros(2,3,size(target_branch.local_expansion,3))
+    FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, expansion_order+10, Val(true))
+    _, v_l_check, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
+
+    local_expansion_check = deepcopy(target_branch.local_expansion)
+    target_branch.local_expansion .= 0.0
+
+    # get local coefficients
+    for i in source_branch.bodies_index
+        body_to_local_point!(Point{Vortex}, target_branch.local_expansion, target_branch.harmonics, source_system[i,Position()] - target_branch.target_center, source_system[i,Strength()], Val(expansion_order+10))
+    end
+
+    # branch.multipole_expansion[:,1,:] .= 0.0 # we are testing just χ
+    # branch.multipole_expansion[:,2,:] .= 0.0 # we are testing just ϕ
+
+    # evaluate expansion
+    _, v, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
+    _, vtrue, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(false,true,false))
+
+    this_L = deepcopy(target_branch.local_expansion)
+    target_branch.local_expansion[:,2,:] .= 0.0
+    _, v_ϕonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(true,true,false))
+    _, vtrue_ϕonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(true,true,false))
+    target_branch.local_expansion .= this_L
+    target_branch.local_expansion[:,1,:] .= 0.0
+    _, v_χonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(true,true,false))
+    _, vtrue_χonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(true,true,false))
+    target_branch.local_expansion .= this_L
+
+    # check velocity
+    v_analytic = SVector{3}(0.0,0,0)
+    for i_body in source_branch.bodies_index
+        dx = x_target-source_system[i_body,FastMultipole.Position()]
+        q = source_system[i_body,FastMultipole.Strength()]
+        this_r = norm(dx)
+        gamma_over_R = q / this_r / (4*pi)
+        jacobian = zeros(3,3)
+        gamma_over_R /= this_r^2
+        for j_potential in 1:3
+            for i_r in 1:3
+                jacobian[i_r,j_potential] -= gamma_over_R[j_potential] * dx[i_r]
+            end
+        end
+        v_analytic += flatten_derivatives!(jacobian)
+    end
+
+    @assert isapprox(vtrue, v_analytic; atol=1e-12)
+
+    # rotate frame
+    r⃗ = x_target - target_center
+    @show r⃗
+    r = norm(r⃗)
+    r̂ = r⃗ / r
+    x̂, ŷ, ẑ, R = rotate(r̂)
+    r⃗r = R * r⃗
+
+    @assert isapprox(dot(x̂,ŷ),0.0; atol=1e-12)
+    @assert isapprox(dot(x̂,ẑ),0.0; atol=1e-12)
+    @assert isapprox(dot(ŷ,ẑ),0.0; atol=1e-12)
+    @assert isapprox(R * r⃗, SVector{3}(0,0,r); atol=1e-12)
+
+    ωx, ωy, ωz = FastMultipole.vortex_from_multipole(source_branch.multipole_expansion)
+    ω⃗ = SVector{3}(ωx, ωy, ωz)
+    ωxr = dot(ω⃗, x̂)
+    ωyr = dot(ω⃗, ŷ)
+    ωzr = dot(ω⃗, ẑ)
+    ω⃗r = SVector{3}(ωxr, ωyr, ωzr)
+
+    v̂x = dot(vtrue, x̂) / norm(vtrue)
+    v̂y = dot(vtrue, ŷ) / norm(vtrue)
+    v̂z = dot(vtrue, ẑ) / norm(vtrue)
+
+    #=
+    # rotated system
+    rotated_position = similar(position)
+    rotated_strength = similar(strength)
+    for i in 1:size(rotated_position,2)
+        rotated_position[:,i] = target_center + R * (position[:,i] - target_center)
+        rotated_strength[:,i] = R * strength[:,i]
+    end
+    rotated_system = VortexParticles(rotated_position, rotated_strength)
+
+    rotated_source_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order+20)
+
+    # get multipole coefficients
+    FastMultipole.body_to_multipole!(rotated_branch, rotated_system, branch.harmonics, Val(expansion_order+20))
+
+    # evaluate expansion
+    x_target_rotated = source_center + R * (x_target - source_center)
+    ϕtruer, vtruer, _ = evaluate_multipole(x_target_rotated, source_center, rotated_branch.multipole_expansion, DerivativesSwitch(true,true,false), Val(expansion_order+20), Val(true))
+
+    println("\nVerifying rotated χ")
+    @show R * vtrue - vtruer
+    =#
+
+    # calculate v using single sum over n
+    if methodϕ == "loop"
+        mag∇ϕ = 0.0
+        i = 2
+        for n in 1:expansion_order
+            ϕn0 = target_branch.local_expansion[1,1,i] + target_branch.local_expansion[2,1,i] * im
+            ϕn1 = target_branch.local_expansion[1,1,i+1] + target_branch.local_expansion[2,1,i] * im
+            mag∇ϕ += (real(ϕn1) * v̂y + imag(ϕn1) * v̂x + ϕn0 * v̂z) * r^(n-1) * (-1)^(n) / Float64(factorial(big(n-1)))
+            i += n+1
+        end
+
+        mag∇ϕ /= 4π
+
+    elseif methodϕ == "loop2"
+        mag∇ϕ = 0.0
+        for i in source_branch.bodies_index
+            this_ωx, this_ωy, this_ωz = R * source_system[i,Strength()]
+            ρ⃗ = R * (source_system[i,Position()] - target_center)
+            ρ, θs, ϕs = FastMultipole.cartesian_to_spherical(ρ⃗)
+            for n in 1:expansion_order+10
+                this_I = im / ρ^(n+1) * Plm(cos(θ),n,1) * exp(-im*ϕ)
+                ϕn0 = this_ωx * real(this_I) - this_ωy * imag(this_I)
+                mag∇ϕ += ϕn0 * r^(n-1)
+            end
+        end
+    end
+
+    @show mag∇ϕ norm(vtrue_ϕonly)
+
+    if methodχ == "loop"
+
+        mag∇χ = 0.0
+        i = 2
+        for n in 1:expansion_order
+            χn1 = target_branch.local_expansion[1,2,i+1] + target_branch.local_expansion[2,2,i+1] * im
+            mag∇χ += χn1 * (v̂x + im*v̂y) * (-1)^n * r^n / Float64(factorial(big(n-1)))
+            i += n + 1
+        end
+
+        mag∇χ /= 4π
+    end
+
+    @show mag∇χ norm(vtrue_χonly)
+
+    #--- check estimates of local coefficients ---#
+
+    #=
+    # ϕn0
+    ϕn0s = zeros(Complex{Float64},expansion_order)
+    for n in 1:expansion_order
+        ϕn0s[n] = estimate_ϕn0(source_center, source_box, ω⃗, target_center, n)
+    end
+
+    # check
+    ϕn0s_check = similar(ϕn0s)
+    i = 2
+    for n in 1:expansion_order
+        ϕn0s_check[n] = target_branch.local_expansion[1,1,i] + im * target_branch.local_expansion[2,1,i]
+        i += n+1
+    end
+
+    @show ϕn0s ϕn0s_check
+
+    # ϕn1
+    ϕn1s = zeros(Complex{Float64}, expansion_order)
+    for n in 1:expansion_order
+        ϕn1s[n] = estimate_ϕn1(source_center, source_box, ω⃗, target_center, n)
+    end
+
+    # check
+    ϕn1s_check = similar(ϕn1s)
+    i = 2
+    for n in 1:expansion_order
+        ϕn1s_check[n] = target_branch.local_expansion[1,1,i+1] + im * target_branch.local_expansion[2,1,i+1]
+        i += n+1
+    end
+
+    @show ϕn1s ϕn1s_check
+
+    # χn1
+    χn1s = zeros(Complex{Float64}, expansion_order)
+    for n in 1:expansion_order
+        χn1s[n] = estimate_χn1(source_center, source_box, ω⃗, target_center, n)
+    end
+
+    # check
+    χn1s_check = similar(χn1s)
+    i = 2
+    for n in 1:expansion_order
+        χn1s_check[n] = target_branch.local_expansion[1,2,i+1] + im * target_branch.local_expansion[2,2,i+1]
+        i += n+1
+    end
+
+    @show χn1s χn1s_check
+    =#
+
+    #--- error estimate ---#
+
+    v̂ = vtrue / norm(vtrue)
+
+    println("\n==== error estimates ====\n")
+
+    # ϕ velocity
+    εϕ = 0.0 + 0im
+    for n in expansion_order+1:expansion_order+1
+        εϕ += get_ϕ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=false)
+    end
+
+    @show εϕ/4/pi norm(vtrue_ϕonly-v_ϕonly)
+
+    # χ velocity
+    εχ = 0.0 + 0im
+    for n in expansion_order+1:expansion_order+1
+        εχ += get_χ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=false)
+    end
+
+    @show norm(εχ/4/pi) norm(vtrue_χonly-v_χonly)
+
+    # ϕχ velocity
+    εϕχ = 0.0 + 0im
+    for n in expansion_order+1:expansion_order+1
+        εϕχ += get_ϕχ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=false)
+    end
+
+    @show norm(εϕχ/4/pi) norm(vtrue-v)
+
+    #--- spherical source approximation ---#
+
+    println("\n==== spherical source approximation ====\n")
+
+    # ϕ velocity
+    εϕ = 0.0 + 0im
+    sphere = true
+    for n in expansion_order+1:expansion_order+1
+        εϕ += get_ϕ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere)
+    end
+
+    @show εϕ/4/pi norm(vtrue_ϕonly-v_ϕonly)
+
+    # χ velocity
+    εχ = 0.0 + 0im
+    for n in expansion_order+1:expansion_order+1
+        εχ += get_χ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere)
+    end
+
+    @show norm(εχ/4/pi) norm(vtrue_χonly-v_χonly)
+
+    # ϕχ velocity
+    εϕχ = 0.0 + 0im
+    for n in expansion_order+1:expansion_order+1
+        εϕχ += get_ϕχ_error(source_center, source_box, ω⃗, target_center, n, v̂, r; sphere=true)
+    end
+
+    @show norm(εϕχ/4/pi) norm(vtrue-v)
+
+end
+
+# x_target = SVector{3}(0.0,1.0,1.0) + SVector{3}(0.5,0.5,0.5)
 x_target = -10*SVector{3}(1.0,0.8,1.2) + SVector{3}(0.5,0.5,0.5)
-x_target *= 2
+# x_target *= 2
 expansion_order = 5
 n_sources = 30
 seed = 123
 
-ϕ, v, v_analytic, εϕ, εχ, branch, source_system = multipole_check(x_target, n_sources; seed, expansion_order, χ_method="integration")
-println()
+# ϕ, v, v_analytic, εϕ, εχ, branch, source_system = multipole_check(x_target, n_sources; seed, expansion_order, χ_method="integration")
+
+vmags_nov = Float64[]
+for r in range(sqrt(3)*1.1,stop=20,length=10)
+    for θ in range(0, stop=π, length=10)
+        for ϕ in range(0, stop=2π, length=20)
+            sθ, cθ = sincos(θ)
+            sϕ, cϕ = sincos(ϕ)
+            x_target = SVector{3}(sθ*cϕ, sθ*sϕ, cθ) * r + SVector{3}(1.0,1,1)
+            vmag_nov = multipole_check(x_target, n_sources; seed, expansion_order, method="final χ", χ_method="integration")
+            push!(vmags_nov, vmag_nov)
+        end
+    end
+end
+
+# println()
 
 # errs = Float64[]
 # for θ in range(0, stop=pi/2, length=10)
@@ -545,3 +1190,12 @@ println()
 #     end
 # end
 # @show err10
+
+n_sources = 30
+local_center = SVector{3}(4.0,-5.0,7.0)
+dx_local = SVector{3}(0.0, 0.0, 0.4)
+x_target = local_center + dx_local
+seed = 123
+expansion_order = 5
+# local_check(x_target, dx_local, n_sources; seed, expansion_order, methodϕ="loop", methodχ="loop")
+

@@ -160,10 +160,10 @@ branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3
 # using FMM
 dummy_index = (zeros(Int64,FastMultipole.get_n_bodies(vortexparticles)),)
 dummy_leaf_index = collect(1:3)
-tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), Val(expansion_order), leaf_size)#, dummy_cost_parameter)
+tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), expansion_order, leaf_size)#, dummy_cost_parameter)
 harmonics = initialize_harmonics(expansion_order)
-FastMultipole.body_to_multipole!(branch_2, (vortexparticles,), harmonics, Val(expansion_order))
-FastMultipole.body_to_multipole!(branch_3, (vortexparticles,), harmonics, Val(expansion_order))
+FastMultipole.body_to_multipole!(branch_2, (vortexparticles,), harmonics, expansion_order)
+FastMultipole.body_to_multipole!(branch_3, (vortexparticles,), harmonics, expansion_order)
 
 m2l_harmonics = initialize_harmonics(expansion_order)
 L = zeros(eltype(tree.branches[1].local_expansion), 2, 4)
@@ -171,9 +171,9 @@ lamb_helmholtz = Val(true)
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -187,8 +187,8 @@ FastMultipole.multipole_to_local!(tree.branches[2], tree.branches[3], weights_tm
 FastMultipole.multipole_to_local!(tree.branches[3], tree.branches[2], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 velocity_n_m = zeros(2,3,size(tree.branches[1].multipole_expansion, 3))
-FastMultipole.evaluate_local!((vortexparticles,), tree.branches[2], tree.branches[2].harmonics, velocity_n_m, Val(expansion_order), lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
-FastMultipole.evaluate_local!((vortexparticles,), tree.branches[3], tree.branches[2].harmonics, velocity_n_m, Val(expansion_order), lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
+FastMultipole.evaluate_local!((vortexparticles,), tree.branches[2], tree.branches[2].harmonics, velocity_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
+FastMultipole.evaluate_local!((vortexparticles,), tree.branches[3], tree.branches[2].harmonics, velocity_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
 update_velocity_stretching!(vortexparticles)
 
 for i in 1:2
@@ -271,17 +271,17 @@ branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)
 # dummy_cost_parameter = FastMultipole.dummy_direct_cost_estimate((vortex_particles,), leaf_size)
-tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), Val(expansion_order), leaf_size)#, dummy_cost_parameter)
+tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), expansion_order, leaf_size)#, dummy_cost_parameter)
 
 # manually compute multipole coefficients
-FastMultipole.body_to_multipole!(Point{Vortex}, vortex_particles, branch_2, 1:1, branch_2.harmonics, Val(expansion_order))
-FastMultipole.body_to_multipole!(Point{Vortex}, vortex_particles, branch_3, 2:2, branch_3.harmonics, Val(expansion_order))
+FastMultipole.body_to_multipole!(Point{Vortex}, vortex_particles, branch_2, 1:1, branch_2.harmonics, expansion_order)
+FastMultipole.body_to_multipole!(Point{Vortex}, vortex_particles, branch_3, 2:2, branch_3.harmonics, expansion_order)
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -299,8 +299,8 @@ FastMultipole.multipole_to_local!(branch_3, branch_2, weights_tmp_1, weights_tmp
 # evaluate multipoles
 velocity_n_m = zeros(2,3,size(branch_2.harmonics,3))
 derivatives_switches = DerivativesSwitch(true, true, true, (vortex_particles,))
-FastMultipole.evaluate_local!((vortex_particles,), branch_2, branch_2.harmonics, velocity_n_m, Val(expansion_order), lamb_helmholtz, derivatives_switches)
-FastMultipole.evaluate_local!((vortex_particles,), branch_3, branch_3.harmonics, velocity_n_m, Val(expansion_order), lamb_helmholtz, derivatives_switches)
+FastMultipole.evaluate_local!((vortex_particles,), branch_2, branch_2.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+FastMultipole.evaluate_local!((vortex_particles,), branch_3, branch_3.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
 #FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.5, unsort_bodies=false)
 
 

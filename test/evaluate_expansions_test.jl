@@ -27,7 +27,7 @@ harmonics = initialize_harmonics(expansion_order)
 derivatives_switch = DerivativesSwitch(true,true,true)
 lamb_helmholtz = Val(false)
 velocity_n_m = zeros(2,3,size(harmonics,3))
-u, velocity, gradient = FastMultipole.evaluate_local(Δx, harmonics, velocity_n_m, branch.local_expansion, Val(expansion_order), lamb_helmholtz, derivatives_switch)
+u, velocity, gradient = FastMultipole.evaluate_local(Δx, harmonics, velocity_n_m, branch.local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 
 
 dx = x_target - xs
