@@ -96,10 +96,10 @@ export visualize
 #------- PRECALCULATIONS -------#
 
 # precompute y-axis rotation by π/2 matrices up to 20th order
-update_Hs_π2!(Hs_π2, Val(20))
+update_Hs_π2!(Hs_π2, 21)
 
 # precompute y-axis Wigner matrix normalization up to 20th order
-update_ζs_mag!(ζs_mag, Val(20))
-update_ηs_mag!(ηs_mag, Val(20))
+update_ζs_mag!(ζs_mag, 21)
+update_ηs_mag!(ηs_mag, 21)
 
 end # module
