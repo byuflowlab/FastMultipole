@@ -146,7 +146,7 @@ function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, we
     source_weights = source_branch.multipole_expansion
 
     # translation vector
-    Δx = target_branch.target_center - source_branch.source_center
+    Δx = target_branch.source_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     #--- rotate coordinate system ---#
@@ -298,6 +298,16 @@ function translate_multipole_to_local_z_m01_n(source_weights, t, one_over_t, ::V
     end
 
     return ϕn0_real, ϕn1_real, ϕn1_imag, χn1_real, χn1_imag
+end
+
+function multipole_to_local!(target_branch::Branch{TF}, source_branch, expansion_order, lamb_helmholtz, ε) where TF
+    error_check = !isnothing(ε)
+    weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
+    weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
+    Ts = zeros(TF, length_Ts(expansion_order + error_check))
+    eimϕs = zeros(TF, 2, expansion_order+1+error_check)
+
+    return multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε)
 end
 
 """
@@ -539,7 +549,7 @@ function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tm
     source_weights = source_branch.local_expansion
 
     # translation vector
-    Δx = target_branch.target_center - source_branch.source_center
+    Δx = target_branch.target_center - source_branch.target_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     #--- rotate coordinate system ---#
