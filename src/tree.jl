@@ -1013,16 +1013,25 @@ end
 # end
 
 function initialize_expansion(expansion_order, type=Float64)
+    # incrememnt expansion order to make room for error predictions
+    expansion_order += 1
+
     return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
 function initialize_velocity_n_m(expansion_order, type=Float64)
+    # incrememnt expansion order to make room for error predictions
+    expansion_order += 1
+
     p = expansion_order
     n_harmonics = harmonic_index(p,p)
     return zeros(type, 2, 3, n_harmonics)
 end
 
 function initialize_harmonics(expansion_order, type=Float64)
+    # incrememnt expansion order to make room for error predictions
+    expansion_order += 1
+
     p = expansion_order+2
     n_harmonics = harmonic_index(p,p)
     return zeros(type, 2, 2, n_harmonics)
@@ -1034,4 +1043,30 @@ function reset_expansions!(tree)
         branch.multipole_expansion .= zero(T)
         branch.local_expansion .= zero(T)
     end
+end
+
+#--- debugging functions ---#
+
+function update_family_tree!(family_tree, tree, i_branch)
+	branch = tree.branches[i_branch]
+	if branch.i_parent > 0
+		push!(family_tree, branch.i_parent)
+		update_family_tree!(family_tree, tree, branch.i_parent)
+	end
+end
+
+function get_interaction_list(tree, m2l_list, i_target)
+	# get family tree
+	family_tree = [i_target]
+	update_family_tree!(family_tree, tree, i_target)
+
+	# check m2l list
+	interaction_list = Int[]
+	for (i, j) in m2l_list
+		if i in family_tree
+			push!(interaction_list, j)
+		end
+	end
+
+	return interaction_list
 end

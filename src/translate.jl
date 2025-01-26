@@ -348,7 +348,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
 
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_tol) where LH
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_tol, n_sources, n_targets, source_center, target_center, source_radius, target_radius) where LH
 
     #--- initialize recursive values ---#
 
@@ -377,6 +377,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
     #--- n > 0 and error predictions ---#
 
+    ε_mp, ε_l = zero(r), zero(r)
     n = 1
     for _ in 1:expansion_order+1
 
@@ -440,7 +441,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         end
     end
 
-    @warn "Error tolerance $(ε_tol * ONE_OVER_4π) not reached! Using max expansion order P=$(n-1)."
+    @warn "Error tolerance $(ε_tol * ONE_OVER_4π) not reached! Using max expansion order P=$(n-1).\n\tε_mp = $ε_mp, \n\tε_l = $ε_l"
 
     return n-1
 end
@@ -468,7 +469,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_tol)
+    expansion_order = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_tol, length(source_branch.bodies_index), length(target_branch.bodies_index), source_branch.source_center, target_branch.target_center, source_branch.source_radius, target_branch.target_radius)
 
     #------- translate multipole to local expansion -------#
 

@@ -1,16 +1,16 @@
-function evaluate_multipole!(systems, branch::MultiBranch, harmonics, expansion_order, lamb_helmholtz, derivatives_switches)
+function evaluate_multipole!(systems, target_branch::MultiBranch, source_branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switches)
     for i in eachindex(systems)
-        evaluate_multipole!(systems[i], branch.bodies_index[i], harmonics, branch.multipole_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
+        evaluate_multipole!(systems[i], target_branch.bodies_index[i], harmonics, source_branch.multipole_expansion, source_branch.source_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
     end
 end
 
-function evaluate_multipole!(system, branch, expansion_order, lamb_helmholtz, derivatives_switch)
-    harmonics = branch.harmonics
-    evaluate_multipole!(system, branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
+function evaluate_multipole!(system, target_branch, source_branch, expansion_order, lamb_helmholtz, derivatives_switch)
+    harmonics = source_branch.harmonics
+    evaluate_multipole!(system, target_branch, source_branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
-function evaluate_multipole!(system, branch::SingleBranch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
-    evaluate_multipole!(system, branch.bodies_index, harmonics, branch.multipole_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+function evaluate_multipole!(system, target_branch::SingleBranch, source_branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
+    evaluate_multipole!(system, branch.bodies_index, harmonics, source_branch.multipole_expansion, source_branch.source_center, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
 function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}

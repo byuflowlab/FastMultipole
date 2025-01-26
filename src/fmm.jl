@@ -273,7 +273,7 @@ function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, syste
 
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
-    eimϕs = zeros(TF, 2, expansion_order+2)
+    eimϕs = zeros(TF, 2, expansion_order+1)
     weights_tmp_1 = initialize_expansion(expansion_order, TF)
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
 
@@ -387,7 +387,7 @@ function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expan
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
-    eimϕs = [zeros(TF, 2, expansion_order+2) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, expansion_order+1) for _ in 1:n_threads]
     weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
     weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
@@ -447,13 +447,164 @@ end
 
 #------- horizontal pass -------#
 
+# function horizontal_pass_debug!(target_system, target_branches::Vector{<:Branch{TF}}, source_system, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol; store="local", printstuff=74121) where TF
+#
+#     @assert isnothing(ε_tol) "ε_tol must be turned off for this function"
+#
+#     # increment the expansion order if ε_tol !== nothing
+#     error_check = !(isnothing(ε_tol))
+#
+#     # preallocate containers to be reused
+#     weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
+#     weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
+#     velocity_n_m = zeros(TF, 2, 3, size(weights_tmp_1, 3))
+#     Ts = zeros(TF, length_Ts(expansion_order + error_check))
+#     eimϕs = zeros(TF, 2, expansion_order+1+error_check)
+#
+#     # zero potential
+#     for i in 1:get_n_bodies(target_system)
+#         target_system[i,ScalarPotential()] = zero(TF)
+#         target_system[i,Velocity()] = zero(SVector{3,TF})
+#     end
+#
+#     # store observed and predicted errors
+#     εs_obs = TF[]
+#     εs_pred = TF[]
+#
+#     i_worst = 0
+#     val_worst = 0.0
+#
+#     for (i_printstuff, (i_target, j_source)) in enumerate(m2l_list)
+#         # get local expansion due to just this multipole expansion
+#         target_branch = deepcopy(target_branches[i_target])
+#         target_branch.local_expansion .= zero(TF)
+#         source_branch = source_branches[j_source]
+#         multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_tol)
+#
+#         # store previous potential/velocity
+#         old_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
+#         old_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
+#
+#         # calculate direct velocity
+#         for i in target_branch.bodies_index
+#             target_system[i, ScalarPotential()] = zero(TF)
+#             target_system[i, Velocity()] = zero(SVector{3,TF})
+#         end
+#         derivatives_switch = DerivativesSwitch(true, true, false, target_system)
+#         nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, source_branches, [SVector{2,Int32}(i_target, j_source)])
+#         direct_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
+#         direct_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
+#
+#         # calculate multipole influence
+#         for i in target_branch.bodies_index
+#             target_system[i, ScalarPotential()] = zero(TF)
+#             target_system[i, Velocity()] = zero(SVector{3,TF})
+#         end
+#         evaluate_multipole!(target_system, target_branch, source_branch, source_branch.harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
+#         multipole_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
+#         multipole_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
+#
+#         # calculate expansion velocity
+#         for i in target_branch.bodies_index
+#             target_system[i, ScalarPotential()] = zero(TF)
+#             target_system[i, Velocity()] = zero(SVector{3,TF})
+#         end
+#         evaluate_local!(target_system, target_branch, target_branch.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
+#         expansion_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
+#         expansion_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
+#
+#         # restore previous velocity
+#         if store == "direct"
+#             for (j,i) in enumerate(target_branch.bodies_index)
+#                 target_system[i, ScalarPotential()] = old_potential[j] + direct_potential[j]
+#                 target_system[i, Velocity()] = old_velocity[j] + direct_velocity[j]
+#             end
+#         elseif store == "multipole"
+#             for (j,i) in enumerate(target_branch.bodies_index)
+#                 target_system[i, ScalarPotential()] = old_potential[j] + multipole_potential[j]
+#                 target_system[i, Velocity()] = old_velocity[j] + multipole_velocity[j]
+#             end
+#         elseif store == "local"
+#             for (j,i) in enumerate(target_branch.bodies_index)
+#                 target_system[i, ScalarPotential()] = old_potential[j] + expansion_potential[j]
+#                 target_system[i, Velocity()] = old_velocity[j] + expansion_velocity[j]
+#             end
+#         end
+#
+#         # actual error
+#         ε_obs = [norm(v_direct - v_expansion) for (v_direct, v_expansion) in zip(direct_velocity, expansion_velocity)]
+#         ε_obs_mp = [norm(v_direct - v_expansion) for (v_direct, v_expansion) in zip(direct_velocity, multipole_velocity)]
+#         ε_obs_max = maximum(abs.(ε_obs))
+#
+#         if ε_obs_max > val_worst
+#             val_worst = ε_obs_max
+#             i_worst = i_printstuff
+#         end
+#
+#         if i_printstuff == printstuff
+#             println("\nM2L DEBUG:")
+#             @show mean(abs.(ε_obs_mp)) maximum(abs.(ε_obs_mp))
+#             @show mean(abs.(ε_obs)) maximum(abs.(ε_obs))
+#             @show target_branch.target_center source_branch.source_center target_branch.bodies_index source_branch.bodies_index target_branch.target_radius source_branch.source_radius target_branch.target_box source_branch.source_box
+#             println()
+#             println("for reproducibility:")
+#             source_x = [source_system[i,Position()] for i in source_branch.bodies_index]
+#             target_x = [target_system[i,Position()] for i in target_branch.bodies_index]
+#             source_m = [source_system[i,Strength()] for i in source_branch.bodies_index]
+#             target_m = [target_system[i,Strength()] for i in target_branch.bodies_index]
+#             source_r = [source_system[i,Radius()] for i in source_branch.bodies_index]
+#             target_r = [target_system[i,Radius()] for i in target_branch.bodies_index]
+#
+#             @show source_x source_m source_r target_x target_m target_r
+#         end
+#
+#         # predicted error
+#         ε_pred = error(target_branch, source_branch, expansion_order, RotatedCoefficients(), lamb_helmholtz)
+#
+#         # store results
+#         push!(εs_obs, ε_obs_max)
+#         push!(εs_pred, ε_pred)
+#
+#         if ε_obs_max > 0.1 && false
+#             println("\nERROR > 0.1 ")
+#             @show i_target j_source
+#             @show ε_obs_max ε_pred
+#             @show target_branch.target_radius
+#             @show source_branch.source_radius
+#             @show source_branch.bodies_index
+#             dx = target_branch.target_center - source_branch.source_center
+#             @show dx
+#             @show (source_branch.source_radius + target_branch.target_radius) / norm(dx)
+#
+#             # ensure all bodies are contained inside
+#             for i in target_branch.bodies_index
+#                 dx = target_system[i,Position()] - target_branch.target_center
+#                 @assert norm(dx) <= target_branch.target_radius "found a body outside: dx=$dx, r=$(target_branch.target_radius)"
+#             end
+#
+#             for i in source_branch.bodies_index
+#                 dx = source_system[i,Position()] - source_branch.source_center
+#                 @assert norm(dx) <= source_branch.source_radius
+#             end
+#
+#         end
+#
+#     end
+#
+#     println("\nWorst interaction:\n\ti=$i_worst\n")
+#     return εs_obs, εs_pred
+# end
+
 function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol) where TF
 
+    # increment the expansion order if ε_tol !== nothing
+    error_check = !(isnothing(ε_tol))
+
     # preallocate containers to be reused
-    weights_tmp_1 = initialize_expansion(expansion_order, TF)
-    weights_tmp_2 = initialize_expansion(expansion_order, TF)
-    Ts = zeros(TF, length_Ts(expansion_order))
-    eimϕs = zeros(TF, 2, expansion_order+2)
+    weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
+    weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
+    Ts = zeros(TF, length_Ts(expansion_order + error_check))
+    eimϕs = zeros(TF, 2, expansion_order+1+error_check)
 
     for (i_target, j_source) in m2l_list
         target_branch = target_branches[i_target]
@@ -478,9 +629,12 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
         rem > 0 && (n_per_thread += 1)
         assignments = 1:n_per_thread:length(m2l_list)
 
+        # increment the expansion order if ε_tol !== nothing
+        error_check = !(isnothing(ε_tol))
+
         # try preallocating one set of containers to be reused
         Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
-        eimϕs = [zeros(TF, 2, expansion_order+2) for _ in 1:n_threads]
+        eimϕs = [zeros(TF, 2, expansion_order+1+error_check) for _ in 1:n_threads]
         weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
         weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
@@ -504,7 +658,7 @@ end
 function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order, lamb_helmholtz, derivatives_switches) where TF
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
-    eimϕs = zeros(TF, 2, expansion_order+2)
+    eimϕs = zeros(TF, 2, expansion_order+1)
     weights_tmp_1 = initialize_expansion(expansion_order, TF)
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
     velocity_n_m = zeros(eltype(branches[1]), 2, 3, size(weights_tmp_1, 3))
@@ -525,7 +679,7 @@ function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
-    eimϕs = [zeros(TF, 2, expansion_order+2) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, expansion_order+1) for _ in 1:n_threads]
     weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
     weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
@@ -992,15 +1146,17 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
     # wrap lamb_helmholtz in Val
     lamb_helmholtz = Val(lamb_helmholtz)
 
+    # increment the expansion order if ε_tol !== nothing
+    error_check = !(isnothing(ε_tol))
 
     if n_sources > 0 && n_targets > 0
 
         # precompute y-axis rotation by π/2 matrices (if not already done)
-        update_Hs_π2!(Hs_π2, expansion_order)
+        update_Hs_π2!(Hs_π2, expansion_order + error_check)
 
         # precompute y-axis Wigner matrix normalization (if not already done)
-        update_ζs_mag!(ζs_mag, expansion_order)
-        update_ηs_mag!(ηs_mag, expansion_order)
+        update_ζs_mag!(ζs_mag, expansion_order + error_check)
+        update_ηs_mag!(ηs_mag, expansion_order + error_check)
 
         # reset multipole/local expansions
         reset_target_tree && (reset_expansions!(source_tree))

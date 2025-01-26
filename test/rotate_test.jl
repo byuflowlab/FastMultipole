@@ -322,8 +322,9 @@ Ts = zeros(FastMultipole.length_Ts(expansion_order))
 lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
-source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
-source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
+ind = 1:min(size(source_weights,3), length(unrotated_weights_real))
+source_weights[1,1,ind] .= unrotated_weights_real[ind]
+source_weights[2,1,ind] .= unrotated_weights_imag[ind]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
 FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
@@ -493,8 +494,9 @@ Ts = zeros(FastMultipole.length_Ts(expansion_order))
 lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
-source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
-source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
+ind = 1:min(size(source_weights,3), length(unrotated_weights_real))
+source_weights[1,1,ind] .= unrotated_weights_real[ind]
+source_weights[2,1,ind] .= unrotated_weights_imag[ind]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 back_rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 

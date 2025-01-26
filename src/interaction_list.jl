@@ -12,6 +12,8 @@ function build_interaction_lists(target_branches, source_branches, source_leaf_i
     return m2l_list, direct_list
 end
 
+mean(x) = sum(x) / length(x)
+
 function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
@@ -29,7 +31,8 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     #    mac = separation_distance * multipole_threshold >= summed_radii # meet M2L criteria
 
     # decide whether or not to accept the multipole expansion
-    summed_radii = source_branch.source_radius + target_branch.target_radius
+    # summed_radii = source_branch.source_radius + target_branch.target_radius
+    summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
 
     if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
     #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion

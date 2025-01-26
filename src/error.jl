@@ -134,10 +134,10 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Rotate
     r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
 
     # calculate error
-    return multipole_error(t⃗, r_mp, multipole_branch.multipole_expansion, P, error_method)
+    return multipole_error(t⃗, r_mp, multipole_branch.multipole_expansion, P, error_method, lamb_helmholtz)
 end
 
-function multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_helmholtz)
+function multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_helmholtz::Val{LH}) where LH
     # ensure enough multipole coefficients exist
     Nmax = (-3 + Int(sqrt(9 - 4*(2-2*size(multipole_expansion,3))))) >> 1
     @assert P < Nmax "Error method `RotatedCoefficients` can only predict error up to one lower expansion order than multipole coefficients have been computed; expansion order P=$P was requested, but branches only contain coefficients up to $Nmax"
@@ -290,7 +290,7 @@ function local_error(local_branch, multipole_branch, P, error_method::RotatedCoe
     t⃗ = local_branch.target_center - multipole_branch.source_center
 
     # local max error location
-    r_l = sum(target_branch.target_box) * 0.33333333333333333333 * sqrt(3)
+    r_l = sum(local_branch.target_box) * 0.33333333333333333333 * sqrt(3)
 
     # calculate error
     return local_error(t⃗, r_l, multipole_branch.multipole_expansion, P, error_method, lamb_helmholtz)
@@ -321,7 +321,11 @@ function local_error(t⃗, r_l, multipole_expansion, P, error_method, lamb_helmh
     # get local coefficients
     # extract degree n, order 0-1 coefficients for error prediction
     # this function also performs the lamb-helmholtz transformation
-    n!_t_np1 = factorial(nmax) / r^(n+1)
+    if nmax < 21
+        n!_t_np1 = factorial(nmax) / r^(nmax+1)
+    else
+        n!_t_np1 = typeof(r)(factorial(big(nmax)) / r^(nmax+1))
+    end
     ϕn0_real, ϕn1_real, ϕn1_imag, χn1_real, χn1_imag = translate_multipole_to_local_z_m01_n(weights_tmp_2, r, 1.0/r, lamb_helmholtz, n!_t_np1, nmax)
 
     # other values
