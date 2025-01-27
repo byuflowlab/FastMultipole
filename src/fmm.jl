@@ -246,7 +246,7 @@ function nearfield_device!(target_systems, derivatives_switches, source_systems)
     center, source_radius, target_radius = SVector{3,TF}(0.0,0,0), zero(TF), zero(TF)
     source_box, target_box, expansion_order = SVector{6,TF}(0.0,0,0,0,0,0), SVector{3,TF}(0.0,0,0), 0
     target_branch = Branch(target_bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
-    levels_index, leaf_index, sort_index, inverse_sort_index, leaf_size = [1:1], [1], dummy_sort_index(target_systems), dummy_sort_index(target_systems), maximum(target_bodies_index)
+    levels_index, leaf_index, sort_index, inverse_sort_index, leaf_size = [1:1], [1], dummy_sort_index(target_systems), dummy_sort_index(target_systems), full_leaf_size(target_systems)
     target_tree = Tree([target_branch], levels_index, leaf_index, sort_index, inverse_sort_index, buffer, Val(expansion_order), leaf_size)
 
     if target_systems === source_systems
@@ -255,7 +255,7 @@ function nearfield_device!(target_systems, derivatives_switches, source_systems)
         # build source tree
         source_bodies_index = get_bodies_index(source_systems)
         source_branch = Branch(source_bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, source_radius, target_radius, source_box, target_box, expansion_order)
-        sort_index, inverse_sort_index, leaf_size = dummy_sort_index(source_systems), dummy_sort_index(source_systems), maximum(source_bodies_index)
+        sort_index, inverse_sort_index, leaf_size = dummy_sort_index(source_systems), dummy_sort_index(source_systems), full_leaf_size(source_systems)
         source_tree = Tree([source_branch], levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)
     end
 
@@ -770,6 +770,14 @@ function downward_pass_multithread!(branches, systems, derivatives_switch, expan
     end
 end
 
+@inline default_leaf_size(systems::Tuple) = SVector{length(systems)}(100 for _ in eachindex(systems))
+
+@inline default_leaf_size(system) = 100
+
+@inline full_leaf_size(systems::Tuple) = SVector{length(systems)}(get_n_bodies(system) for system in systems)
+
+@inline full_leaf_size(system) = get_n_bodies(system)
+
 #--- running FMM ---#
 
 """
@@ -816,7 +824,7 @@ Apply all interactions of `source_systems` acting on `target_systems` using the 
 """
 function fmm!(target_systems, source_systems;
     ε_tol=nothing,
-    expansion_order::Int=5, leaf_size_source=50, leaf_size_target=50, multipole_threshold=0.4,
+    expansion_order::Int=5, leaf_size_source=default_leaf_size(source_systems), leaf_size_target=default_leaf_size(target_systems), multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
@@ -887,7 +895,7 @@ Apply all interactions of `systems` acting on itself using the fast multipole me
 """
 function fmm!(systems;
     ε_tol=nothing,
-    expansion_order::Int=5, leaf_size=50, multipole_threshold=0.4,
+    expansion_order::Int=5, leaf_size=default_leaf_size(systems), multipole_threshold=0.4,
     lamb_helmholtz::Bool=false,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,

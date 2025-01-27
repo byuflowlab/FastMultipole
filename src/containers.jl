@@ -269,7 +269,7 @@ struct MultiTree{TF,N,TB} <: Tree{TF}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
     expansion_order::Int64
-    leaf_size::Int64    # max number of bodies in a leaf
+    leaf_size::SVector{N,Int64}    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     # cost_parameters::SVector{N,Float64}
 end

@@ -162,7 +162,7 @@ function child_branches!(branches, system, sort_index, buffer, sort_index_buffer
             update_octant_accumulator!(cumulative_octant_census)
 
             # number of child branches
-            if get_population(cumulative_octant_census) > leaf_size
+            if exceeds(cumulative_octant_census, leaf_size)
                 for i_octant in 1:8
                     if get_population(cumulative_octant_census, i_octant) > 0
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
@@ -236,6 +236,15 @@ end
 @inline get_population(cumulative_octant_census::AbstractVector) = cumulative_octant_census[end]
 
 @inline get_population(cumulative_octant_census::AbstractMatrix) = sum(cumulative_octant_census[:,end])
+
+@inline exceeds(cumulative_octant_census::AbstractVector, leaf_size) = cumulative_octant_census[end] > leaf_size
+
+@inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size)
+    for i_element in 1:size(cumulative_octant_census, 1)
+        cumulative_octant_census[i_element,end] > leaf_size[i_element] && (return true)
+    end
+    return false
+end
 
 @inline function get_child_center(parent_center, parent_target_box::SVector, i_octant)
     delta = parent_target_box[1] * 0.5
@@ -313,7 +322,6 @@ end
 @inline function get_bodies_index(cumulative_octant_census::AbstractMatrix, parent_bodies_indices::AbstractVector, i_octant)
     n_systems = size(cumulative_octant_census,1)
     bodies_index = SVector{n_systems,UnitRange{Int64}}([get_bodies_index(view(cumulative_octant_census,i_system,:), parent_bodies_indices[i_system], i_octant) for i_system in 1:n_systems])
-    # TODO why does this require square brackets? ah, because StaticArrays tries to collect the unit range ONLY IF THERE IS ONLY ONE;
     return bodies_index
 end
 
@@ -322,7 +330,6 @@ end
 @inline function get_bodies_index(systems::Tuple)
     n_systems = length(systems)
     return SVector{n_systems,UnitRange{Int64}}([get_bodies_index(system) for system in systems])
-    # TODO why does this require square brackets? ah, because StaticArrays tries to collect the unit range ONLY IF THERE IS ONLY ONE;
 end
 
 #####
@@ -369,7 +376,8 @@ end
 #####
 @inline function get_n_children(cumulative_octant_census, leaf_size)
     n_children = 0
-    if get_population(cumulative_octant_census) > leaf_size
+
+    if exceeds(cumulative_octant_census, leaf_size)
         for i_octant in 1:8
             get_population(cumulative_octant_census,i_octant) > 0 && (n_children += 1)
         end

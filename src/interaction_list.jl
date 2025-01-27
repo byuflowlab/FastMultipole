@@ -31,8 +31,8 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     #    mac = separation_distance * multipole_threshold >= summed_radii # meet M2L criteria
 
     # decide whether or not to accept the multipole expansion
-    # summed_radii = source_branch.source_radius + target_branch.target_radius
-    summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
+    summed_radii = source_branch.source_radius + target_branch.target_radius
+    # summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
 
     if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
     #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
