@@ -1,6 +1,6 @@
 using Statistics
 
-expansion_order, leaf_size, multipole_threshold = 10, 100, 0.5
+expansion_order, leaf_size, multipole_threshold = 20, 100, 0.5
 n_bodies = 10000
 
 shrink_recenter = true
@@ -15,7 +15,7 @@ validation_potential2 = validation_system2.potential[1,:]
 
 @assert validation_potential == validation_potential2
 
-ε_tol = 1e-3
+ε_tol = 0.01
 # ε_tol = nothing
 system = generate_gravitational(seed, n_bodies; radius_factor=0.0)
 system2 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
@@ -28,6 +28,10 @@ tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system; e
 potential = system.potential[1,:]
 @show maximum(abs.(potential - validation_potential))
 
+velocity_err = [norm(system.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
+
+@show maximum(velocity_err)
+
 println("\n===== radius factor = 0.1 =====\n")
 
 tree2, m2l_list2, direct_list2, derivatives_switches2 = FastMultipole.fmm!(system2; expansion_order, leaf_size, multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter, ε_tol)
@@ -36,6 +40,11 @@ tree2, m2l_list2, direct_list2, derivatives_switches2 = FastMultipole.fmm!(syste
 potential2 = system2.potential[1,:]
 @show maximum(abs.(potential2 - validation_potential))
 
+velocity_err = [norm(system2.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
+
+@show maximum(velocity_err)
+
+#=
 #--- get true potential for nearfield = false ---#
 
 # system2.potential .= 0.0
@@ -91,4 +100,5 @@ dp_true_hp = potential_true - potential_hp
 @show mean(dp_true_mp)
 @show mean(dp_true_fmm)
 @show mean(dp_true_hp)
+=#
 =#
