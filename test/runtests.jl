@@ -15,6 +15,7 @@ include("./gravitational.jl")
 include("./vortex.jl")
 include("./panels.jl")
 include("evaluate_multipole.jl")
+include("bodytolocal.jl")
 
 #--- helper functions ---#
 

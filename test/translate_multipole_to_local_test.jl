@@ -48,9 +48,9 @@ local_expansion_test = ComplexF64[0.12778297701518376 + 4.529876741832122e-19im,
 
 expansion_order = 10
 box = SVector{3}(0.0,0.0,0.0)
-source_box = SVector{6}(0.0 for _ in 1:6)
-source_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([0.2, 0.4, -0.15999999999999998]), 0.0, 0.0, source_box, box, expansion_order)
-target_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.5, -4.3999999999999995, 0.8]), 0.0, 0.0, source_box, box, expansion_order)
+
+source_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([0.2, 0.4, -0.15999999999999998]), SVector{3}([0.2, 0.4, -0.15999999999999998]), 0.0, 0.0, box, box, expansion_order)
+target_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.5, -4.3999999999999995, 0.8]), SVector{3}([2.5, -4.3999999999999995, 0.8]), 0.0, 0.0, box, box, expansion_order)
 
 i, i_compressed = 1, 1
 for n in 0:expansion_order
@@ -66,7 +66,7 @@ end
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))

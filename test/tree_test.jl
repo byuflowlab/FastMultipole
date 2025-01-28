@@ -33,7 +33,7 @@
     end
 
     # test branch! function
-    expansion_order, leaf_size, multipole_threshold = 2, 1, 0.5
+    expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
     tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=false)
 
     r1 = max(max(tree.branches[1].target_box[1],tree.branches[1].target_box[2]),tree.branches[1].target_box[3])
@@ -45,8 +45,8 @@
         1 0.65+r1/2 0.65+r1/2 0.55-r1/2 sqrt(3)*r2;
         1 0.65-r1/2 0.65-r1/2 0.55+r1/2 sqrt(3)*r2;
         1 0.65+r1/2 0.65+r1/2 0.55+r1/2 sqrt(3)*r2;
-        1 tree.branches[2].center[1]-r2/2 tree.branches[2].center[2]-r2/2 tree.branches[2].center[3]-r2/2 sqrt(3)*r2/2;
-        1 tree.branches[2].center[1]-r2/2 tree.branches[2].center[2]-r2/2 tree.branches[2].center[3]+r2/2 sqrt(3)*r2/2
+        1 tree.branches[2].target_center[1]-r2/2 tree.branches[2].target_center[2]-r2/2 tree.branches[2].target_center[3]-r2/2 sqrt(3)*r2/2;
+        1 tree.branches[2].target_center[1]-r2/2 tree.branches[2].target_center[2]-r2/2 tree.branches[2].target_center[3]+r2/2 sqrt(3)*r2/2
     ]
 
     @test length(tree.branches) == size(test_branches)[1]
@@ -54,7 +54,7 @@
     for i_branch in 1:length(tree.branches)
         @test isapprox(length(tree.branches[i_branch].bodies_index[1]), test_branches[i_branch,1]; atol=1e-8)
         for i in 1:3
-            @test isapprox(tree.branches[i_branch].center[i], test_branches[i_branch,1+i]; atol=1e-7)
+            @test isapprox(tree.branches[i_branch].target_center[i], test_branches[i_branch,1+i]; atol=1e-7)
         end
         @test isapprox(tree.branches[i_branch].target_radius, test_branches[i_branch,5]; atol=1e-7)
     end
@@ -78,47 +78,50 @@ end
 
     # test target box
     center, box = FastMultipole.center_box((elements,))
+    source_center, source_box = FastMultipole.source_center_box((elements,), FastMultipole.get_bodies_index((elements,)))
 
     # test source box
-    target_radius, source_radius, source_box = FastMultipole.shrink_radius_box(center, (elements,), SVector{1}((1:5,)))
+    target_radius, source_radius = FastMultipole.shrink_radius(center, source_center, (elements,), SVector{1}((1:5,)))
 
     # manually
-    dx_min, dx_max, dy_min, dy_max, dz_min, dz_max = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    x_min, x_max, y_min, y_max, z_min, z_max = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     for i in 1:5
-        dx_min = min(dx_min, elements.bodies[i].position[1] - center[1] - elements.bodies[i].radius)
-        dy_min = min(dy_min, elements.bodies[i].position[2] - center[2] - elements.bodies[i].radius)
-        dz_min = min(dz_min, elements.bodies[i].position[3] - center[3] - elements.bodies[i].radius)
-        dx_max = max(dx_max, elements.bodies[i].position[1] - center[1] + elements.bodies[i].radius)
-        dy_max = max(dy_max, elements.bodies[i].position[2] - center[2] + elements.bodies[i].radius)
-        dz_max = max(dz_max, elements.bodies[i].position[3] - center[3] + elements.bodies[i].radius)
+        x_min = min(x_min, elements.bodies[i].position[1] - elements.bodies[i].radius)
+        y_min = min(y_min, elements.bodies[i].position[2] - elements.bodies[i].radius)
+        z_min = min(z_min, elements.bodies[i].position[3] - elements.bodies[i].radius)
+        x_max = max(x_max, elements.bodies[i].position[1] + elements.bodies[i].radius)
+        y_max = max(y_max, elements.bodies[i].position[2] + elements.bodies[i].radius)
+        z_max = max(z_max, elements.bodies[i].position[3] + elements.bodies[i].radius)
     end
 
-    test_source_box = [dx_min, dx_max, dy_min, dy_max, dz_min, dz_max]
+    test_source_center = SVector{3}((x_min+x_max)*0.5, (y_min+y_max)*0.5, (z_min+z_max)*0.5)
+    test_source_box = [(x_max-x_min)*0.5, (y_max-y_min)*0.5, (z_max-z_min)*0.5]
     test_source_radius = 0.0
     for i_body in 1:5
-        test_source_radius = max(test_source_radius, norm(elements.bodies[i_body].position - center) + elements.bodies[i_body].radius)
+        test_source_radius = max(test_source_radius, norm(elements.bodies[i_body].position - test_source_center) + elements.bodies[i_body].radius)
     end
 
+    @test isapprox(test_source_center, source_center; atol=1e-12)
     @test isapprox(test_source_radius, source_radius; atol=1e-12)
-    for i in 1:6
-        @test isapprox(test_source_box[i], source_box[i]; atol=1e-12)
-    end
+    @test isapprox(test_source_box, source_box; atol=1e-12)
 
     # test branch! function
-    expansion_order, leaf_size, multipole_threshold = 2, 1, 0.5
+    expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
     tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=true)
 
     # test branch 3-5 (leaf branches)
     function test_leaf(branches, elements, i_leaf)
         branch = tree.branches[i_leaf]
         i_body = branch.bodies_index[1][1]
-        test_center = elements.bodies[i_body].position
+        test_target_center = elements.bodies[i_body].position
+        test_source_center = elements.bodies[i_body].position
         test_target_radius = 0.0
         test_source_radius = elements.bodies[i_body].radius
         test_target_box = SVector{3}(0.0,0.0,0.0)
-        test_source_box = SVector{6}(-test_source_radius, test_source_radius, -test_source_radius, test_source_radius, -test_source_radius, test_source_radius)
+        test_source_box = SVector{3}(test_source_radius for _ in 1:3)
 
-        @test isapprox(test_center, branch.center; atol=1e-12)
+        @test isapprox(test_target_center, branch.target_center; atol=1e-12)
+        @test isapprox(test_source_center, branch.source_center; atol=1e-12)
         @test isapprox(test_target_radius, branch.target_radius; atol=1e-12)
         @test isapprox(test_source_radius, branch.source_radius; atol=1e-12)
         @test isapprox(test_target_box, branch.target_box; atol=1e-12)
@@ -139,9 +142,21 @@ end
     branch = tree.branches[2]
     bodies_index = branch.bodies_index[1]
     centers = [elements.bodies[i].position for i in bodies_index]
-    test_center = sum(centers) / length(centers)
-    test_target_radius = maximum([norm(elements.bodies[i].position - branch.center) for i in bodies_index])
-    test_source_radius = maximum([norm(elements.bodies[i].position - branch.center) + elements.bodies[i].radius for i in bodies_index])
+    test_target_center = sum(centers) / length(centers)
+
+    # source center
+    min_x_source = minimum([centers[i][1] - elements.bodies[i].radius for i in bodies_index])
+    min_y_source = minimum([centers[i][2] - elements.bodies[i].radius for i in bodies_index])
+    min_z_source = minimum([centers[i][3] - elements.bodies[i].radius for i in bodies_index])
+    max_x_source = maximum([centers[i][1] + elements.bodies[i].radius for i in bodies_index])
+    max_y_source = maximum([centers[i][2] + elements.bodies[i].radius for i in bodies_index])
+    max_z_source = maximum([centers[i][3] + elements.bodies[i].radius for i in bodies_index])
+
+    test_source_center = SVector{3}((min_x_source+max_x_source)*0.5, (min_y_source+max_y_source)*0.5, (min_z_source+max_z_source)*0.5)
+    test_source_box = SVector{3}((max_x_source-min_x_source)*0.5, (max_y_source-min_y_source)*0.5, (max_z_source-min_z_source)*0.5)
+
+    test_target_radius = maximum([norm(elements.bodies[i].position - branch.target_center) for i in bodies_index])
+    test_source_radius = maximum([norm(elements.bodies[i].position - branch.source_center) + elements.bodies[i].radius for i in bodies_index])
     bodies_x = [c[1] for c in centers]
     bodies_y = [c[2] for c in centers]
     bodies_z = [c[3] for c in centers]
@@ -153,16 +168,8 @@ end
     max_z = maximum(bodies_z)
     test_target_box = SVector{3}((max_x - min_x)/2, (max_y - min_y)/2, (max_z - min_z)/2)
 
-    min_x_source = minimum([centers[i][1] - elements.bodies[i].radius for i in bodies_index])
-    min_y_source = minimum([centers[i][2] - elements.bodies[i].radius for i in bodies_index])
-    min_z_source = minimum([centers[i][3] - elements.bodies[i].radius for i in bodies_index])
-    max_x_source = maximum([centers[i][1] + elements.bodies[i].radius for i in bodies_index])
-    max_y_source = maximum([centers[i][2] + elements.bodies[i].radius for i in bodies_index])
-    max_z_source = maximum([centers[i][3] + elements.bodies[i].radius for i in bodies_index])
-
-    test_source_box = SVector{6}(min_x_source - branch.center[1], max_x_source - branch.center[1], min_y_source - branch.center[2], max_y_source - branch.center[2], min_z_source - branch.center[3], max_z_source - branch.center[3])
-
-    @test isapprox(test_center, branch.center; atol=1e-12)
+    @test isapprox(test_target_center, branch.target_center; atol=1e-12)
+    @test isapprox(test_source_center, branch.source_center; atol=1e-12)
     @test isapprox(test_target_radius, branch.target_radius; atol=1e-12)
     @test isapprox(test_source_radius, branch.source_radius; atol=1e-12)
     @test isapprox(test_target_box, branch.target_box; atol=1e-12)
@@ -208,20 +215,3 @@ end
 
 end
 
-@testset "octree creation: accumulate charge" begin
-
-n_bodies = 101
-bodies = rand(8,n_bodies)
-system = Gravitational(bodies)
-
-tree = fmm.Tree(system; leaf_size=5, accumulate_charge=true)
-
-for i_branch in 1:length(tree.branches)
-    charge = 0.0
-    for i_body in tree.branches[i_branch].bodies_index
-        charge += system.bodies[i_body].strength
-    end
-    @test isapprox(charge, tree.branches[i_branch].charge; atol=1e-12)
-end
-
-end

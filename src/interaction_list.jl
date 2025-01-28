@@ -1,253 +1,53 @@
 #--- create interaction lists ---#
 
-function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order)
+function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # prepare containers
-    m2l_list = Vector{Tuple{Int32,Int32,Int64}}(undef,0)
+    m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
 
     # populate lists
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced), error_method, expansion_order)
+    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
 
     return m2l_list, direct_list
 end
 
-function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, expansion_order::Int, error_method::ErrorMethod)
-    return expansion_order
-end
+mean(x) = sum(x) / length(x)
 
-function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, ::Dynamic{PMAX,RTOL}, error_method::ErrorMethod) where {PMAX,RTOL}
-    return get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, PMAX, RTOL, error_method)
-end
-
-@inline function warn_Pmax()
-    if WARNING_FLAG_PMAX[]
-        @warn "error tolerance not met with dynamic expansion order; try increasing `Pmax`"
-        WARNING_FLAG_PMAX[] = false
-    end
-end
-
-
-"""
-    get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, Pmax, ε_rel, error_method)
-
-Returns the smallest expansion order not greater than `Pmax` and satisfying the specified relative error tolerance.
-
-# Inputs
-
-* `r_min::Flaot64`: distance from the multipole expansion to the closest target
-* `r_max::Float64`: distance from the local expansion to the farthest target
-* `ρ_min::Float64`: distance from the local expansion to the closest source
-* `ρ_max::Float64`: distance from the multipole expansion to the farthest source
-* `ΔC2::Float64`: distance squared between multipole and local centers
-* `Pmax::Int64`: maximum allowable expansion order
-* `ε_rel::Float64`: relative error tolerance
-* `error_method::ErrorMethod`: type used to dispatch on the desired error method
-
-# Ouputs
-
-* `P::Int`: the smallest expansion order to satisfy the error tolerance
-
-"""
-function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, Pmax, ε_rel, ::Union{EqualSpheres, UnequalSpheres, UnequalBoxes})
-    ρ_max_over_r_min = ρ_max / r_min
-    r_max_over_ρ_min = r_max / ρ_min
-    t1 = ρ_max_over_r_min
-    t2 = r_max_over_ρ_min
-    for P in 0:Pmax-1
-        t1 + t2 < ε_rel && (return P)
-        t1 *= ρ_max_over_r_min
-        t2 *= r_max_over_ρ_min
-    end
-
-    warn_Pmax()
-
-    return Pmax
-end
-
-function get_P(r_min, r_max, ρ_min, ρ_max, ΔC2, Pmax, ε_rel, ::Union{UniformUnequalSpheres, UniformUnequalBoxes})
-
-
-    # multipole error
-    ρ_max_over_r_min = ρ_max / r_min
-    ε_multipole = 1.5 * ρ_max / (r_min - ρ_max)
-
-    # local error
-    ρ_max2 = ρ_max * ρ_max
-    Γ = 3 * r_max * r_min / (2 * ρ_max2 * ρ_max)
-
-    # distance from multipole center to point closest to the local expansion
-    ΔC = sqrt(ΔC2)
-    ρ_max_line = ΔC - ρ_min
-
-    # distance from local center to farthest multipole point
-    ΔC_plus = ρ_min + ρ_max_line + ρ_max_line
-
-    # distance from local center to nearest multipole point
-    ΔC_minus = ρ_min
-
-    t_plus = r_max / ΔC_plus
-    one_over_ΔC_minus = 1/ΔC_minus
-    t_minus = r_max * one_over_ΔC_minus
-    L = log((1-t_plus)/(1-t_minus))
-    ΔC2_inv = 1/(2*ΔC)
-    ρ2_ΔC2_2ΔC = (ρ_max2 - ΔC2) * ΔC2_inv
-    r2_ΔC2 = r_max * r_max * ΔC2_inv
-
-    # recursively tracked quantities
-    Lζ_sum_pm1 = L
-    Lζ_sum_pm2 = L
-    Lζ_sum_pm3 = L
-    t_plus_n = t_plus
-    t_minus_n = t_minus
-    η_p = log(ΔC_plus * one_over_ΔC_minus)
-    r_inv = 1/r_max
-    η_pm1 = η_p + (ΔC_plus - ΔC_minus) * r_inv
-    η_pm2 = η_pm1 + (ΔC_plus*ΔC_plus - ΔC_minus*ΔC_minus) * r_inv * r_inv * 0.5
-
-    #--- test p=0 ---#
-
-    # test error
-    ε_local = Γ * (r_max * (η_pm1 + Lζ_sum_pm2) + ρ2_ΔC2_2ΔC * (η_p + Lζ_sum_pm1) - r2_ΔC2 * (η_pm2 + Lζ_sum_pm3))
-    ε_multipole * 0.25 + ε_local < ε_rel && (return 0)
-
-    # recurse multipole
-    ε_multipole *= ρ_max_over_r_min
-
-    # recurse local
-    η_pm2 = η_pm1
-    η_pm1 = η_p
-    η_p = zero(r_min)
-
-    #--- test p>0 ---#
-
-    for P in 1:Pmax-1
-        # get local error
-        ε_local = Γ * (r_max * (η_pm1 + Lζ_sum_pm2) + ρ2_ΔC2_2ΔC * (η_p + Lζ_sum_pm1) - r2_ΔC2 * (η_pm2 + Lζ_sum_pm3))
-
-        # check error
-        ε_multipole / (P+4) + ε_local < ε_rel && (return P)
-
-        # recurse multipole
-        ε_multipole *= ρ_max_over_r_min
-
-        # recurse local
-        Lζ_sum_pm3 = Lζ_sum_pm2
-        Lζ_sum_pm2 = Lζ_sum_pm1
-        Lζ_sum_pm1 += (t_plus_n - t_minus_n) / P
-        t_plus_n *= t_plus
-        t_minus_n *= t_minus
-        η_pm2 = η_pm1
-        η_pm1 = η_p
-        η_p = zero(r_min)
-    end
-
-    warn_Pmax()
-
-    return Pmax
-end
-
-function minimum_distance(dx, rx_minus, rx_plus)
-    right = dx + rx_plus
-    left = dx + rx_minus
-    same_sign = right * left >= 0
-    return same_sign * min(right, left)
-end
-
-function minimum_distance(center1, center2, box2::SVector{6,<:Any})
-    x1, y1, z1 = center1
-    x2, y2, z2 = center2
-    bx_min, bx_max, by_min, by_max, bz_min, bz_max = box2
-    Δx = minimum_distance(x2-x1, bx_min, bx_max)
-    Δy = minimum_distance(y2-y1, by_min, by_max)
-    Δz = minimum_distance(z2-z1, bz_min, bz_max)
-    return sqrt(Δx*Δx + Δy*Δy + Δz*Δz)
-end
-
-function minimum_distance(center1, center2, box2::SVector{3,<:Any})
-    x1, y1, z1 = center1
-    x2, y2, z2 = center2
-    bx, by, bz = box2
-    Δx = minimum_distance(x2-x1, -bx, bx)
-    Δy = minimum_distance(y2-y1, -by, by)
-    Δz = minimum_distance(z2-z1, -bz, bz)
-    return sqrt(Δx*Δx + Δy*Δy + Δz*Δz)
-end
-
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UnequalBoxes)
-    r_max = target_branch.target_radius
-    r_min = minimum_distance(source_branch.center, target_branch.center, target_branch.target_box)
-    ρ_max = source_branch.source_radius
-    ρ_min = minimum_distance(target_branch.center, source_branch.center, source_branch.source_box)
-
-    return r_min, r_max, ρ_min, ρ_max
-end
-
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::UniformUnequalBoxes)
-    r_max = target_branch.target_radius
-    r_min = minimum_distance(source_branch.center, target_branch.center, target_branch.target_box)
-    ρ_max = source_branch.source_radius
-    ρ_min = sqrt(separation_distance_squared) - ρ_max
-
-    return r_min, r_max, ρ_min, ρ_max
-end
-
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::Union{UnequalSpheres, UniformUnequalSpheres})
-    separation_distance = sqrt(separation_distance_squared)
-    r_max = target_branch.target_radius
-    r_min = separation_distance - r_max
-    ρ_max = source_branch.source_radius
-    ρ_min = separation_distance - ρ_max
-
-    return r_min, r_max, ρ_min, ρ_max
-end
-
-@inline function get_r_ρ(target_branch, source_branch, separation_distance_squared, ::EqualSpheres)
-    # see Section 3.5.2, Pringle, 1994
-    # but normalized by a different mean potential
-    # to remove the singularity
-    separation_distance = sqrt(separation_distance_squared)
-    r_max = source_branch.source_radius # should I use source or target radius?
-    r_min = separation_distance - r_max
-    ρ_max = r_max
-    ρ_min = r_min
-
-    return r_min, r_max, ρ_min, ρ_max
-end
-
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, error_method::ErrorMethod, expansion_order) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
 
     # branch center separation distance
-    Δx, Δy, Δz = source_branch.center - target_branch.center
+    Δx, Δy, Δz = target_branch.target_center - source_branch.source_center
     separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
 
     # get r_min, r_max, ρ_min, ρ_max here, based on error method
-    r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance_squared, error_method)
+    # r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance_squared)
 
     #    # Barba's multipole acceptance test- slightly different than mine
     #    summed_radii = target_branch.target_radius + source_branch.source_radius
     #    mac = separation_distance * multipole_threshold >= summed_radii # meet M2L criteria
 
     # decide whether or not to accept the multipole expansion
-    summed_radii = r_max + ρ_max
+    summed_radii = source_branch.source_radius + target_branch.target_radius
+    # summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
+
     if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
     #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
         if ff
-            P = get_P(r_min, r_max, ρ_min, ρ_max, separation_distance_squared, expansion_order, error_method)
-            push!(m2l_list, (i_target, j_source, P))
+            push!(m2l_list, SVector{2}(i_target, j_source))
         end
     elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
         nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
     elseif source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
     else # source is not a leaf AND target is a leaf or is smaller
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced, error_method, expansion_order)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
         end
     end
 end
@@ -329,7 +129,7 @@ end
     end
 end
 
-function InteractionList(direct_list, target_systems, target_tree::Tree, source_systems, source_tree::Tree{TF,<:Any}, derivatives_switches) where TF
+function InteractionList(direct_list, target_systems, target_tree::Tree, source_systems, source_tree::Tree{TF}, derivatives_switches) where TF
     # unpack tree
     leaf_index = source_tree.leaf_index
 
@@ -356,15 +156,5 @@ function InteractionList(direct_list, target_systems, target_tree::Tree, source_
     influence = zeros(TF,n_rows_max)
 
     return InteractionList{TF}(influence_matrices, strengths, influence, direct_list)
-end
-
-#--- dispatching dynamic expansion order ---#
-
-@inline function get_Pmax(expansion_order::Int)
-    return expansion_order
-end
-
-@inline function get_Pmax(expansion_order::Dynamic{PMAX,<:Any}) where PMAX
-    return PMAX
 end
 

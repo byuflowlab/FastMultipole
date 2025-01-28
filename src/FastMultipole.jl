@@ -9,8 +9,10 @@ using WriteVTK
 
 #------- CONSTANTS -------#
 
-const ONE_OVER_4π = 1/4/pi
+const ONE_OVER_4π = 1/(4*π)
 const ONE_THIRD = 1/3
+const π_over_2 = π/2
+const π2 = 2*π
 const DEBUG = Array{Bool,0}(undef)
 DEBUG[] = false
 
@@ -21,12 +23,6 @@ const WARNING_FLAG_PMAX = Array{Bool,0}(undef)
 WARNING_FLAG_PMAX[] = true
 
 # multithreading parameters
-#const MIN_NPT_B2M = 1
-#const MIN_NPT_M2M = 1
-#const MIN_NPT_M2L = 1
-#const MIN_NPT_L2L = 1
-#const MIN_NPT_L2B = 1
-#const MIN_NPT_NF = 1
 const MIN_NPT_B2M = 100
 const MIN_NPT_M2M = 100
 const MIN_NPT_M2L = 100
@@ -37,7 +33,7 @@ const MIN_NPT_NF = 100
 # preallocate y-axis rotation matrices by π/2
 const Hs_π2 = Float64[1.0]
 
-# preallocate y-axis Wigner matrix normalization
+# preallocate y-axis rotation Wigner matrix normalization
 const ζs_mag = Float64[1.0]
 const ηs_mag = Float64[1.0]
 
@@ -73,13 +69,17 @@ include("derivativesswitch.jl")
 
 export DerivativesSwitch
 
+include("error.jl")
+
+export multipole_error, local_error, error
+
 include("sortwrapper.jl")
 
 export SortWrapper
 
 include("interaction_list.jl")
 
-export EqualSpheres, UnequalSpheres, UnequalBoxes, Dynamic, build_interaction_lists
+export EqualSpheres, UnequalSpheres, UnequalBoxes, UniformUnequalSpheres, UniformUnequalBoxes, UniformCubes, UniformCubesVelocity, Dynamic, build_interaction_lists
 
 include("fmm.jl")
 
@@ -96,10 +96,10 @@ export visualize
 #------- PRECALCULATIONS -------#
 
 # precompute y-axis rotation by π/2 matrices up to 20th order
-update_Hs_π2!(Hs_π2, Val(20))
+update_Hs_π2!(Hs_π2, 21)
 
 # precompute y-axis Wigner matrix normalization up to 20th order
-update_ζs_mag!(ζs_mag, Val(20))
-update_ηs_mag!(ηs_mag, Val(20))
+update_ζs_mag!(ζs_mag, 21)
+update_ηs_mag!(ηs_mag, 21)
 
 end # module

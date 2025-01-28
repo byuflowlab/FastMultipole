@@ -131,8 +131,6 @@ struct ExpansionSwitch{SP,VP} end
 
 abstract type ErrorMethod end
 
-struct EqualSpheres <: ErrorMethod end
-
 struct UnequalSpheres <: ErrorMethod end
 
 struct UnequalBoxes <: ErrorMethod end
@@ -141,11 +139,7 @@ struct UniformUnequalSpheres <: ErrorMethod end
 
 struct UniformUnequalBoxes <: ErrorMethod end
 
-#------- expansion order -------#
-
-struct Dynamic{PMAX,RTOL} end
-
-Dynamic(PMAX,RTOL) = Dynamic{PMAX,RTOL}()
+struct RotatedCoefficients <: ErrorMethod end
 
 #------- octree creation -------#
 
@@ -183,13 +177,12 @@ struct MultiBranch{TF,N} <: Branch{TF}
     branch_index::UnitRange{Int64}
     i_parent::Int64
     i_leaf::Int64
-    center::SVector{3,TF}   # center of the branch
+    source_center::SVector{3,TF}   # center of the branch
+    target_center::SVector{3,TF}   # center of the branch
     source_radius::TF
     target_radius::TF
-    source_box::SVector{6,TF} # x, y, and z half widths of the box encapsulating all sources
+    source_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
-    charge::TF
-    dipole::TF
     error::Array{TF,0}
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
@@ -197,10 +190,10 @@ struct MultiBranch{TF,N} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
+function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
+    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::MultiBranch{TF}) where TF = TF
@@ -236,13 +229,12 @@ struct SingleBranch{TF} <: Branch{TF}
     branch_index::UnitRange{Int64}
     i_parent::Int64
     i_leaf::Int64
-    center::SVector{3,TF}   # center of the branch
+    source_center::SVector{3,TF}   # center of sources
+    target_center::SVector{3,TF}   # center of targets
     source_radius::TF
     target_radius::TF
-    source_box::SVector{6,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
+    source_box::SVector{3,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
-    charge::TF
-    dipole::TF
     error::Array{TF,0}
     multipole_expansion::Array{TF,3} # multipole expansion coefficients
     local_expansion::Array{TF,3}     # local expansion coefficients
@@ -250,10 +242,10 @@ struct SingleBranch{TF} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock, charge=zero(TF), dipole=zero(TF)) where TF
+function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, center, source_radius, target_radius, source_box, target_box, charge, dipole, error, multipole_expansion, local_expansion, harmonics, lock)
+    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
 Base.eltype(::SingleBranch{TF}) where TF = TF
@@ -263,33 +255,33 @@ Base.eltype(::SingleBranch{TF}) where TF = TF
 
 Supertype of all octree structures with `TF` the floating point type and `P` the expansion order.
 """
-abstract type Tree{TF,P} end
+abstract type Tree{TF} end
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB,P} <: Tree{TF,P}
+struct MultiTree{TF,N,TB} <: Tree{TF}
     branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::TB
-    expansion_order::Val{P}
-    leaf_size::Int64    # max number of bodies in a leaf
+    expansion_order::Int64
+    leaf_size::SVector{N,Int64}    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     # cost_parameters::SVector{N,Float64}
 end
 
-struct SingleTree{TF,TB,P} <: Tree{TF,P}
+struct SingleTree{TF,TB} <: Tree{TF}
     branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index::Vector{Int64}
     inverse_sort_index::Vector{Int64}
     buffer::TB
-    expansion_order::Val{P}
+    expansion_order::Int64
     leaf_size::Int64    # max number of bodies in a leaf
     # cost_parameters::SingleCostParameters
     # cost_parameters::Float64

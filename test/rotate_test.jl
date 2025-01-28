@@ -21,7 +21,7 @@ end
 Hs_π2 = [1.0]
 
 expansion_order = 4
-FastMultipole.update_Hs_π2!(Hs_π2, Val(10))
+FastMultipole.update_Hs_π2!(Hs_π2, 10)
 
 H0 = zeros(Complex{Float64},1,1)
 H0[1,1] = 1.0
@@ -74,7 +74,7 @@ expansion_order = 5
 β = 3*pi/7
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 FastMultipole.update_Ts!(Ts, Hs_π2, β, expansion_order)
 
 T0 = ones(1,1)
@@ -123,7 +123,7 @@ end
 
 # eimϕ
 expansion_order = 10
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 ϕ = π/7
 FastMultipole.update_eimϕs!(eimϕs, ϕ, expansion_order)
 for m in 0:expansion_order
@@ -315,15 +315,16 @@ rotated_weights_test = ComplexF64[0.6999999999999998 + 0.0im, -0.024500000000000
 # rotate about y axis
 expansion_order = 10
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
 FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
-source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
-source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
+ind = 1:min(size(source_weights,3), length(unrotated_weights_real))
+source_weights[1,1,ind] .= unrotated_weights_real[ind]
+source_weights[2,1,ind] .= unrotated_weights_imag[ind]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
 FastMultipole.rotate_multipole_y!(rotated_weights, source_weights, Ts, Hs_π2, ζs_mag, θ, expansion_order, lamb_helmholtz)
@@ -486,15 +487,16 @@ unrotated_weights_test = unrotated_weights_real + im .* unrotated_weights_imag
 # rotate about y axis
 expansion_order = 10
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
 FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
 lamb_helmholtz = Val(false)
 
 source_weights = initialize_expansion(expansion_order, eltype(Ts))
-source_weights[1,1,:] .= unrotated_weights_real[1:size(source_weights,3)]
-source_weights[2,1,:] .= unrotated_weights_imag[1:size(source_weights,3)]
+ind = 1:min(size(source_weights,3), length(unrotated_weights_real))
+source_weights[1,1,ind] .= unrotated_weights_real[ind]
+source_weights[2,1,ind] .= unrotated_weights_imag[ind]
 rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 back_rotated_weights = initialize_expansion(expansion_order, eltype(Ts))
 
@@ -658,7 +660,7 @@ for n in 0:expansion_order
 end
 
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
@@ -706,7 +708,7 @@ for n in 0:expansion_order
 end
 
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, Val(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 Ts = zeros(FastMultipole.length_Ts(expansion_order))
@@ -756,7 +758,7 @@ for n in 0:expansion_order
 end
 
 ϕ = 2.0344439357957027
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 lamb_helmholtz = Val(false)
 FastMultipole.rotate_z!(rotated_weights, weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
 
@@ -799,7 +801,7 @@ for n in 0:expansion_order
 end
 
 ϕ = 2.0344439357957027
-eimϕs = zeros(2, expansion_order+1)
+eimϕs = zeros(2, expansion_order+2)
 FastMultipole.update_eimϕs!(eimϕs, ϕ, expansion_order)
 lamb_helmholtz = Val(false)
 FastMultipole.back_rotate_z!(back_rotated_weights, weights, eimϕs, expansion_order, lamb_helmholtz)
