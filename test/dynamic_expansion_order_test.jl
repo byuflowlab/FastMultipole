@@ -1,4 +1,4 @@
-using Statistics
+@testset "dynamic expansion order" begin
 
 expansion_order, leaf_size, multipole_threshold = 20, 100, 0.5
 n_bodies = 10000
@@ -20,30 +20,31 @@ validation_potential2 = validation_system2.potential[1,:]
 system = generate_gravitational(seed, n_bodies; radius_factor=0.0)
 system2 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 
-println("\n===== radius factor = 0.0 =====\n")
+# println("\n===== radius factor = 0.0 =====\n")
 
 tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system; expansion_order, leaf_size, multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter, ε_tol)
 
-@show length(m2l_list) length(direct_list)
+# @show length(m2l_list) length(direct_list)
 potential = system.potential[1,:]
-@show maximum(abs.(potential - validation_potential))
+# @show maximum(abs.(potential - validation_potential)) < ε_tol
 
 velocity_err = [norm(system.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
 
-@show maximum(velocity_err)
+@test ε_tol * 0.1 < maximum(velocity_err) < ε_tol * 10
 
-println("\n===== radius factor = 0.1 =====\n")
+# println("\n===== radius factor = 0.1 =====\n")
 
 tree2, m2l_list2, direct_list2, derivatives_switches2 = FastMultipole.fmm!(system2; expansion_order, leaf_size, multipole_threshold, nearfield=true, farfield=true, unsort_bodies=true, shrink_recenter, ε_tol)
 
-@show length(m2l_list2) length(direct_list2)
+# @show length(m2l_list2) length(direct_list2)
 potential2 = system2.potential[1,:]
-@show maximum(abs.(potential2 - validation_potential))
+# @show maximum(abs.(potential2 - validation_potential))
 
 velocity_err = [norm(system2.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
 
-@show maximum(velocity_err)
+@test ε_tol * 0.1 < maximum(velocity_err) < ε_tol * 10
 
+end
 #=
 #--- get true potential for nearfield = false ---#
 
