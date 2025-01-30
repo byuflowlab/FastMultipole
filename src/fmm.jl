@@ -604,7 +604,7 @@ function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, so
     weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
     weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
     Ts = zeros(TF, length_Ts(expansion_order + error_check))
-    eimϕs = zeros(TF, 2, expansion_order+1+error_check)
+    eimϕs = zeros(TF, 2, expansion_order + 1 + error_check)
 
     for (i_target, j_source) in m2l_list
         target_branch = target_branches[i_target]
@@ -633,10 +633,10 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
         error_check = !(isnothing(ε_tol))
 
         # try preallocating one set of containers to be reused
-        Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
-        eimϕs = [zeros(TF, 2, expansion_order+1+error_check) for _ in 1:n_threads]
-        weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
-        weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+        Ts = [zeros(TF, length_Ts(expansion_order + error_check)) for _ in 1:n_threads]
+        eimϕs = [zeros(TF, 2, expansion_order + 1 + error_check) for _ in 1:n_threads]
+        weights_tmp_1 = [initialize_expansion(expansion_order + error_check, TF) for _ in 1:n_threads]
+        weights_tmp_2 = [initialize_expansion(expansion_order + error_check, TF) for _ in 1:n_threads]
 
         # execute tasks
         Threads.@threads for i_thread in 1:length(assignments)
@@ -1173,7 +1173,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
             t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
-                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
+                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
                     horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads_multipole)
 	                downward_pass && translate_locals_multithread!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
                 end
@@ -1187,7 +1187,7 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         else # standard nearfield function
 
             nearfield && nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list, n_threads)
-            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads)
+            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads)
             horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
             downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, expansion_order, lamb_helmholtz, target_tree.levels_index, target_tree.leaf_index, n_threads)
 

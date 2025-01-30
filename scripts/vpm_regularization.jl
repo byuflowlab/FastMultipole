@@ -3,13 +3,25 @@ using SpecialFunctions: erf
 using PythonPlot
 using LaTeXStrings
 
+# function myerf(x)
+#     a1 = 0.278393
+#     a2 = 0.230389
+#     a3 = 2/sqrt(π)
+#     return a3 * (x + a1 * x * x * x / (1 + a2 * x * x))
+# end
+
+function myerf(x)
+    return tanh(x*pi/sqrt(6))
+end
+
 function upper_bound(σ, ω, ε)
     return ω / (8 * pi * ε * σ) * (sqrt(2/pi) + sqrt(2/(pi*σ*σ) + 16 * pi * ε / ω))
 end
 
 function residual(ρ_σ, σ, ω, ε)
     t1 = 4*pi*σ*σ*ε*ρ_σ*ρ_σ / ω
-    t2 = erf(ρ_σ / sqrt(2))
+    # t2 = erf(ρ_σ / sqrt(2))
+    t2 = myerf(ρ_σ / sqrt(2))
     t3 = sqrt(2/pi) * ρ_σ * exp(-ρ_σ*ρ_σ*0.5)
     return t1 + t2 - t3 - 1.0
 end
@@ -30,7 +42,7 @@ for (iσ,σ) in enumerate(σs)
     end
 end
 
-fig = figure("regularization")
+fig = figure("regularization with myerf")
 fig.clear()
 fig.add_subplot(111, xlabel=L"\varepsilon_{tol}", ylabel=L"\rho / \sigma")
 ax = fig.get_axes()[0]
