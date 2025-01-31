@@ -154,8 +154,12 @@ function fmm.direct!(target_system, target_index, derivatives_switch, source_sys
             end
             flatten_derivatives!(jacobian, hessian, derivatives_switch)
 
-            target_system[i_target,fmm.VELOCITY] .+= view(jacobian,:,1)
-            target_system[i_target,fmm.VELOCITY_GRADIENT] .+= view(hessian,:,:,1)
+            velocity = SVector{3,eltype(jacobian)}(jacobian[1,1], jacobian[2,1], jacobian[3,1])
+            target_system[i_target,fmm.VELOCITY] = target_system[i_target,fmm.VELOCITY] + velocity
+            vgrad = SMatrix{3,3,eltype(jacobian),9}(hessian[1,1,1], hessian[2,1,1], hessian[3,1,1],
+                                                    hessian[1,2,1], hessian[2,2,1], hessian[2,3,1],
+                                                    hessian[3,1,1], hessian[3,2,1], hessian[3,3,1])
+            target_system[i_target,fmm.VELOCITY_GRADIENT] += vgrad
         end
 
     end
