@@ -115,51 +115,30 @@ end
 """
 Classical formulation so far.
 """
-function fmm.direct!(target_system, target_index, derivatives_switch, source_system::VortexParticles, source_index)
-    jacobian = zeros(eltype(target_system),3,4)
-    hessian = zeros(eltype(target_system),3,3,4)
+function fmm.direct!(target_system, target_index, derivatives_switch::FastMultipole.DerivativesSwitch{S,V,VG}, source_system::VortexParticles, source_index) where {S,V,VG}
     for j_source in source_index
         x_source = source_system[j_source,Position()]
+        Γx, Γy, Γz = source_system[j_source,Strength()]
         for i_target in target_index
-            jacobian .*= 0.0
-            hessian .*= 0.0
             x_target = target_system[i_target,Position()]
-            dx = x_target - x_source
-            r = sqrt(dx' * dx)
-            if r > 0
-                # calculate induced potential
-                gamma_over_R = source_system.bodies[j_source].strength / r * ONE_OVER_4PI
-                #target_system[i_target,fmm.VECTOR_POTENTIAL] .+= gamma_over_R
+            dx, dy, dz = x_target - x_source
+            r2 = dx * dx + dy * dy + dz * dz
+            if r2 > 0
+                # induced velocity
+                vx, vy, vz = zero(r2), zero(r2), zero(r2)
+                if V
+                    # distance away
+                    r = sqrt(r2)
+                    denom = FastMultipole.ONE_OVER_4π / (r * r2)
 
-                # calculate induced jacobian
-                # off diagonal elements are formed from the vector potential
-                # diagonal elements are omitted (not needed?)
-                # gamma_over_R3 = source_bodies[i_STRENGTH_vortex,j_source] / r^3
-                gamma_over_R /= r^2
-                for j_potential in 2:4
-                    for i_r in 1:3
-                        jacobian[i_r,j_potential] -= gamma_over_R[j_potential-1] * dx[i_r]
-                    end
+                    vx = (dz * Γy - dy * Γz) * denom
+                    vy = (dx * Γz - dz * Γx) * denom
+                    vz = (dy * Γx - dx * Γy) * denom
                 end
-                gamma_over_R /= r^2
-                hessian[1,1,i_POTENTIAL_VECTOR] += gamma_over_R .* (2 * dx[1]^2 - dx[2]^2 - dx[3]^2) # dx2
-                hessian[1,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
-                hessian[1,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
-                hessian[2,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[2] # dxdy
-                hessian[2,2,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 + 2 * dx[2]^2 - dx[3]^2) # dy2
-                hessian[2,3,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
-                hessian[3,1,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[1] * dx[3] # dxdz
-                hessian[3,2,i_POTENTIAL_VECTOR] += gamma_over_R * 3 * dx[2] * dx[3] # dydz
-                hessian[3,3,i_POTENTIAL_VECTOR] += gamma_over_R .* (-dx[1]^2 - dx[2]^2 + 2 * dx[3]^2) # dz2
-            end
-            flatten_derivatives!(jacobian, hessian, derivatives_switch)
 
-            velocity = SVector{3,eltype(jacobian)}(jacobian[1,1], jacobian[2,1], jacobian[3,1])
-            target_system[i_target,fmm.VELOCITY] = target_system[i_target,fmm.VELOCITY] + velocity
-            vgrad = SMatrix{3,3,eltype(jacobian),9}(hessian[1,1,1], hessian[2,1,1], hessian[3,1,1],
-                                                    hessian[1,2,1], hessian[2,2,1], hessian[2,3,1],
-                                                    hessian[3,1,1], hessian[3,2,1], hessian[3,3,1])
-            target_system[i_target,fmm.VELOCITY_GRADIENT] += vgrad
+                v = target_system[i_target, Velocity()]
+                target_system[i_target, Velocity()] = v + SVector{3}(vx,vy,vz)
+            end
         end
 
     end
