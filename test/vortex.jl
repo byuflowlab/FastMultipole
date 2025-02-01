@@ -124,23 +124,47 @@ function fmm.direct!(target_system, target_index, derivatives_switch::FastMultip
             dx, dy, dz = x_target - x_source
             r2 = dx * dx + dy * dy + dz * dz
             if r2 > 0
+                # distance away
+                r = sqrt(r2)
+                rinv = 1 / r
+                rinv2 = rinv * rinv
+
+                # useful denominator
+                denom = FastMultipole.ONE_OVER_4π * rinv * rinv2
+
                 # induced velocity
                 vx, vy, vz = zero(r2), zero(r2), zero(r2)
-                if V
-                    # distance away
-                    r = sqrt(r2)
-                    denom = FastMultipole.ONE_OVER_4π / (r * r2)
 
+                if V
                     vx = (dz * Γy - dy * Γz) * denom
                     vy = (dx * Γz - dz * Γx) * denom
                     vz = (dy * Γx - dx * Γy) * denom
                 end
 
+                # velocity gradient
+                vxx, vxy, vxz = zero(r), zero(r), zero(r)
+                vyx, vyy, vyz = zero(r), zero(r), zero(r)
+                vzx, vzy, vzz = zero(r), zero(r), zero(r)
+                if VG
+                    denom *= rinv2
+                    vxx = -3 * dx * (Γy * dz - Γz * dy) * denom
+                    vxy = (-3 * dx * (Γz * dx - Γx * dz) + Γz * r2) * denom
+                    vxz = (-3 * dx * (Γx * dy - Γy * dx) - Γy * r2) * denom
+                    vyx = (-3 * dy * (Γy * dz - Γz * dy) - Γz * r2) * denom
+                    vyy = -3 * dy * (Γz * dx - Γx * dz) * denom
+                    vyz = (-3 * dy * (Γx * dy - Γy * dx) + Γx * r2) * denom
+                    vzx = (-3 * dz * (Γy * dz - Γz * dy) + Γy * r2) * denom
+                    vzy = (-3 * dz * (Γz * dx - Γx * dz) - Γx * r2) * denom
+                    vzz = -3 * dz * (Γx * dy - Γy * dx) * denom
+                end
+
                 v = target_system[i_target, Velocity()]
                 target_system[i_target, Velocity()] = v + SVector{3}(vx,vy,vz)
+
+                vgxx, vgxy, vgxz, vgyx, vgyy, vgyz, vgzx, vgzy, vgzz = target_system[i_target, VelocityGradient()]
+                target_system[i_target, VelocityGradient()] = SMatrix{3,3}(vxx+vgxx, vxy+vgxy, vxz+vgxz, vyx+vgyx, vyy+vgyy, vyz+vgyz, vzx+vgzx, vzy+vgzy, vzz+vgzz)
             end
         end
-
     end
 end
 
