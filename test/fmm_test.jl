@@ -151,16 +151,16 @@ leaf_size = SVector{1}(1)
 x_branch_1 = SVector{3}([0.0,0,0])
 bounding_box = SVector{3}(0.0,0,0)
 
-branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_1 = FastMultipole.Branch(SVector{1}([1:2]), true, true, 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_2 = FastMultipole.SVector{3}(xs[:,1] .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_2 = FastMultipole.Branch(SVector{1}([1:1]), true, true, 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_3 = FastMultipole.SVector{3}(xs[:,2] .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_3 = FastMultipole.Branch(SVector{1}([2:2]), true, true, 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 
 # using FMM
 dummy_index = (zeros(Int64,FastMultipole.get_n_bodies(vortexparticles)),)
 dummy_leaf_index = collect(1:3)
-tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), expansion_order, leaf_size)#, dummy_cost_parameter)
+tree = FastMultipole.Tree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortexparticles),), expansion_order, leaf_size)#, dummy_cost_parameter)
 harmonics = initialize_harmonics(expansion_order)
 FastMultipole.body_to_multipole!(branch_2, (vortexparticles,), harmonics, expansion_order)
 FastMultipole.body_to_multipole!(branch_3, (vortexparticles,), harmonics, expansion_order)
@@ -262,16 +262,16 @@ leaf_size = SVector{1}(1)
 x_branch_1 = SVector{3}((bodies[1:3,1] + bodies[1:3,2])/2)
 bounding_box = SVector{3}(0.0,0,0)
 
-branch_1 = FastMultipole.MultiBranch(SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_1 = FastMultipole.Branch(SVector{1}([1:2]), true, true, 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_2 = SVector{3}(bodies[1:3,1])# .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.MultiBranch(SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_2 = FastMultipole.Branch(SVector{1}([1:1]), true, true, 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 x_branch_3 = SVector{3}(bodies[1:3,2])# .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.MultiBranch(SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
+branch_3 = FastMultipole.Branch(SVector{1}([2:2]), true, true, 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_expansion(expansion_order), FastMultipole.initialize_harmonics(expansion_order, Float64), ReentrantLock())
 
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)
 # dummy_cost_parameter = FastMultipole.dummy_direct_cost_estimate((vortex_particles,), leaf_size)
-tree = FastMultipole.MultiTree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), expansion_order, leaf_size)#, dummy_cost_parameter)
+tree = FastMultipole.Tree([branch_1, branch_2, branch_3], [1:1,2:3], dummy_leaf_index, dummy_index, dummy_index, (deepcopy(vortex_particles),), expansion_order, leaf_size)#, dummy_cost_parameter)
 
 # manually compute multipole coefficients
 FastMultipole.body_to_multipole!(Point{Vortex}, vortex_particles, branch_2, 1:1, branch_2.harmonics, expansion_order)
@@ -301,7 +301,7 @@ velocity_n_m = zeros(2,3,size(branch_2.harmonics,3))
 derivatives_switches = DerivativesSwitch(true, true, true, (vortex_particles,))
 FastMultipole.evaluate_local!((vortex_particles,), branch_2, branch_2.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
 FastMultipole.evaluate_local!((vortex_particles,), branch_3, branch_3.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
-#FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.5, unsort_bodies=false)
+# FastMultipole.fmm!(tree, (vortex_particles,); multipole_threshold=0.5, unsort_bodies=false)
 
 
 update_velocity_stretching!(vortex_particles)
@@ -407,7 +407,9 @@ leaf_size = SVector{1}(1)
 
 tree = FastMultipole.Tree((vortex_particles,); expansion_order, leaf_size, shrink_recenter=false)
 
-m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(tree, (vortex_particles,); expansion_order, multipole_threshold=0.8, lamb_helmholtz=true)
+is_target = SVector{1}(true)
+is_source = SVector{1}(true)
+m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!((vortex_particles,), tree, is_target, is_source; expansion_order, multipole_threshold=0.8, lamb_helmholtz=true)
 
 update_velocity_stretching!(vortex_particles)
 
@@ -448,17 +450,17 @@ potential4 = system4.potential[1,:]
 @test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-10)
 
 system5 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-source_tree, target_tree, m2l_list5, direct_list5, derivatives_switches5 = FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
+FastMultipole.fmm!(system5, system5; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, shrink_recenter)
 potential5 = system5.potential[1,:]
 @test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-10)
 
 system6 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=SVector{1}(leaf_size), multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
+FastMultipole.fmm!((system6,), system6; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=SVector{1}(leaf_size), multipole_threshold, shrink_recenter)
 potential6 = system6.potential[1,:]
 @test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-10)
 
 system7 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, leaf_size_source=SVector{1}(leaf_size), leaf_size_target=SVector{1}(leaf_size), multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true, source_shrink_recenter=shrink_recenter, target_shrink_recenter=shrink_recenter)
+FastMultipole.fmm!((system7,), (system7,); expansion_order=expansion_order, leaf_size_source=SVector{1}(leaf_size), leaf_size_target=SVector{1}(leaf_size), multipole_threshold, shrink_recenter)
 potential7 = system7.potential[1,:]
 @test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-10)
 
@@ -487,17 +489,17 @@ potential9 = system9.system.potential[1,:]
 @test isapprox(maximum(abs.(potential9 - validation_potential)), 0.0; atol=1e-9)
 
 system10 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!(system10, system10; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!(system10, system10; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=leaf_size, multipole_threshold)
 potential10 = system10.system.potential[1,:]
 @test isapprox(maximum(abs.(potential10 - validation_potential)), 0.0; atol=1e-9)
 
 system11 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!((system11,), system11; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=SVector{1}(leaf_size), multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system11,), system11; expansion_order=expansion_order, leaf_size_source=leaf_size, leaf_size_target=SVector{1}(leaf_size), multipole_threshold)
 potential11 = system11.system.potential[1,:]
 @test isapprox(maximum(abs.(potential11 - validation_potential)), 0.0; atol=1e-9)
 
 system12 = FastMultipole.SortWrapper(generate_gravitational(seed, n_bodies; radius_factor=0.1))
-FastMultipole.fmm!((system12,), (system12,); expansion_order=expansion_order, leaf_size_source=SVector{1}(leaf_size), leaf_size_target=SVector{1}(leaf_size), multipole_threshold=multipole_threshold, nearfield=true, farfield=true, unsort_source_bodies=true, unsort_target_bodies=true)
+FastMultipole.fmm!((system12,), (system12,); expansion_order, leaf_size_source=SVector{1}(leaf_size), leaf_size_target=SVector{1}(leaf_size), multipole_threshold)
 potential12 = system12.system.potential[1,:]
 @test isapprox(maximum(abs.(potential12 - validation_potential)), 0.0; atol=1e-9)
 

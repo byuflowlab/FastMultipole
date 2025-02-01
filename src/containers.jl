@@ -143,10 +143,8 @@ struct RotatedCoefficients <: ErrorMethod end
 
 #------- octree creation -------#
 
-abstract type Branch{TF} end
-
 """
-    MultiBranch{TF,N} <: Branch{TF}
+    Branch{TF,N}
 
 Branch object used to sort more than one system into an octree. Type parameters represent:
 
@@ -171,8 +169,10 @@ Branch object used to sort more than one system into an octree. Type parameters 
 * `lock::ReentrantLock`: lock used to avoid data race conditions when modifying this branch or its corresponding bodies
 
 """
-struct MultiBranch{TF,N} <: Branch{TF}
+struct Branch{TF,N}
     bodies_index::SVector{N,UnitRange{Int64}}
+    source::Bool
+    target::Bool
     n_branches::Int64
     branch_index::UnitRange{Int64}
     i_parent::Int64
@@ -190,79 +190,20 @@ struct MultiBranch{TF,N} <: Branch{TF}
     lock::ReentrantLock
 end
 
-function MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock) where TF
+function Branch(bodies_index, source, target, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock) where TF
     error = Array{TF,0}(undef)
     error[] = zero(TF)
-    MultiBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, multipole_expansion, local_expansion, harmonics, lock)
+    Branch(bodies_index, source, target, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, multipole_expansion, local_expansion, harmonics, lock)
 end
 
-Base.eltype(::MultiBranch{TF}) where TF = TF
-
-"""
-    SingleBranch{TF} <: Branch{TF}
-
-Branch object used to sort a single system into an octree. Type parameters represent:
-
-* `TF`: the floating point type (would be a dual number if using algorithmic differentiation)
-
-**Fields**
-
-* `bodies_index::UnitRange`: unit range indicating the index of bodies in the represented system
-* `n_branches::Int`: number of child branches corresponding to this branch
-* `branch_index::UnitRange`: indices of this branch's child branches
-* `i_parent::Int`: index of this branch's parent
-* `i_leaf::Int`: if this branch is a leaf, what is its index in its parent `<:Tree`'s `leaf_index` field
-* `center::Vector{TF}`: center of this branch at which its multipole and local expansions are centered
-* `source_radius::TF`: if this branch is a leaf, distance from `center` to the outer edge of farthest body contained in this branch; otherwise, this is the distance from `center` to the corner of its `source_box`
-* `target_radius::TF`: distance from `center` to the farthest body center contained in this branch
-* `source_box::Vector{TF}`: vector of length 6 containing the distances from the center to faces of a rectangular prism completely enclosing all bodies with their finite radius in the negative x, positive x, negative y, positive y, negative z, and positive z directions, respectively
-* `target_box::Vector{TF}`: vector of length 3 containing the distances from the center to faces of a rectangular prism completely enclosing all body centers in the x, y, and z direction, respectively
-* multipole_expansion::Array{TF,3}`: array of size (2,2,) containing the multipole expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
-* local_expansion::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` containing the local expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
-* `harmonics::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` used as storage for regular harmonics, irregular harmonics, or whatever is needed, and is indexed as multipole and local expansions
-* `lock::ReentrantLock`: lock used to avoid data race conditions when modifying this branch or its corresponding bodies
-
-"""
-struct SingleBranch{TF} <: Branch{TF}
-    bodies_index::UnitRange{Int64}
-    n_branches::Int64
-    branch_index::UnitRange{Int64}
-    i_parent::Int64
-    i_leaf::Int64
-    source_center::SVector{3,TF}   # center of sources
-    target_center::SVector{3,TF}   # center of targets
-    source_radius::TF
-    target_radius::TF
-    source_box::SVector{3,TF} # x_min, x_max, y_min, y_max, and z_min, z_max half widths of the box encapsulating all sources
-    target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
-    error::Array{TF,0}
-    multipole_expansion::Array{TF,3} # multipole expansion coefficients
-    local_expansion::Array{TF,3}     # local expansion coefficients
-    harmonics::Array{TF,3}
-    lock::ReentrantLock
-end
-
-function SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock) where TF
-    error = Array{TF,0}(undef)
-    error[] = zero(TF)
-    SingleBranch(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, multipole_expansion, local_expansion, harmonics, lock)
-end
-
-Base.eltype(::SingleBranch{TF}) where TF = TF
-
-"""
-    abstract type Tree{TF,P} end
-
-Supertype of all octree structures with `TF` the floating point type and `P` the expansion order.
-"""
-abstract type Tree{TF} end
+Base.eltype(::Branch{TF,<:Any}) where TF = TF
 
 """
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct MultiTree{TF,N,TB} <: Tree{TF}
-    branches::Vector{MultiBranch{TF,N}}        # a vector of `Branch` objects composing the tree
+struct Tree{TF,N,TB}
+    branches::Vector{Branch{TF,N}}        # a vector of `Branch` objects composing the tree
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
@@ -272,19 +213,6 @@ struct MultiTree{TF,N,TB} <: Tree{TF}
     leaf_size::SVector{N,Int64}    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
     # cost_parameters::SVector{N,Float64}
-end
-
-struct SingleTree{TF,TB} <: Tree{TF}
-    branches::Vector{SingleBranch{TF}}        # a vector of `Branch` objects composing the tree
-    levels_index::Vector{UnitRange{Int64}}
-    leaf_index::Vector{Int}
-    sort_index::Vector{Int64}
-    inverse_sort_index::Vector{Int64}
-    buffer::TB
-    expansion_order::Int64
-    leaf_size::Int64    # max number of bodies in a leaf
-    # cost_parameters::SingleCostParameters
-    # cost_parameters::Float64
 end
 
 struct InteractionList{TF}

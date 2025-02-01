@@ -208,6 +208,10 @@ function Base.getindex(system::VortexPanels, i, ::Normal)
     return normal
 end
 
+function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
+    return Branch(SVector{1}([bodies_index]), n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order, SVector{1}(true), SVector{1}(true))
+end
+
 @testset "body-to-multipole: point source" begin
 
 x = SVector{3}(0.1,0.2,-0.3)
@@ -401,21 +405,21 @@ body_to_multipole!(Point{Vortex}, system, branch, 1:1, harmonics, expansion_orde
 xt = SVector{3}(1.0,1.0,7.4)
 target_center = SVector{3}(1.0,1.0,7.0)
 
-target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order)
+target_branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, target_center, target_center, radius, radius, box, box, expansion_order+1)
 
 # preallocate containers
 Hs_π2 = [1.0]
-FastMultipole.update_Hs_π2!(Hs_π2, expansion_order)
-Ts = zeros(FastMultipole.length_Ts(expansion_order))
+FastMultipole.update_Hs_π2!(Hs_π2, expansion_order+1)
+Ts = zeros(FastMultipole.length_Ts(expansion_order+1))
 eimϕs = zeros(2, expansion_order+2)
-weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
-weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
+weights_tmp_1 = initialize_expansion(expansion_order+1, eltype(Ts))
+weights_tmp_2 = initialize_expansion(expansion_order+1, eltype(Ts))
 
 # normalization
-ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
-FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
-ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
-FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
+ζs_mag = zeros(FastMultipole.length_ζs(expansion_order+1))
+FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order+1)
+ηs_mag = zeros(FastMultipole.length_ηs(expansion_order+1))
+FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order+1)
 
 # perform transformation
 lamb_helmholtz = Val(true)

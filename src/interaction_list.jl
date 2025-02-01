@@ -52,8 +52,8 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     end
 end
 
-@inline preallocate_bodies_index(T::Type{<:MultiBranch{<:Any,NT}}, n) where NT = Tuple(Vector{UnitRange{Int64}}(undef, n) for _ in 1:NT)
-@inline preallocate_bodies_index(T::Type{<:SingleBranch}, n) = Vector{UnitRange{Int64}}(undef, n)
+@inline preallocate_bodies_index(T::Type{<:Branch{<:Any,NT}}, n) where NT = Tuple(Vector{UnitRange{Int64}}(undef, n) for _ in 1:NT)
+# @inline preallocate_bodies_index(T::Type{<:SingleBranch}, n) = Vector{UnitRange{Int64}}(undef, n)
 
 function sort_by_target(direct_list, target_branches::Vector{<:Branch})
     # count cardinality of each target leaf in direct_list

@@ -111,11 +111,8 @@ function body_to_multipole!(system, branch, bodies_index, harmonics, expansion_o
 end
 
 function direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+    @show typeof(target_system) typeof(target_index) typeof(derivatives_switch) typeof(source_system) typeof(source_index)
     @warn "direct! not overloaded for type $(typeof(source_system)); interaction ignored"
     return nothing
 end
 
-function direct_gpu!(target_system, target_indices, derivatives_switch, source_system, source_indices)
-    @warn "direct_gpu! not overloaded for type $(typeof(source_system)); interaction ignored"
-    return nothing
-end

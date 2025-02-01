@@ -1,50 +1,44 @@
 #------- direct interactions -------#
 
-function nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_systems, source_branches::Vector{<:MultiBranch}, direct_list)
-    for (i_source_system, source_system) in enumerate(source_systems)
-        nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, i_source_system, source_branches, direct_list)
+function nearfield_singlethread!(systems, branches, is_target, is_source, derivatives_switches, direct_list)
+    # loop over sources
+    for (i_source_system, source_system) in enumerate(systems)
+
+        # check if this is a source system
+        if is_source[i_source_system]
+
+            # loop over target systems
+            for (i_target_system, target_system) in enumerate(systems)
+
+                # check if this is a target system
+                if is_target[i_target_system]
+
+                    # extract derivatives switch
+                    derivatives_switch = derivatives_switches[i_target_system]
+
+                    # loop over direct list
+                    for (i_target, i_source) in direct_list
+
+                        # identify sources
+                        source_index = branches[i_source].bodies_index[i_source_system]
+
+                        # identify targets
+                        target_index = branches[i_target].bodies_index[i_target_system]
+
+                        # compute interaction
+                        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+
+                    end
+                end
+            end
+        end
     end
 end
 
-function nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, i_source_system, source_branches, direct_list)
-    for (i_target, i_source) in direct_list
-        target_index = target_branches[i_target].bodies_index
-        source_index = source_branches[i_source].bodies_index[i_source_system]
-        nearfield_singlethread!(target_system, target_index, derivatives_switch, source_system, source_index)
-    end
-end
-
-function nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, source_branches::Vector{<:SingleBranch}, direct_list)
-    for (i_target, i_source) in direct_list
-        target_index = target_branches[i_target].bodies_index
-        source_index = source_branches[i_source].bodies_index
-        nearfield_singlethread!(target_system, target_index, derivatives_switch, source_system, source_index)
-    end
-end
-
-function nearfield_singlethread!(target_system, target_index, derivatives_switch, source_system, source_index)
-    _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
-end
-
-function nearfield_singlethread!(target_systems, target_indices::SVector, derivatives_switches::Tuple, source_system, source_index)
-    for (target_system, target_index, derivatives_switch) in zip(target_systems, target_indices, derivatives_switches)
-        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
-    end
-end
-
-function get_n_interactions(target_systems, target_branches, source_system, i_source_system, source_branches::Vector{<:MultiBranch}, direct_list)
+function get_n_interactions(target_systems, target_branches, source_system, i_source_system, source_branches::Vector{<:Branch}, direct_list)
     n_interactions = 0
     for (i_target, i_source) in direct_list
         n_interactions += get_n_bodies(target_branches[i_target]) * length(source_branches[i_source].bodies_index[i_source_system])
-    end
-
-    return n_interactions
-end
-
-function get_n_interactions(target_systems, target_branches, source_system, source_branches::Vector{<:SingleBranch}, direct_list)
-    n_interactions = 0
-    for (i_target, i_source) in direct_list
-        n_interactions += get_n_bodies(target_branches[i_target]) * length(source_branches[i_source].bodies_index)
     end
 
     return n_interactions
@@ -121,10 +115,10 @@ function execute_assignment!(target_systems, target_branches, derivatives_switch
     end
 end
 
-function nearfield_multithread!(target_system, target_branches, derivatives_switch, source_system, source_branches, direct_list, n_threads)
+function nearfield_multithread!(systems, branches, is_target, is_source, derivatives_switch, direct_list, n_threads)
     if n_threads == 1 # single thread
 
-        nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, source_branches, direct_list)
+        nearfield_singlethread!(systems, branches, is_target, is_source, derivatives_switch, direct_list)
 
     else # multithread
 
@@ -297,7 +291,7 @@ function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, syste
     end
 end
 
-function body_to_multipole_multithread!(branches::Vector{<:MultiBranch}, systems::Tuple, expansion_order, leaf_index, n_threads)
+function body_to_multipole_multithread!(branches::Vector{<:Branch}, systems::Tuple, expansion_order, leaf_index, n_threads)
     ## load balance
     leaf_assignments = fill(1:0, length(systems), n_threads)
     for (i_system,system) in enumerate(systems)
@@ -341,44 +335,6 @@ function body_to_multipole_multithread!(branches::Vector{<:MultiBranch}, systems
                     body_to_multipole!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
                 end
             end
-        end
-    end
-end
-
-function body_to_multipole_multithread!(branches::Vector{<:SingleBranch}, system, expansion_order, leaf_index, n_threads)
-    ## load balance
-    leaf_assignments = fill(1:0, n_threads)
-
-    # total number of bodies
-    n_bodies = get_n_bodies(system)
-
-    # number of bodies per thread
-    n_per_thread, rem = divrem(n_bodies, n_threads)
-    rem > 0 && (n_per_thread += 1)
-
-    # if there are too many threads, we'll actually hurt performance
-    n_per_thread < MIN_NPT_B2M && (n_per_thread = MIN_NPT_B2M)
-
-    # create chunks
-    i_start = 1
-    i_thread = 1
-    n_bodies = 0
-    for (i_end,i_leaf) in enumerate(leaf_index)
-        n_bodies += get_n_bodies(branches[i_leaf])
-        if n_bodies >= n_per_thread
-            leaf_assignments[i_thread] = i_start:i_end
-            i_start = i_end+1
-            i_thread += 1
-            n_bodies = 0
-        end
-    end
-    i_thread <= n_threads && (leaf_assignments[i_thread] = i_start:length(leaf_index))
-
-    ## compute multipole expansion coefficients
-    Threads.@threads for i_thread in 1:n_threads
-        for i_assignment in leaf_assignments[i_thread]
-            branch = branches[leaf_index[i_assignment]]
-            body_to_multipole!(system, branch, branch.bodies_index, branch.harmonics, expansion_order)
         end
     end
 end
@@ -616,7 +572,7 @@ function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, so
 
 end
 
-function horizontal_pass_multithread!(target_branches, source_branches::Vector{<:Branch{TF}}, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads) where TF
+function horizontal_pass_multithread!(target_branches, source_branches::Vector{Branch{TF,N}}, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads) where {TF,N}
 
     if n_threads == 1 # single thread
 
@@ -772,189 +728,107 @@ end
 
 #--- running FMM ---#
 
-"""
-    fmm!(target_systems, source_systems; kwargs...)
-
-Apply all interactions of `source_systems` acting on `target_systems` using the fast multipole method. Assumes compatibility functions have been overloaded for both source and target systems.
-
-# Arguments
-
-- `target_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or - a tuple of system objects for which compatibility functions have been overloaded
-
-- `source_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-# Optional Arguments
-
-- `expansion_order::Int`: the expansion order to be used
-- `leaf_size_source::Int`: maximum number of bodies from `source_systems` allowed in a leaf-level branch
-- `leaf_size_target::Int`: maximum number of bodies from `target_systems` allowed in a leaf-level branch
-- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
-- `lamb_helmholtz::Bool`: determines whether or not to calculate the induced velocity due to a vector potential using the Lamb-Helmholtz decomposition; erroroneous velocity and gradient will result if `lamb_helmholtz==false` and a vector potential is used.
-- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
-- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
-- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
-- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
-- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
-- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
-- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
-- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
-- `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for the `source_systems`
-- `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for the `target_systems`
-- `source_shink_recenter::Bool`: indicates whether or not to resize branches for the `source_systems` octree after it is created to increase computational efficiency
-- `target_shink_recenter::Bool`: indicates whether or not to resize branches for the `target_systems` octree after it is created to increase computational efficiency
-- `save_tree_source::Bool`: indicates whether or not to save a VTK file for visualizing the source octree
-- `save_tree_target::Bool`: indicates whether or not to save a VTK file for visualizing the target octree
-- `save_name_source::String`: name and path of the source octree visualization if `save_tree == true`
-- `save_name_target::String`: name and path of the target octree visualization if `save_tree == true`
-
-"""
-function fmm!(target_systems, source_systems;
-    ε_tol=nothing,
-    expansion_order::Int=5, leaf_size_source=default_leaf_size(source_systems), leaf_size_target=default_leaf_size(target_systems), multipole_threshold=0.4,
-    lamb_helmholtz::Bool=false,
-    scalar_potential=true, velocity=true, velocity_gradient=true,
-    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_source_bodies=true, unsort_target_bodies=true,
-    source_shrink_recenter::Bool=false, target_shrink_recenter::Bool=false,
-    save_tree_source=false, save_tree_target=false, save_name_source="source_tree", save_name_target="target_tree",
-    nearfield_device::Bool=false
-)
-    # check for duplicate systems
-    target_systems = wrap_duplicates(target_systems, source_systems)
-
-    # create trees
-    source_tree = Tree(source_systems; expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size=leaf_size_source, shrink_recenter=source_shrink_recenter)
-    target_tree = Tree(target_systems; expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size=leaf_size_target, shrink_recenter=target_shrink_recenter)
-
-    # perform fmm
-    m2l_list, direct_list, derivatives_switches = fmm!(target_tree, target_systems, source_tree, source_systems;
-        expansion_order, ε_tol,
-        lamb_helmholtz,
-        scalar_potential, velocity, velocity_gradient,
-        multipole_threshold,
-        reset_source_tree=false, reset_target_tree=false,
-        upward_pass, horizontal_pass, downward_pass,
-        nearfield, farfield, self_induced,
-        unsort_source_bodies, unsort_target_bodies, nearfield_device
-    )
-
-    # visualize
-    save_tree_source && (visualize(save_name_source, source_systems, source_tree))
-    save_tree_target && (visualize(save_name_target, target_systems, target_tree))
-
-    return source_tree, target_tree, m2l_list, direct_list, derivatives_switches
+@inline function to_tuple(input::Tuple)
+    return input
 end
 
-"""
-    fmm!(systems; kwargs...)
+@inline function to_tuple(input)
+    return (input,)
+end
 
-Apply all interactions of `systems` acting on itself using the fast multipole method. Assumes compatibility functions have been overloaded for both source and target systems.
+@inline function to_vector(input::AbstractVector, n)
+    return SVector{n}(input)
+end
 
-# Arguments
+@inline function to_vector(input, n)
+    return SVector{n}(input for _ in 1:n)
+end
 
-- `systems`: either
+# combine into tuple of unique systems
+function unique_tuple(target_systems, source_systems, leaf_size_target::AbstractVector, leaf_size_source::AbstractVector)
 
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
+    # unique tuple containing all systems
+    systems = (target_systems..., (source_system for source_system in source_systems if !(source_system in target_systems))...)
 
-# Optional Arguments
+    # tag telling which systems are targets
+    is_target = SVector{length(systems),Bool}((true for _ in eachindex(target_systems))..., (false for _ in length(target_systems)+1:length(systems))...)
 
-- `expansion_order::Int`: the expansion order to be used
-- `leaf_size::Int`: maximum number of bodies from `systems` allowed in a leaf-level branch
-- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
-- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
-- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
-- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
-- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
-- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
-- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included in the direct_list
-- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included in the m2l_list
-- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
-- `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
-- `shink_recenter::Bool`: indicates whether or not to resize branches for the octree after it is created to increase computational efficiency
-- `save_tree::Bool`: indicates whether or not to save a VTK file for visualizing the octree
-- `save_name::String`: name and path of the octree visualization if `save_tree == true`
-- `nearfield_device::Bool`: indicates whether or not the `nearfield_device!` function should be used for nearfield interactions
+    # tag telling which systems are sources
+    is_source = SVector{length(systems),Bool}(system in source_systems for system in systems)
 
-"""
-function fmm!(systems;
-    ε_tol=nothing,
-    expansion_order::Int=5, leaf_size=default_leaf_size(systems), multipole_threshold=0.4,
-    lamb_helmholtz::Bool=false,
-    scalar_potential=true, velocity=true, velocity_gradient=true,
-    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_bodies::Bool=true, shrink_recenter::Bool=false,
-    save_tree::Bool=false, save_name="tree", nearfield_device::Bool=false
+    return systems, is_target, is_source
+end
+
+function match_unique(v_target::AbstractVector, v_source::AbstractVector, systems, target_systems, source_systems)
+    # convert vector to match unique systems tuple
+    v_unique = SVector{length(systems),eltype(v_target)}((val for val in v_target)..., (v_source[i] for i in eachindex(v_source) if !(source_systems[i] in target_systems))...)
+
+    return v_unique
+end
+
+function fmm!(target_systems, source_systems; optargs...)
+    # promote arguments to Tuples
+    target_systems = to_tuple(target_systems)
+    source_systems = to_tuple(source_systems)
+
+    return fmm!(target_systems, source_systems; optargs...)
+end
+
+function fmm!(target_systems::Tuple, source_systems::Tuple;
+        leaf_size_target=default_leaf_size(target_systems),
+        leaf_size_source=default_leaf_size(source_systems),
+        scalar_potential=true, velocity=true, velocity_gradient=true,
+        optargs...)
+
+    # promote arguments to a vector
+    leaf_size_target = to_vector(leaf_size_target, length(target_systems))
+    leaf_size_source = to_vector(leaf_size_source, length(source_systems))
+    scalar_potential = to_vector(scalar_potential, length(target_systems))
+    velocity = to_vector(velocity, length(target_systems))
+    velocity_gradient = to_vector(velocity_gradient, length(target_systems))
+
+    #--- combine into tuple of unique systems ---#
+
+    # systems
+    systems, is_target, is_source = unique_tuple(target_systems, source_systems, leaf_size_target, leaf_size_source)
+
+    # leaf size
+    leaf_size = match_unique(leaf_size_target, leaf_size_source, systems, target_systems, source_systems)
+
+    # derivatives switch inputs
+    derivatives_switch_source = SVector{length(source_systems),Bool}(false for _ in source_systems)
+    scalar_potential = match_unique(scalar_potential, derivatives_switch_source, systems, target_systems, source_systems)
+    velocity = match_unique(velocity, derivatives_switch_source, systems, target_systems, source_systems)
+    velocity_gradient = match_unique(velocity_gradient, derivatives_switch_source, systems, target_systems, source_systems)
+
+    return fmm!(systems; is_target, is_source, leaf_size, scalar_potential, velocity, velocity_gradient, optargs...)
+end
+
+function fmm!(systems::Tuple;
+    ε_tol=nothing, expansion_order::Int=5, leaf_size=default_leaf_size(systems),
+    shrink_recenter::Bool=false,
+    is_target=SVector{length(systems),Bool}(true for _ in eachindex(systems)),
+    is_source=SVector{length(systems),Bool}(true for _ in eachindex(systems)),
+    optargs...
 )
+
+    # promote leaf_size to vector
+    leaf_size = to_vector(leaf_size, length(systems))
 
     # create tree
-    tree = Tree(systems; expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size, shrink_recenter)
+    tree = Tree(systems; is_target, is_source, expansion_order=expansion_order+!(isnothing(ε_tol)), leaf_size, shrink_recenter)
 
     # perform fmm
-    m2l_list, direct_list, derivatives_switches = fmm!(tree, systems;
-        expansion_order, ε_tol,
-        lamb_helmholtz,
-        scalar_potential, velocity, velocity_gradient,
-        multipole_threshold, reset_tree=false,
-        upward_pass, horizontal_pass, downward_pass,
-        nearfield, farfield, self_induced,
-        unsort_bodies, nearfield_device
-    )
-
-    # visualize
-    save_tree && (visualize(save_name, systems, tree))
-
-    return tree, m2l_list, direct_list, derivatives_switches
+    return fmm!(systems, tree, is_target, is_source; expansion_order, ε_tol, reset_tree=false, optargs...)
 end
 
-"""
-    fmm!(tree, systems; kwargs...)
+fmm!(system; optargs...) = fmm!((system,); optargs...)
 
-Dispatches `fmm!` using an existing `::Tree`.
-
-# Arguments
-
-- `tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
-- `systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-# Optional Arguments
-
-- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
-- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity from `source_systems`
-- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(systems)` indicating whether each system should receive a velocity gradient from `source_systems`
-- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
-- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
-- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
-- `nearfield::Bool`: indicates whether near-field (computed without multipoles) interactions should be included in the direct_list
-- `farfield::Bool`: indicates whether far-field (computed with multipoles) interactions should be included in the m2l_list
-- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
-- `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
-- `nearfield_device::Bool`: indicates whether or not the `nearfield_device!` function should be used for nearfield interactions
-
-"""
-function fmm!(tree::Tree, systems;
-    ε_tol=nothing,
-    expansion_order::Int=5,
-    multipole_threshold=0.4, reset_tree::Bool=true,
-    lamb_helmholtz::Bool=false,
-    scalar_potential=true, velocity=true, velocity_gradient=true,
-    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_bodies::Bool=true, nearfield_device::Bool=false
-)
+function fmm!(systems::Tuple, tree::Tree, is_target, is_source; multipole_threshold=0.4,
+        scalar_potential=true, velocity=true, velocity_gradient=true,
+        farfield=true, nearfield=true, self_induced=true,
+        optargs...
+    )
 
     # assemble derivatives switch
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, systems)
@@ -963,133 +837,8 @@ function fmm!(tree::Tree, systems;
     m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
-    fmm!(tree, systems, m2l_list, direct_list, derivatives_switches, expansion_order;
-        ε_tol,
-        lamb_helmholtz,
-        reset_tree,
-        nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_bodies, nearfield_device
-    )
-
-    return m2l_list, direct_list, derivatives_switches
+    return fmm!(systems, tree, is_target, is_source, m2l_list, direct_list, derivatives_switches; optargs...)
 end
-
-"""
-    fmm!(target_tree, target_systems, source_tree, source_systems; kwargs...)
-
-Dispatches `fmm!` using existing `::Tree` objects.
-
-# Arguments
-
-- `target_tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
-- `target_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-- `source_tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
-- `source_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-# Optional Arguments
-
-- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
-- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
-- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
-- `reset_source_tree::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(source_systems)` indicating whether or not to reset the expansions of each source tree
-- `reset_target_tree::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(source_systems)` indicating whether or not to reset the expansions of each target tree
-- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
-- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
-- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
-- `nearfield::Bool`: indicates whether near-field (computed without multipoles) interactions should be included in the direct_list
-- `farfield::Bool`: indicates whether far-field (computed with multipoles) interactions should be included in the m2l_list
-- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself in the direct_list
-- `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `source_systems`
-- `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
-- `nearfield_device::Bool`: indicates whether or not the `nearfield_device!` function should be used for nearfield interactions
-
-"""
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems;
-    ε_tol=nothing,
-    expansion_order::Int=5, multipole_threshold=0.4,
-    scalar_potential=true, velocity=true, velocity_gradient=true,
-    lamb_helmholtz::Bool=false,
-    reset_source_tree::Bool=true, reset_target_tree::Bool=true,
-    upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    nearfield::Bool=true, farfield::Bool=true, self_induced::Bool=true,
-    unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
-    nearfield_device::Bool=false
-)
-
-    # assemble derivatives switch
-    derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
-
-    # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, source_tree.leaf_index, multipole_threshold, farfield, nearfield, self_induced)
-
-    # run fmm
-    fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches, expansion_order;
-        ε_tol,
-        lamb_helmholtz,
-        reset_source_tree, reset_target_tree,
-        nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies, unsort_target_bodies, nearfield_device
-    )
-
-    return m2l_list, direct_list, derivatives_switches
-end
-
-"""
-    fmm!(tree, systems; kwargs...)
-
-Dispatches `fmm!` using an existing `::Tree`.
-
-# Arguments
-
-- `tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
-- `systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-- `m2l_list::Vector{SVector{2,Int32}}`: list of branch index pairs `[i_target, i_source]` for which multipole expansions of the source branch are to be transformed to local expansions at the target branch
-- `direct_list::Union{Vector{SVector{2,Int32}}, InteractionList}`: list of branch index pairs `[i_target, i_source]` for which interactions are to be evaluted without multipole expansion (i.e., directly); if `typeof(direct_list) <: InteractionList`, then prepared influence matrices are used rather than computing direct influences on the fly
-- `derivatives_switches::Union{DerivativesSwitch, Tuple{<:DerivativesSwitch,...}}`: switch determining which of scalar potential, vector potential, velocity, and/or velocity gradient are to be computed for each target system
-
-# Optional Arguments
-
-- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
-- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
-- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
-- `unsort_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `systems`
-
-"""
-function fmm!(tree::Tree, systems, m2l_list, direct_list, derivatives_switches, expansion_order;
-    ε_tol=nothing,
-    lamb_helmholtz::Bool=false,
-    reset_tree::Bool=true,
-    nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    unsort_bodies::Bool=true, nearfield_device::Bool=false
-)
-
-    fmm!(tree, systems, tree, systems, m2l_list, direct_list, derivatives_switches, expansion_order;
-        ε_tol,
-        lamb_helmholtz,
-        reset_source_tree=reset_tree, reset_target_tree=false,
-        nearfield, upward_pass, horizontal_pass, downward_pass,
-        unsort_source_bodies=unsort_bodies, unsort_target_bodies=false,
-        nearfield_device
-    )
-
-end
-
-const WARNING_FLAG_EMPTY_SOURCE = Array{Bool,0}(undef)
-WARNING_FLAG_EMPTY_SOURCE[] = false
-const WARNING_FLAG_EMPTY_TARGET = Array{Bool,0}(undef)
-WARNING_FLAG_EMPTY_TARGET[] = false
 
 """
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches; kwargs...)
@@ -1130,26 +879,24 @@ Dispatches `fmm!` using existing `::Tree` objects.
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
 
 """
-function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_systems, m2l_list, direct_list, derivatives_switches, expansion_order;
-    ε_tol=nothing,
-    lamb_helmholtz::Bool=false,
-    reset_source_tree::Bool=true, reset_target_tree::Bool=true,
+function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct_list, derivatives_switches;
+    expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=false,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
-    unsort_source_bodies::Bool=true, unsort_target_bodies::Bool=true,
-    nearfield_device::Bool=false
+    reset_tree::Bool=true, unsort_bodies::Bool=true,
+    nearfield_device::Bool=false,
+    save_tree=false, save_name="tree"
 )
 
     # check if systems are empty
-    n_sources = get_n_bodies(source_systems)
-    n_targets = get_n_bodies(target_systems)
+    n_bodies = get_n_bodies(systems)
 
-    # wrap lamb_helmholtz in Val
-    lamb_helmholtz = Val(lamb_helmholtz)
+    if n_bodies > 0
 
-    # increment the expansion order if ε_tol !== nothing
-    error_check = !(isnothing(ε_tol))
+        # wrap lamb_helmholtz in Val
+        lamb_helmholtz = Val(lamb_helmholtz)
 
-    if n_sources > 0 && n_targets > 0
+        # increment the expansion order if ε_tol !== nothing
+        error_check = !(isnothing(ε_tol))
 
         # precompute y-axis rotation by π/2 matrices (if not already done)
         update_Hs_π2!(Hs_π2, expansion_order + error_check)
@@ -1159,54 +906,50 @@ function fmm!(target_tree::Tree, target_systems, source_tree::Tree, source_syste
         update_ηs_mag!(ηs_mag, expansion_order + error_check)
 
         # reset multipole/local expansions
-        reset_target_tree && (reset_expansions!(source_tree))
-        reset_source_tree && (reset_expansions!(source_tree))
+        reset_tree && (reset_expansions!(tree))
 
         # available threads
         n_threads = Threads.nthreads()
 
-
         # begin FMM
-        if nearfield_device
+        if nearfield_device # use GPU
 
             # allow nearfield_device! to be called concurrently with upward and horizontal passes
-            t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
+            t1 = Threads.@spawn nearfield && nearfield_device!(systems, tree, derivatives_switches, systems, tree, direct_list)
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
-                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
-                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads_multipole)
-	                downward_pass && translate_locals_multithread!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
+                    upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads_multipole)
+                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads_multipole)
+	                downward_pass && translate_locals_multithread!(tree.branches, expansion_order, lamb_helmholtz, tree.levels_index, n_threads_multipole)
                 end
 
             fetch(t1)
             fetch(t2)
 
             # local to body interaction
-            downward_pass && local_to_body_multithread!(target_tree.branches, target_systems, derivatives_switches, Pmax, lamb_helmholtz, target_tree.leaf_index, n_threads)
+            downward_pass && local_to_body_multithread!(tree.branches, systems, derivatives_switches, Pmax, lamb_helmholtz, tree.leaf_index, n_threads)
 
-        else # standard nearfield function
+        else # use CPU
 
-            nearfield && nearfield_multithread!(target_systems, target_tree.branches, derivatives_switches, source_systems, source_tree.branches, direct_list, n_threads)
-            upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads)
-            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
-            downward_pass && downward_pass_multithread!(target_tree.branches, target_systems, derivatives_switches, expansion_order, lamb_helmholtz, target_tree.levels_index, target_tree.leaf_index, n_threads)
+            nearfield && nearfield_multithread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list, n_threads)
+            upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads)
+            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
+            downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads)
 
         end
 
     else
-        if n_sources == 0 && !WARNING_FLAG_EMPTY_SOURCE[]
-            @warn "fmm! called but the source system is empty; foregoing calculation"
-            WARNING_FLAG_EMPTY_SOURCE[] = true
-        end
-        if n_targets == 0 && !WARNING_FLAG_EMPTY_TARGET[]
-            @warn "fmm! called but the target system is empty; foregoing calculation"
-            WARNING_FLAG_EMPTY_TARGET[] = true
-        end
+
+        @warn "fmm! called but the system is empty; foregoing calculation"
+
     end
 
-   # unsort bodies
-    n_sources > 0 && unsort_source_bodies && unsort!(source_systems, source_tree)
-    n_targets > 0 && unsort_target_bodies && unsort!(target_systems, target_tree)
+    # unsort bodies
+    n_bodies > 0 && unsort_bodies && unsort!(systems, tree)
 
+    # visualize tree
+    save_tree && (visualize(save_name, systems, tree))
+
+    return tree, m2l_list, direct_list, derivatives_switches
 end
 

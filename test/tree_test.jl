@@ -183,7 +183,7 @@ n_bodies = 101
 bodies = rand(8,n_bodies)
 x_presorted = deepcopy(bodies[1:3,:])
 bodies[5:8,2:n_bodies] .= 0.0
-system = Gravitational(bodies)
+system = (Gravitational(bodies),)
 tree, m2l_list, direct_list, switch = FastMultipole.fmm!(system; unsort_bodies=false)
 x_sorted = deepcopy(bodies[1:3,:])
 FastMultipole.unsort!(system, tree)
@@ -200,9 +200,9 @@ end
 
 n_bodies = 101
 bodies = rand(8,n_bodies)
-system = Gravitational(bodies)
+system = (Gravitational(bodies),)
 
-tree = fmm.Tree(system; leaf_size=5)
+tree = fmm.Tree(system; leaf_size=SVector{1}(5))
 leaf_index = tree.leaf_index
 
 i_leaf = 1
