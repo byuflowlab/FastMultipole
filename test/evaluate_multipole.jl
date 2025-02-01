@@ -10,20 +10,20 @@ function evaluate_multipole!(system, target_branch, source_branch, expansion_ord
 end
 
 function evaluate_multipole!(system, target_branch::SingleBranch, source_branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
-    evaluate_multipole!(system, branch.bodies_index, harmonics, source_branch.multipole_expansion, source_branch.source_center, expansion_order, lamb_helmholtz, derivatives_switch)
+    evaluate_multipole!(system, target_branch.bodies_index, harmonics, source_branch.multipole_expansion, source_branch.source_center, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
 function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     for i_body in bodies_index
-        scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,POSITION] - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
-        PS && (system[i_body, SCALAR_POTENTIAL] += scalar_potential)
+        scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,Position()] - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+        PS && (system[i_body, ScalarPotential()] += scalar_potential)
         if VS
-            vpx, vpy, vpz = system[i_body, VELOCITY]
-            system[i_body, VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
+            vpx, vpy, vpz = system[i_body, Velocity()]
+            system[i_body, Velocity()] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
         end
         if GS
-            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
-            system[i_body,VELOCITY_GRADIENT] = SMatrix{3,3}(
+            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VelocityGradient()]
+            system[i_body,VelocityGradient()] = SMatrix{3,3}(
                 gradient[1] + v1,
                 gradient[2] + v2,
                 gradient[3] + v3,
