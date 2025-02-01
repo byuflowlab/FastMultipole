@@ -1,6 +1,6 @@
-function evaluate_local!(systems, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
-    for i in eachindex(systems)
-        evaluate_local!(systems[i], branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
+function evaluate_local!(systems, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
+    for (system, bodies_index, derivatives_switch, target) in zip(systems, branch.bodies_index, derivatives_switches, is_target)
+        target && evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
     end
 end
 
