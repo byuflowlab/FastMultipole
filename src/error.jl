@@ -160,7 +160,7 @@ function multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_
     rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, nmax, lamb_helmholtz)
 
     # multipole error
-    in0 = (P*(P+1))>>1 + 1
+    in0 = (nmax*(nmax+1))>>1 + 1
     ϕn0 = weights_tmp_2[1,1,in0]
     ϕn1_real = weights_tmp_2[1,1,in0+1]
     ϕn1_imag = weights_tmp_2[2,1,in0+1]
