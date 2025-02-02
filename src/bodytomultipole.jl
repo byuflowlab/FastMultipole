@@ -16,7 +16,16 @@ body_to_multipole!(system::VortexSheetSurface, args...) = body_to_multipole!(Pan
 #     body_to_multipole!(system, branch, branch.bodies_index, harmonics, expansion_order)
 # end
 
-@inline function body_to_multipole!(branch::Branch, systems::Tuple, harmonics, expansion_order, is_source)
+function body_to_multipole!(branches, leaf_index, system, i_system, expansion_order, is_source)
+    if is_source[i_system]
+        for i_branch in leaf_index
+            branch = branches[i_branch]
+            branch.source && body_to_multipole!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
+        end
+    end
+end
+
+function body_to_multipole!(branch::Branch, systems::Tuple, harmonics, expansion_order, is_source)
     # iterate over systems
     for (system, bodies_index, source) in zip(systems, branch.bodies_index, is_source)
         source && body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
@@ -479,6 +488,13 @@ end
     i_source = 1
     multiplier = 1.0
     mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength, i_source, multiplier, expansion_order)
+end
+
+@inline function body_to_multipole_point!(::Type{Point{SourceVortex}}, multipole_coefficients, harmonics, Δx, strength, expansion_order)
+    scalar_strength = strength[1]
+    vector_strength = SVector{3}(strength[2], strength[3], strength[4])
+    body_to_multipole_point!(Point{Source}, multipole_coefficients, harmonics, Δx, scalar_strength, expansion_order)
+    body_to_multipole_point!(Point{Vortex}, multipole_coefficients, harmonics, Δx, vector_strength, expansion_order)
 end
 
 #--- filament elements ---#

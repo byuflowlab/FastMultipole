@@ -37,6 +37,8 @@ abstract type Vortex <: AbstractKernel end
 
 abstract type Source <: AbstractKernel end
 
+abstract type SourceVortex <: AbstractKernel end
+
 abstract type Dipole <: AbstractKernel end
 
 abstract type SourceDipole <: AbstractKernel end

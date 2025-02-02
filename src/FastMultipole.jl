@@ -7,6 +7,8 @@ using LinearAlgebra
 using StaticArrays
 using WriteVTK
 
+using CodeTools
+
 #------- CONSTANTS -------#
 
 const ONE_OVER_4π = 1/(4*π)
@@ -54,7 +56,7 @@ export unsort!, resort!, unsorted_index_2_sorted_index, sorted_index_2_unsorted_
 include("compatibility.jl")
 
 export Body, Position, Radius, ScalarPotential, VectorPotential, Velocity, VelocityGradient, Vertex, Normal, Strength
-export Vortex, Source, Dipole, SourceDipole, Point, Filament, Panel
+export Vortex, Source, Dipole, SourceDipole, SourceVortex, Point, Filament, Panel
 export get_n_bodies, buffer_element, body_to_multipole!, direct!, direct_gpu!
 
 include("bodytomultipole.jl")
