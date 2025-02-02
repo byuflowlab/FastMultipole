@@ -139,12 +139,11 @@ function fmm.direct!(target_system, target_index, derivatives_switch::FastMultip
                     vx = (dz * Γy - dy * Γz) * denom
                     vy = (dx * Γz - dz * Γx) * denom
                     vz = (dy * Γx - dx * Γy) * denom
+                    v = target_system[i_target, Velocity()]
+                    target_system[i_target, Velocity()] = v + SVector{3}(vx,vy,vz)
                 end
 
                 # velocity gradient
-                vxx, vxy, vxz = zero(r), zero(r), zero(r)
-                vyx, vyy, vyz = zero(r), zero(r), zero(r)
-                vzx, vzy, vzz = zero(r), zero(r), zero(r)
                 if VG
                     denom *= rinv2
                     vxx = -3 * dx * (Γy * dz - Γz * dy) * denom
@@ -156,13 +155,10 @@ function fmm.direct!(target_system, target_index, derivatives_switch::FastMultip
                     vzx = (-3 * dz * (Γy * dz - Γz * dy) + Γy * r2) * denom
                     vzy = (-3 * dz * (Γz * dx - Γx * dz) - Γx * r2) * denom
                     vzz = -3 * dz * (Γx * dy - Γy * dx) * denom
+                    vgxx, vgxy, vgxz, vgyx, vgyy, vgyz, vgzx, vgzy, vgzz = target_system[i_target, VelocityGradient()]
+                    target_system[i_target, VelocityGradient()] = SMatrix{3,3}(vxx+vgxx, vxy+vgxy, vxz+vgxz, vyx+vgyx, vyy+vgyy, vyz+vgyz, vzx+vgzx, vzy+vgzy, vzz+vgzz)
                 end
 
-                v = target_system[i_target, Velocity()]
-                target_system[i_target, Velocity()] = v + SVector{3}(vx,vy,vz)
-
-                vgxx, vgxy, vgxz, vgyx, vgyy, vgyz, vgzx, vgzy, vgzz = target_system[i_target, VelocityGradient()]
-                target_system[i_target, VelocityGradient()] = SMatrix{3,3}(vxx+vgxx, vxy+vgxy, vxz+vgxz, vyx+vgyx, vyy+vgyy, vyz+vgyz, vzx+vgzx, vzy+vgzy, vzz+vgzz)
             end
         end
     end
