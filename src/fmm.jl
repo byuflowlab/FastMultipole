@@ -263,19 +263,21 @@ end
 
 #------- UPWARD PASS -------#
 
-function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order, lamb_helmholtz, leaf_index, is_source) where TF
+function upward_pass_singlethread_1!(branches::Vector{Branch{TF,N}}, systems, expansion_order, leaf_index, is_source) where {TF,N}
+
+    # body_to_multipole
+    for (i_system, system) in enumerate(systems)
+        body_to_multipole!(branches, leaf_index, system, i_system, expansion_order, is_source)
+    end
+end
+
+function upward_pass_singlethread_2!(branches::Vector{Branch{TF,N}}, expansion_order, lamb_helmholtz, leaf_index, is_source) where {TF,N}
 
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
     eimϕs = zeros(TF, 2, expansion_order+1)
     weights_tmp_1 = initialize_expansion(expansion_order, TF)
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
-
-    # multipole expansions
-    for i_branch in leaf_index
-        branch = branches[i_branch]
-        branch.source && body_to_multipole!(branch, systems, branch.harmonics, expansion_order, is_source)
-    end
 
     # loop over branches
     for i_branch in length(branches):-1:1 # no need to create a multipole expansion at the very top level
@@ -290,6 +292,40 @@ function upward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, syste
         end
     end
 end
+
+@inline function upward_pass_singlethread!(branches::Vector{Branch{TF,N}}, systems, expansion_order, lamb_helmholtz, leaf_index, is_source) where {TF,N}
+    upward_pass_singlethread_1!(branches, systems, expansion_order, leaf_index, is_source)
+    upward_pass_singlethread_2!(branches, expansion_order, lamb_helmholtz, leaf_index, is_source)
+end
+
+
+# function upward_pass_singlethread!(branches::Vector{Branch{TF,N}}, systems, expansion_order, lamb_helmholtz, leaf_index, is_source) where {TF,N}
+#
+#     # try preallocating one container to be reused
+#     Ts = zeros(TF, length_Ts(expansion_order))
+#     eimϕs = zeros(TF, 2, expansion_order+1)
+#     weights_tmp_1 = initialize_expansion(expansion_order, TF)
+#     weights_tmp_2 = initialize_expansion(expansion_order, TF)
+#
+#     # multipole expansions
+#     for i_branch in leaf_index
+#         branch = branches[i_branch]
+#         branch.source && body_to_multipole!(branch, systems, branch.harmonics, expansion_order, is_source)
+#     end
+#
+#     # loop over branches
+#     for i_branch in length(branches):-1:1 # no need to create a multipole expansion at the very top level
+#         branch = branches[i_branch]
+#
+#         if branch.source && branch.n_branches !== 0 # branch is a source and is not a leaf
+#             # iterate over children
+#             for i_child in branch.branch_index
+#                 child_branch = branches[i_child]
+#                 multipole_to_multipole!(branch, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+#             end
+#         end
+#     end
+# end
 
 function body_to_multipole_multithread!(branches::Vector{<:Branch}, systems::Tuple, expansion_order, leaf_index, is_source, n_threads)
     ## load balance
@@ -339,7 +375,7 @@ function body_to_multipole_multithread!(branches::Vector{<:Branch}, systems::Tup
     end
 end
 
-function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
+function translate_multipoles_multithread!(branches::Vector{Branch{TF,N}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where {TF,N}
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
@@ -381,7 +417,7 @@ function translate_multipoles_multithread!(branches::Vector{<:Branch{TF}}, expan
     end
 end
 
-function upward_pass_multithread!(branches, systems, expansion_order, lamb_helmholtz, levels_index, leaf_index, is_source, n_threads)
+function upward_pass_multithread!(branches, systems, expansion_order, lamb_helmholtz, levels_index, leaf_index, is_source, ::Val{n_threads}) where n_threads
 
     if n_threads == 1
 
@@ -551,7 +587,7 @@ end
 #     return εs_obs, εs_pred
 # end
 
-function horizontal_pass_singlethread!(target_branches::Vector{<:Branch{TF}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol) where TF
+function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol) where {TF,N}
 
     # increment the expansion order if ε_tol !== nothing
     error_check = !(isnothing(ε_tol))
@@ -611,30 +647,67 @@ end
 
 #------- DOWNWARD PASS -------#
 
-function downward_pass_singlethread!(branches::AbstractVector{<:Branch{TF}}, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target) where TF
+function downward_pass_singlethread_1!(branches::Vector{Branch{TF,N}}, expansion_order, lamb_helmholtz) where {TF,N}
+
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
     eimϕs = zeros(TF, 2, expansion_order+1)
     weights_tmp_1 = initialize_expansion(expansion_order, TF)
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
-    velocity_n_m = zeros(eltype(branches[1]), 2, 3, size(weights_tmp_1, 3))
 
     # loop over branches
-    for branch in branches
-        if branch.target # if branch is a target
-            if branch.n_branches == 0 # leaf level
-                evaluate_local!(systems, branch, branch.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
-            else
-                for i_child_branch in branch.branch_index
-                    child_branch = branches[i_child_branch]
-                    child_branch.target && local_to_local!(child_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
-                end
+    for i_branch in 1:length(branches)
+        branch = branches[i_branch]
+        if branch.target && branch.n_branches > 0 # if branch is a non-leaf target
+            for i_child_branch in branch.branch_index
+                child_branch = branches[i_child_branch]
+                child_branch.target && local_to_local!(child_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
 end
 
-function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
+function downward_pass_singlethread_2!(branches::Vector{<:Branch{TF,<:Any}}, leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target, velocity_n_m) where TF
+
+    # loop over systems
+    for (i_system, system) in enumerate(systems)
+        evaluate_local!(system, i_system, branches, leaf_index, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
+    end
+
+end
+
+@inline function downward_pass_singlethread!(branches, leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target, velocity_n_m)
+
+    downward_pass_singlethread_1!(branches, expansion_order, lamb_helmholtz)
+
+    downward_pass_singlethread_2!(branches, leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target, velocity_n_m)
+
+end
+
+# @inline function downward_pass_singlethread!(branches::Vector{<:Branch{TF,<:Any}}, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target) where TF
+#     # try preallocating one container to be reused
+#     Ts = zeros(TF, length_Ts(expansion_order))
+#     eimϕs = zeros(TF, 2, expansion_order+1)
+#     weights_tmp_1 = initialize_expansion(expansion_order, TF)
+#     weights_tmp_2 = initialize_expansion(expansion_order, TF)
+#     velocity_n_m = zeros(eltype(branches[1]), 2, 3, size(weights_tmp_1, 3))
+#
+#     # loop over branches
+#     for branch in branches
+#         if branch.target # if branch is a target
+#             if branch.n_branches == 0 # leaf level
+#                 evaluate_local!(systems, branch, branch.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
+#             else
+#                 for i_child_branch in branch.branch_index
+#                     child_branch = branches[i_child_branch]
+#                     child_branch.target && local_to_local!(child_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+#                 end
+#             end
+#         end
+#     end
+# end
+
+function translate_locals_multithread!(branches::Vector{Branch{TF,<:Any}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
@@ -670,7 +743,7 @@ function translate_locals_multithread!(branches::Vector{<:Branch{TF}}, expansion
     return nothing
 end
 
-function local_to_body_multithread!(branches::Vector{<:Branch{TF}}, systems, derivatives_switches, expansion_order, lamb_helmholtz, leaf_index, is_target, n_threads) where TF
+function local_to_body_multithread!(branches::Vector{Branch{TF,<:Any}}, systems, derivatives_switches, expansion_order, lamb_helmholtz, leaf_index, is_target, n_threads) where TF
     # try preallocating one set of containers to be reused
     velocity_n_m = [initialize_velocity_n_m(expansion_order, TF) for _ in 1:n_threads]
 
@@ -944,10 +1017,27 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
 
         else # use CPU
 
-            nearfield && nearfield_multithread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list, n_threads)
-            upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.levels_index, tree.leaf_index, is_source, n_threads)
-            horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
-            downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, is_target, n_threads)
+            if n_threads == 1
+
+                println("Direct:")
+                @time nearfield_singlethread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list)
+                println("Expansions")
+                @time begin
+                upward_pass && upward_pass_singlethread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.leaf_index, is_source)
+                horizontal_pass && horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol)
+
+                # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
+                downward_pass && downward_pass_singlethread_1!(tree.branches, expansion_order, lamb_helmholtz)
+                velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(tree.branches[1]))
+                downward_pass && downward_pass_singlethread_2!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target, velocity_n_m)
+                end
+            else
+
+                nearfield && nearfield_multithread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list, n_threads)
+                upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.levels_index, tree.leaf_index, is_source, n_threads_2)
+                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
+                downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, is_target, n_threads)
+            end
 
         end
 

@@ -244,10 +244,12 @@ end
 # @inline exceeds(cumulative_octant_census::AbstractVector, leaf_size) = cumulative_octant_census[end] > leaf_size
 
 @inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size)
+    fraction = 0.0
     for i_element in 1:size(cumulative_octant_census, 1)
-        cumulative_octant_census[i_element,end] > leaf_size[i_element] && (return true)
+        fraction += cumulative_octant_census[i_element,end] / leaf_size[i_element]
+        # cumulative_octant_census[i_element,end] > leaf_size[i_element] && (return true)
     end
-    return false
+    return fraction >= 1.0
 end
 
 @inline function get_child_center(parent_center, parent_target_box::SVector, i_octant)

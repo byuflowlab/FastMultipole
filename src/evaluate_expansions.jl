@@ -1,3 +1,16 @@
+function evaluate_local!(system, i_system, branches::Vector{Branch{TF,N}}, leaf_index, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target) where {TF,N}
+    if is_target[i_system]
+
+        derivatives_switch = derivatives_switches[i_system]
+
+        # loop over leaf branches
+        for i_branch in leaf_index
+            branch = branches[i_branch]
+            branch.target && evaluate_local!(system, branch.bodies_index[i_system], branch.harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+        end
+    end
+end
+
 function evaluate_local!(systems, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
     for (system, bodies_index, derivatives_switch, target) in zip(systems, branch.bodies_index, derivatives_switches, is_target)
         target && evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
