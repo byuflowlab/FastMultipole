@@ -47,7 +47,7 @@ function Tree(systems::Tuple; is_target=SVector{length(systems), Bool}(true for 
         if n_children > 0
             n_children_prewhile = n_children
             while n_children > 0
-                parents_index, n_children, i_leaf = child_branches!(branches, systems, sort_index, buffer, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children, i_leaf = child_branches!(branches, systems, sort_index, buffer, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order, is_target, is_source)
                 push!(levels_index, parents_index)
             end
             if WARNING_FLAG_LEAF_SIZE[]
@@ -249,7 +249,7 @@ end
         fraction += cumulative_octant_census[i_element,end] / leaf_size[i_element]
         # cumulative_octant_census[i_element,end] > leaf_size[i_element] && (return true)
     end
-    return fraction >= 1.0
+    return fraction > nextfloat(1.0)
 end
 
 @inline function get_child_center(parent_center, parent_target_box::SVector, i_octant)
