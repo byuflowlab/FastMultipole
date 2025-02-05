@@ -8,9 +8,6 @@ Base.getindex(sys::AbstractArray, i, ::Body) = sys[i]
 
 Base.getindex(sys, i, ::Position) = @error "getindex! not overloaded for `FastMultipole.Position` for type $(typeof(sys)); cannot run FMM"
 
-const WARNING_FLAG_RADIUS = Array{Bool,0}(undef)
-WARNING_FLAG_RADIUS[] = true
-
 function Base.getindex(sys, i, ::Radius)
     if WARNING_FLAG_RADIUS[]
         @warn "getindex! not overloaded for `FastMultipole.Radius` for type $(typeof(sys)); zero radius assumed"
@@ -18,9 +15,6 @@ function Base.getindex(sys, i, ::Radius)
     end
     return 0.0
 end
-
-const WARNING_FLAG_SCALAR_POTENTIAL = Array{Bool,0}(undef)
-WARNING_FLAG_SCALAR_POTENTIAL[] = true
 
 function Base.getindex(sys, i, ::ScalarPotential)
     if WARNING_FLAG_SCALAR_POTENTIAL[]
@@ -30,9 +24,6 @@ function Base.getindex(sys, i, ::ScalarPotential)
     return 0.0
 end
 
-const WARNING_FLAG_VECTOR_POTENTIAL = Array{Bool,0}(undef)
-WARNING_FLAG_VECTOR_POTENTIAL[] = true
-
 #function Base.getindex(sys, i, ::VectorPotential)
 #    if WARNING_FLAG_VECTOR_POTENTIAL[]
 #        @warn "getindex! not overloaded for `FastMultipole.VectorPotential` for type $(typeof(sys)); zero assumed"
@@ -40,9 +31,6 @@ WARNING_FLAG_VECTOR_POTENTIAL[] = true
 #    end
 #    return SVector{3}(0.0,0.0,0.0)
 #end
-
-const WARNING_FLAG_VELOCITY = Array{Bool,0}(undef)
-WARNING_FLAG_VELOCITY[] = true
 
 function Base.getindex(sys, i, ::Velocity)
     if WARNING_FLAG_VELOCITY[]
@@ -52,9 +40,6 @@ function Base.getindex(sys, i, ::Velocity)
     return zero(SVector{3,Float64})
 end
 
-const WARNING_FLAG_VELOCITY_GRADIENT = Array{Bool,0}(undef)
-WARNING_FLAG_VELOCITY_GRADIENT[] = true
-
 function Base.getindex(sys, i, ::VelocityGradient)
     if WARNING_FLAG_VELOCITY_GRADIENT[]
         @warn "getindex! not overloaded for `FastMultipole.VelocityGradient` for type $(typeof(sys)); zero assumed"
@@ -62,9 +47,6 @@ function Base.getindex(sys, i, ::VelocityGradient)
     end
     return zero(SMatrix{3,3,Float64,9})
 end
-
-const WARNING_FLAG_STRENGTH = Array{Bool,0}(undef)
-WARNING_FLAG_STRENGTH[] = true
 
 function Base.getindex(sys, i, ::Strength)
     if WARNING_FLAG_STRENGTH[]

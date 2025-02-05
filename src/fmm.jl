@@ -978,6 +978,9 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
 
     if n_bodies > 0
 
+        # reset flags
+        WARNING_FLAG_ERROR[] = true
+
         # wrap lamb_helmholtz in Val
         lamb_helmholtz = Val(lamb_helmholtz)
 

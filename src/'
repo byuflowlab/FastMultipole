@@ -445,9 +445,8 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         end
     end
 
-    if WARNING_FLAG_ERROR[]
+    if WARNING_FLAG_ERROR[] == false
         @warn "Error tolerance $(ε_tol * ONE_OVER_4π) not reached! Using max expansion order P=$(n-1).\n\tε_mp = $ε_mp, \n\tε_l = $ε_l"
-        WARNING_FLAG_ERROR[] = false
     end
 
     return n-1

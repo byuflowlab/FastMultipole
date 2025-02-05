@@ -7,8 +7,6 @@ using LinearAlgebra
 using StaticArrays
 using WriteVTK
 
-using CodeTools
-
 #------- CONSTANTS -------#
 
 const ONE_OVER_4π = 1/(4*π)
@@ -38,6 +36,30 @@ const Hs_π2 = Float64[1.0]
 # preallocate y-axis rotation Wigner matrix normalization
 const ζs_mag = Float64[1.0]
 const ηs_mag = Float64[1.0]
+
+#------- WARNING FLAGS -------#
+
+const WARNING_FLAG_ERROR = Array{Bool,0}(undef)
+WARNING_FLAG_ERROR[] = true
+
+const WARNING_FLAG_RADIUS = Array{Bool,0}(undef)
+WARNING_FLAG_RADIUS[] = true
+
+const WARNING_FLAG_SCALAR_POTENTIAL = Array{Bool,0}(undef)
+WARNING_FLAG_SCALAR_POTENTIAL[] = true
+
+const WARNING_FLAG_VECTOR_POTENTIAL = Array{Bool,0}(undef)
+WARNING_FLAG_VECTOR_POTENTIAL[] = true
+
+const WARNING_FLAG_VELOCITY = Array{Bool,0}(undef)
+WARNING_FLAG_VELOCITY[] = true
+
+const WARNING_FLAG_VELOCITY_GRADIENT = Array{Bool,0}(undef)
+WARNING_FLAG_VELOCITY_GRADIENT[] = true
+
+const WARNING_FLAG_STRENGTH = Array{Bool,0}(undef)
+WARNING_FLAG_STRENGTH[] = true
+
 
 #------- HEADERS AND EXPORTS -------#
 
