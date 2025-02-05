@@ -970,7 +970,7 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     reset_tree::Bool=true, unsort_bodies::Bool=true,
     nearfield_device::Bool=false,
-    save_tree=false, save_name="tree", tune=true
+    save_tree=false, save_name="tree", tune=false
 )
 
     # check if systems are empty
