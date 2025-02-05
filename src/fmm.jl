@@ -970,7 +970,7 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     reset_tree::Bool=true, unsort_bodies::Bool=true,
     nearfield_device::Bool=false,
-    save_tree=false, save_name="tree"
+    save_tree=false, save_name="tree", tune=true
 )
 
     # check if systems are empty
@@ -1022,10 +1022,8 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
 
             if n_threads == 1
 
-                println("Direct:")
-                @time nearfield_singlethread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list)
-                println("Expansions")
-                @time begin
+                t_nf = @elapsed nearfield_singlethread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list)
+                t_exp = @elapsed begin
                 upward_pass && upward_pass_singlethread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.leaf_index, is_source)
                 horizontal_pass && horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol)
 
@@ -1033,6 +1031,13 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
                 downward_pass && downward_pass_singlethread_1!(tree.branches, expansion_order, lamb_helmholtz)
                 velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(tree.branches[1]))
                 downward_pass && downward_pass_singlethread_2!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target, velocity_n_m)
+                end
+
+                if tune
+                    println("\n#------- Tuning FastMultipole -------#\n\tDirect Cost:    $t_nf\n\tExpansion Cost: $t_exp")
+                    suggestion = t_nf > t_exp * 1.25 ? "decreasing" : t_nf < t_exp * 0.75 ? "increasing" : "keeping current"
+                    println("\tSuggest " * suggestion * " leaf size")
+                    println("#------------------------------------#\n")
                 end
             else
 
