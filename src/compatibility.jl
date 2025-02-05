@@ -88,13 +88,18 @@ get_n_bodies(sys) = @error "FastMultipole.get_n_bodies() not overloaded for type
 buffer_element(system) = @error "`buffer_element` not overloaded for `system::`$(typeof(system)); try using `SortWrapper(system)` or overload `buffer_element`"
 
 function body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
-    @warn "body_to_multipole! not overloaded for type $(typeof(system)); interaction ignored"
+    if WARNING_FLAG_B2M[]
+        @warn "body_to_multipole! not overloaded for type $(typeof(system)); interaction ignored"
+        WARNING_FLAG_B2M[] = false
+    end
     return nothing
 end
 
 function direct!(target_system, target_index, derivatives_switch, source_system, source_index)
-    @show typeof(target_system) typeof(target_index) typeof(derivatives_switch) typeof(source_system) typeof(source_index)
-    @warn "direct! not overloaded for type $(typeof(source_system)); interaction ignored"
+    if WARNING_FLAG_DIRECT[]
+        @warn "direct! not overloaded for type $(typeof(source_system)); interaction ignored"
+        WARNING_FLAG_DIRECT[] = false
+    end
     return nothing
 end
 

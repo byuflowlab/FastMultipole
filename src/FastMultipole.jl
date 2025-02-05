@@ -60,6 +60,11 @@ WARNING_FLAG_VELOCITY_GRADIENT[] = true
 const WARNING_FLAG_STRENGTH = Array{Bool,0}(undef)
 WARNING_FLAG_STRENGTH[] = true
 
+const WARNING_FLAG_B2M = Array{Bool,0}(undef)
+WARNING_FLAG_B2M[] = true
+
+const WARNING_FLAG_DIRECT = Array{Bool,0}(undef)
+WARNING_FLAG_DIRECT[] = true
 
 #------- HEADERS AND EXPORTS -------#
 
