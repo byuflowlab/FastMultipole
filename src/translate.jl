@@ -383,7 +383,33 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
     # perform computation
     n = 1
-    for _ in 1:expansion_order+1
+
+    # rotate about z axis
+    eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
+
+    # get y-axis Wigner rotation matrix
+    _1_n = update_Ts_n!(Ts, Hs_π2, sβ, cβ, _1_n, n)
+
+    # perform rotation about the y axis
+    # NOTE: the method used here results in an additional rotatation of π about the new z axis
+    i_ζ, i_T = _rotate_multipole_y_n!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, lamb_helmholtz, i_ζ, i_T, n)
+
+    # recurse
+    if n < expansion_order + 1 # if statement ensures that n == 1 + desired P
+                               # when tolerance is reached (breaks the loop early)
+                               # or that n == 1 + Pmax when tolerance is not reached
+        n!_t_np1 *= (n+1) * rinv
+        r_l_nm1 *= r_l
+        r_mp_inv_np2 *= r_mp_inv
+        nm1!_inv /= n
+
+        # increment n
+        n += 1
+        np1! *= n+1
+    end
+
+    # n>1
+    for _ in 2:expansion_order+1
 
         # rotate about z axis
         eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
