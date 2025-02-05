@@ -40,6 +40,10 @@ function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_fact
     system = Gravitational(bodies)
 end
 
+function reset!(system::Gravitational{TF}) where TF
+    system.potential .= zero(TF)
+end
+
 function Base.getindex(g::Gravitational, i, ::Position)
     g.bodies[i].position
 end
