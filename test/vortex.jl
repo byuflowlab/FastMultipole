@@ -40,6 +40,11 @@ function generate_vortex(seed, n_bodies; strength_scale=1/n_bodies)
     return VortexParticles(position, strength)
 end
 
+function reset!(system::VortexParticles{TF}) where TF
+    system.potential .= zero(TF)
+    system.velocity_stretching .= zero(TF)
+end
+
 abstract type IntegrationScheme end
 
 struct Euler{TF} <: IntegrationScheme
