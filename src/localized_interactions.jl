@@ -6,9 +6,23 @@ function localized_particle_interaction!(systems::Tuple, radius;
     tree = Tree(systems; leaf_size, is_target, is_source)
     direct_list = build_localized_interaction_list(tree, radius)
 
-    for interaction in direct_list
-
+    for i in eachindex(systems)
+        !is_source[i] && continue
+        source_system = systems[i]
+        for j in eachindex(systems)
+            !is_target[j] && continue
+            target_system = systems[j]
+            for interaction in direct_list
+                t_leaf, s_branch = interaction
+                target_idx = tree.branches[t_leaf].bodies_index[j]
+                source_idx = tree.branches[s_branch].bodies_index[i]
+                localized_direct!(target_system, target_idx, source_system, source_idx)
+            end
+        end
     end
+
+    unsort!(systems, tree)
+    return nothing
 end
 
 function build_localized_interaction_list(tree::Tree, radius)
