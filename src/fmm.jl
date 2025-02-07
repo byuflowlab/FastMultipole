@@ -16,22 +16,28 @@ function nearfield_singlethread!(systems, branches, is_target, is_source, deriva
                     # extract derivatives switch
                     derivatives_switch = derivatives_switches[i_target_system]
 
-                    # loop over direct list
-                    for (i_target, i_source) in direct_list
-
-                        # identify sources
-                        source_index = branches[i_source].bodies_index[i_source_system]
-
-                        # identify targets
-                        target_index = branches[i_target].bodies_index[i_target_system]
-
-                        # compute interaction
-                        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
-
-                    end
+                    # perform direct interactions
+                    nearfield_loop!(target_system, i_target_system, source_system, i_source_system, branches, direct_list, derivatives_switch)
                 end
             end
         end
+    end
+end
+
+function nearfield_loop!(target_system, i_target_system, source_system, i_source_system, branches, direct_list, derivatives_switch)
+
+    # loop over direct list
+    for (i_target, i_source) in direct_list
+
+        # identify sources
+        source_index = branches[i_source].bodies_index[i_source_system]
+
+        # identify targets
+        target_index = branches[i_target].bodies_index[i_target_system]
+
+        # compute interaction
+        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+
     end
 end
 
