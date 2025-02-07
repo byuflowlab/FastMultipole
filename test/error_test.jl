@@ -27,7 +27,7 @@ function predicted_errors(tree, m2l_list, system, error_method, expansion_order,
     return multipole_errs_hat, local_errs_hat
 end
 
-function expansion_errors(tree::FastMultipole.Tree{TF,<:Any,<:Any}, m2l_list, system, expansion_order, lamb_helmholtz::Val) where TF
+function expansion_errors(tree::FastMultipole.Tree{TF,<:Any,<:Any}, m2l_list, system, expansion_order, lamb_helmholtz::Val; debug=false) where TF
 
     # preallocate containers
     multipole_errs_mean = zeros(length(m2l_list))
@@ -51,6 +51,10 @@ function expansion_errors(tree::FastMultipole.Tree{TF,<:Any,<:Any}, m2l_list, sy
         # extract branches
         local_branch = tree.branches[i_target]
         multipole_branch = tree.branches[i_source]
+
+        if debug && i == 30299
+            @show local_branch.target_center local_branch.target_box multipole_branch.source_center multipole_branch.source_box local_branch.bodies_index multipole_branch.bodies_index
+        end
 
         # zero velocity influence
         for i in local_branch.bodies_index[1]
@@ -123,11 +127,19 @@ end
 
 #--- Gravitational System ---#
 
-function run_gravitational_system(expansion_order)
+function clean_nans!(v)
+    for i in eachindex(v)
+        if abs(v[i]) < 1e-16
+            v[i] = 1e-16
+        end
+    end
+end
+
+function run_gravitational_system(expansion_order; debug=false)
     # create system
     seed = 123
     n_bodies = 10000
-    system = generate_gravitational(seed, n_bodies; radius_factor=0.0)
+    system = generate_gravitational(seed, n_bodies; radius_factor=0.0, strength_factor=1/(0.07891333941819023*n_bodies))
 
     # generate multipole expansions and m2l-list
     leaf_size, multipole_threshold, lamb_helmholtz = SVector{1}(50), 0.5, false
@@ -137,7 +149,7 @@ function run_gravitational_system(expansion_order)
     tree, m2l_list, direct_list, derivatives_switches = fmm!((system,), tree, is_target, is_source; multipole_threshold, expansion_order=expansion_order+1, unsort_bodies=false, lamb_helmholtz, velocity_gradient=false)
 
     # compute expansion errors
-    multipole_errs_mean, local_errs_mean, overall_errs_mean, multipole_errs_max, local_errs_max, overall_errs_max = expansion_errors(tree, m2l_list, system, expansion_order, Val(lamb_helmholtz))
+    multipole_errs_mean, local_errs_mean, overall_errs_mean, multipole_errs_max, local_errs_max, overall_errs_max = expansion_errors(tree, m2l_list, system, expansion_order, Val(lamb_helmholtz); debug)
 
     # predicted errors
     error_method = FastMultipole.RotatedCoefficients()
@@ -150,6 +162,7 @@ function run_gravitational_system(expansion_order)
     reset!(system)
     direct!(system)
     direct_velocity = [SVector{3}(system[i,Velocity()]) for i in 1:get_n_bodies(system)]
+    mean_velocity = mean([norm(v) for v in direct_velocity])
     error_velocity = [norm(v1 - v2) for (v1,v2) in zip(fmm_velocity, direct_velocity)]
     mean_error = mean(error_velocity)
     median_error = median(error_velocity)
@@ -163,6 +176,7 @@ function run_gravitational_system(expansion_order)
     println("\n#------- Checking Error P=$expansion_order -------#")
     println("\tlength of m2l_list:    $(length(m2l_list))")
     println("\tlength of direct_list: $(length(direct_list))")
+    println("\tmean velocity:         $(mean_velocity)")
     println("\tmean error (manual):   $(mean_error)")
     println("\tmedian error (manual): $(median_error)")
     println("\tmax error (manual):    $(max_error)")
@@ -176,14 +190,6 @@ function run_gravitational_system(expansion_order)
     @assert sum(isnan.(local_errs_max)) == 0
     @assert sum(isnan.(overall_errs_max)) == 0
 
-    function clean_nans!(v)
-        for i in eachindex(v)
-            if abs(v[i]) < 1e-12
-                v[i] = 1e-12
-            end
-        end
-    end
-
     clean_nans!(multipole_errs_hat)
     clean_nans!(multipole_errs_max)
     clean_nans!(local_errs_hat)
@@ -193,6 +199,11 @@ function run_gravitational_system(expansion_order)
     v_mp = multipole_errs_hat ./ multipole_errs_max
     v_l = local_errs_hat ./ local_errs_max
     v_o = (multipole_errs_hat .+ local_errs_hat) ./ overall_errs_max
+
+    if debug
+        maxval, i = findmax(log10.(v_l))
+        @show maxval i
+    end
 
     @assert sum(isnan.(v_mp)) == 0
     @assert sum(isnan.(v_l)) == 0
@@ -243,7 +254,7 @@ function run_vortex_system(expansion_order)
     # create system
     seed = 123
     n_bodies = 10000
-    system = generate_vortex(seed, n_bodies)# ; radius_factor=0.0)
+    system = generate_vortex(seed, n_bodies; strength_scale=1/(n_bodies*0.22117081079800682))
 
     # generate multipole expansions and m2l-list
     leaf_size, multipole_threshold, lamb_helmholtz = SVector{1}(40), 0.5, true
@@ -266,6 +277,7 @@ function run_vortex_system(expansion_order)
     reset!(system)
     direct!(system)
     direct_velocity = [SVector{3}(system[i,Velocity()]) for i in 1:get_n_bodies(system)]
+    mean_velocity = mean([norm(v) for v in direct_velocity])
     error_velocity = [norm(v1 - v2) for (v1,v2) in zip(fmm_velocity, direct_velocity)]
     mean_error = mean(error_velocity)
     median_error = median(error_velocity)
@@ -278,6 +290,7 @@ function run_vortex_system(expansion_order)
     println("\n#------- Checking Error P=$expansion_order -------#")
     println("\tlength of m2l_list:    $(length(m2l_list))")
     println("\tlength of direct_list: $(length(direct_list))")
+    println("\tmean velocity:         $(mean_velocity)")
     println("\tmean error (manual):   $(mean_error)")
     println("\tmedian error (manual): $(median_error)")
     println("\tmax error (manual):    $(max_error)")
@@ -290,14 +303,6 @@ function run_vortex_system(expansion_order)
     @assert sum(isnan.(local_errs_hat)) == 0
     @assert sum(isnan.(local_errs_max)) == 0
     @assert sum(isnan.(overall_errs_max)) == 0
-
-    function clean_nans!(v)
-        for i in eachindex(v)
-            if abs(v[i]) < 1e-12
-                v[i] = 1e-12
-            end
-        end
-    end
 
     clean_nans!(multipole_errs_hat)
     clean_nans!(multipole_errs_max)
@@ -348,18 +353,18 @@ function sweep_vortex_system(Ps=1:20)
     return mp_record, l_record, o_record, actual_record
 end
 
-mp_record, l_record, o_record, actual_record = sweep_gravitational_system(1:20)
+# mp_record, l_record, o_record, actual_record = sweep_gravitational_system(1:20)
 
-mp_record_vortex, l_record_vortex, o_record_vortex, actual_record_vortex = sweep_vortex_system()
+# mp_record_vortex, l_record_vortex, o_record_vortex, actual_record_vortex = sweep_vortex_system()
 
 # save files
-writedlm("mp_gravitational.csv", mp_record, ',')
-writedlm("l_gravitational.csv", l_record, ',')
-writedlm("o_gravitational.csv", o_record, ',')
-writedlm("actual_gravitational.csv", actual_record, ',')
+# writedlm("mp_gravitational.csv", mp_record, ',')
+# writedlm("l_gravitational.csv", l_record, ',')
+# writedlm("o_gravitational.csv", o_record, ',')
+# writedlm("actual_gravitational.csv", actual_record, ',')
 
-writedlm("mp_vortex.csv", mp_record_vortex, ',')
-writedlm("l_vortex.csv", l_record_vortex, ',')
-writedlm("o_vortex.csv", o_record_vortex, ',')
-writedlm("actual_vortex.csv", actual_record_vortex, ',')
+# writedlm("mp_vortex.csv", mp_record_vortex, ',')
+# writedlm("l_vortex.csv", l_record_vortex, ',')
+# writedlm("o_vortex.csv", o_record_vortex, ',')
+# writedlm("actual_vortex.csv", actual_record_vortex, ',')
 
