@@ -1,12 +1,19 @@
 #--- determine distances for error formulae ---#
 
 @inline minabs(x, y) = x * (abs(x) <= abs(y)) + y * (abs(y) < abs(x))
+@inline maxabs(x, y) = x * (abs(x) >= abs(y)) + y * (abs(y) > abs(x))
 
 function minimum_distance(dx, rx_minus, rx_plus)
     right = dx + rx_plus
     left = dx + rx_minus
     same_sign = right * left >= 0
     return same_sign * minabs(right, left)
+end
+
+function maximum_distance(dx, rx_minus, rx_plus)
+    right = dx + rx_plus
+    left = dx + rx_minus
+    return maxabs(right, left)
 end
 
 function minimum_distance(center1, center2, box2::SVector{3,<:Any})
@@ -16,6 +23,29 @@ function minimum_distance(center1, center2, box2::SVector{3,<:Any})
     Δx = minimum_distance(x2-x1, -bx, bx)
     Δy = minimum_distance(y2-y1, -by, by)
     Δz = minimum_distance(z2-z1, -bz, bz)
+    return SVector{3}(Δx, Δy, Δz)
+end
+
+# Minimum distance between box edges
+function minimum_edge_distance(center1, box1, center2, box2)
+    x1, y1, z1 = center1
+    x2, y2, z2 = center2
+    bx1, by1, bz1 = box1
+    bx2, by2, bz2 = box2
+    Δx = minimum_distance(x2-x1, -bx1-bx2, bx1+bx2)
+    Δy = minimum_distance(y2-y1, -by1-by2, by1+by2)
+    Δz = minimum_distance(z2-z1, -bz1-bz2, bz1+bz2)
+    return SVector{3}(Δx, Δy, Δz)
+end
+
+function maximum_edge_distance(center1, box1, center2, box2)
+    x1, y1, z1 = center1
+    x2, y2, z2 = center2
+    bx1, by1, bz1 = box1
+    bx2, by2, bz2 = box2
+    Δx = maximum_distance(x2-x1, -bx1-bx2, bx1+bx2)
+    Δy = maximum_distance(y2-y1, -by1-by2, by1+by2)
+    Δz = maximum_distance(z2-z1, -bz1-bz2, bz1+bz2)
     return SVector{3}(Δx, Δy, Δz)
 end
 

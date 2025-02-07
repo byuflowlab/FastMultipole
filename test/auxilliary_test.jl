@@ -47,3 +47,136 @@ end
     end
 end
 
+@testset "minimum_edge_distance" begin
+    center1 = [0.0, 0.0, 0.0]
+    box1 = [1.0, 1.0, 1.0]
+    center2 = [2.0, 2.0, 2.0]
+    box2 = [1.0, 1.0, 1.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 0.0; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    center2 = [3.0, 3.0, 3.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 1.0; atol=1e-10)
+    @test isapprox(dy, 1.0; atol=1e-10)
+    @test isapprox(dz, 1.0; atol=1e-10)
+
+    center2 = [-2.0, -2.0, -2.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 0.0; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    center2 = [-3.0, -3.0, -3.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, -1.0; atol=1e-10)
+    @test isapprox(dy, -1.0; atol=1e-10)
+    @test isapprox(dz, -1.0; atol=1e-10)
+
+    center2 = [2.0, 0.0, 0.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 0.0; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    center2 = [1.0, 3.0, 0.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 1.0; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    center2 = [-1.0, 3.0, 0.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 1.0; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    center2 = [1.0, 3.0, 0.0]
+    box2 = [0.1, 0.1, 0.1]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 2.0-0.1; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    center2 = [0.0, 3.0, 0.0]
+    box2 = [0.1, 0.1, 0.1]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 2.0-0.1; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+
+    box2 = [5.0, 1.0, 1.0]
+    dx, dy, dz = FastMultipole.minimum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 0.0; atol=1e-10)
+    @test isapprox(dy, 1.0; atol=1e-10)
+    @test isapprox(dz, 0.0; atol=1e-10)
+end
+
+@testset "maximum_edge_distance" begin
+    center1 = [0.0, 0.0, 0.0]
+    box1 = [1.0, 1.0, 1.0]
+    center2 = [2.0, 2.0, 2.0]
+    box2 = [1.0, 1.0, 1.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 4.0; atol=1e-10)
+    @test isapprox(dy, 4.0; atol=1e-10)
+    @test isapprox(dz, 4.0; atol=1e-10)
+
+    center2 = [3.0, 3.0, 3.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 5.0; atol=1e-10)
+    @test isapprox(dy, 5.0; atol=1e-10)
+    @test isapprox(dz, 5.0; atol=1e-10)
+
+    center2 = [-2.0, -2.0, -2.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, -4.0; atol=1e-10)
+    @test isapprox(dy, -4.0; atol=1e-10)
+    @test isapprox(dz, -4.0; atol=1e-10)
+
+    center2 = [-3.0, -3.0, -3.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, -5.0; atol=1e-10)
+    @test isapprox(dy, -5.0; atol=1e-10)
+    @test isapprox(dz, -5.0; atol=1e-10)
+
+    center2 = [2.0, 0.0, 0.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 4.0; atol=1e-10)
+    @test isapprox(dy, 2.0; atol=1e-10)
+    @test isapprox(dz, 2.0; atol=1e-10)
+
+    center2 = [1.0, 3.0, 0.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 3.0; atol=1e-10)
+    @test isapprox(dy, 5.0; atol=1e-10)
+    @test isapprox(dz, 2.0; atol=1e-10)
+
+    center2 = [-1.0, 3.0, 0.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, -3.0; atol=1e-10)
+    @test isapprox(dy, 5.0; atol=1e-10)
+    @test isapprox(dz, 2.0; atol=1e-10)
+
+    center2 = [1.0, 3.0, 0.0]
+    box2 = [0.1, 0.1, 0.1]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 2.1; atol=1e-10)
+    @test isapprox(dy, 4.1; atol=1e-10)
+    @test isapprox(dz, 1.1; atol=1e-10)
+
+    center2 = [0.0, 3.0, 0.0]
+    box2 = [0.1, 0.1, 0.1]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 1.1; atol=1e-10)
+    @test isapprox(dy, 4.1; atol=1e-10)
+    @test isapprox(dz, 1.1; atol=1e-10)
+
+    box2 = [5.0, 1.0, 1.0]
+    dx, dy, dz = FastMultipole.maximum_edge_distance(center1, box1, center2, box2)
+    @test isapprox(dx, 6.0; atol=1e-10)
+    @test isapprox(dy, 5.0; atol=1e-10)
+    @test isapprox(dz, 2.0; atol=1e-10)
+end
