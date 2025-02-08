@@ -1,43 +1,42 @@
 #------- direct interactions -------#
 
-function nearfield_singlethread!(systems, branches, is_target, is_source, derivatives_switches, direct_list)
+function nearfield_singlethread!(targets, systems, branches, is_target, is_source, derivatives_switches, direct_list)
     # loop over sources
     for (i_source_system, source_system) in enumerate(systems)
 
         # check if this is a source system
         if is_source[i_source_system]
+            # perform direct interactions
+            nearfield_loop!(targets, is_target, source_system, i_source_system, branches, direct_list, derivatives_switches)
 
-            # loop over target systems
-            for (i_target_system, target_system) in enumerate(systems)
-
-                # check if this is a target system
-                if is_target[i_target_system]
-
-                    # extract derivatives switch
-                    derivatives_switch = derivatives_switches[i_target_system]
-
-                    # perform direct interactions
-                    nearfield_loop!(target_system, i_target_system, source_system, i_source_system, branches, direct_list, derivatives_switch)
-                end
-            end
         end
     end
 end
 
-function nearfield_loop!(target_system, i_target_system, source_system, i_source_system, branches, direct_list, derivatives_switch)
+function nearfield_loop!(targets, is_target, source_system, i_source_system, branches, direct_list, derivatives_switches)
+    # loop over target systems
+    for (i_target_system, target_system) in enumerate(targets)
 
-    # loop over direct list
-    for (i_target, i_source) in direct_list
+        # check if this is a target system
+        if is_target[i_target_system]
 
-        # identify sources
-        source_index = branches[i_source].bodies_index[i_source_system]
+            # extract derivatives switch
+            derivatives_switch = derivatives_switches[i_target_system]
 
-        # identify targets
-        target_index = branches[i_target].bodies_index[i_target_system]
+            # loop over direct list
+            for (i_target, i_source) in direct_list
 
-        # compute interaction
-        _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+                # identify sources
+                source_index = branches[i_source].bodies_index[i_source_system]
 
+                # identify targets
+                target_index = branches[i_target].bodies_index[i_target_system]
+
+                # compute interaction
+                _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+
+            end
+        end
     end
 end
 
@@ -932,6 +931,26 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source; multipole_thresh
     return fmm!(systems, tree, is_target, is_source, m2l_list, direct_list, derivatives_switches; optargs...)
 end
 
+function system_to_target!(target, system)
+    for i in 1:get_n_bodies(system)
+        target[i,Position()] = system[i,Position()]
+    end
+end
+
+function target_to_system!(system, target, ::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
+    for i in 1:get_n_bodies(system)
+        if PS
+            system[i,ScalarPotential()] += target[i,ScalarPotential()]
+        end
+        if VS
+            system[i,Velocity()] += target[i,Velocity()]
+        end
+        if GS
+            system[i,VelocityGradient()] += target[i,VelocityGradient()]
+        end
+    end
+end
+
 """
     fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches; kwargs...)
 
@@ -972,7 +991,7 @@ Dispatches `fmm!` using existing `::Tree` objects.
 
 """
 function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct_list, derivatives_switches;
-    expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=false,
+    expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=true,
     nearfield::Bool=true, upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     reset_tree::Bool=true, unsort_bodies::Bool=true,
     nearfield_device::Bool=false,
@@ -1028,7 +1047,22 @@ function fmm!(systems::Tuple, tree::Tree, is_target, is_source, m2l_list, direct
 
             if n_threads == 1
 
-                t_nf = @elapsed nearfield_singlethread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list)
+                # allocate target matrices
+                targets = [zeros(i_VELOCITY_GRADIENT[end], get_n_bodies(system)) for system in systems]
+
+                # copy system information to targets
+                for (target, system) in zip(targets, systems)
+                    system_to_target!(target, system)
+                end
+
+                # perform nearfield calculations
+                t_nf = @elapsed nearfield_singlethread!(targets, systems, tree.branches, is_target, is_source, derivatives_switches, direct_list)
+
+                # copy results
+                for (system, target, derivatives_switch) in zip(systems, targets, derivatives_switches)
+                    target_to_system!(system, target, derivatives_switch)
+                end
+
                 t_exp = @elapsed begin
                 upward_pass && upward_pass_singlethread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.leaf_index, is_source)
                 horizontal_pass && horizontal_pass_singlethread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol)

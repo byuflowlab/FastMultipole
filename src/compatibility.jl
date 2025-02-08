@@ -1,6 +1,4 @@
-#####
-##### functions that should be overloaded for use in the FMM
-#####
+#------- functions that should be overloaded for use in the FMM -------#
 
 Base.getindex(sys, i, ::Body) = @error "getindex! not overloaded for `FastMultipole.Body` for type $(typeof(sys))"
 
@@ -101,5 +99,35 @@ function direct!(target_system, target_index, derivatives_switch, source_system,
         WARNING_FLAG_DIRECT[] = false
     end
     return nothing
+end
+
+#------- access functions for use with a matrix of targets used as input to direct! -------#
+
+const i_POSITION = 1:3
+const i_SCALAR_POTENTIAL = 4
+const i_VELOCITY = 5:7
+const i_VELOCITY_GRADIENT = 8:16
+
+#--- getters ---#
+
+Base.getindex(sys::Matrix{TF}, i, ::Position) where TF = SVector{3,TF}(sys[i_POSITION[1], i], sys[i_POSITION[2], i], sys[i_POSITION[3], i])
+Base.getindex(sys::Matrix{TF}, i, ::ScalarPotential) where TF = sys[i_SCALAR_POTENTIAL, i]
+Base.getindex(sys::Matrix{TF}, i, ::Velocity) where TF =
+    SVector{3,TF}(sys[i_VELOCITY[1], i], sys[i_VELOCITY[2], i], sys[i_VELOCITY[3], i])
+Base.getindex(sys::Matrix{TF}, i, ::VelocityGradient) where TF =
+    SMatrix{3,3,TF,9}(sys[i_VELOCITY_GRADIENT[1], i], sys[i_VELOCITY_GRADIENT[2], i], sys[i_VELOCITY_GRADIENT[3], i],
+    sys[i_VELOCITY_GRADIENT[4], i], sys[i_VELOCITY_GRADIENT[5], i], sys[i_VELOCITY_GRADIENT[6], i],
+    sys[i_VELOCITY_GRADIENT[7], i], sys[i_VELOCITY_GRADIENT[8], i], sys[i_VELOCITY_GRADIENT[9], i])
+
+#--- setters ---#
+
+Base.setindex!(sys::Matrix, val, i, ::Position) = sys[i_POSITION, i] .= val
+Base.setindex!(sys::Matrix, val, i, ::ScalarPotential) = sys[i_SCALAR_POTENTIAL, i] = val
+Base.setindex!(sys::Matrix, val, i, ::Velocity) = sys[i_VELOCITY, i] .= val
+
+function Base.setindex!(sys::Matrix, val, i, ::VelocityGradient)
+    for (jj,j) in enumerate(i_VELOCITY_GRADIENT)
+        sys[j, i] = val[jj]
+    end
 end
 

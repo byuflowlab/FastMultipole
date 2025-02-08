@@ -87,7 +87,7 @@ end
 
 function _direct!(target_system, target_index, derivatives_switch, source_system::SortWrapper, source_index::UnitRange)
     for i in source_index
-        direct!(target_system, target_indices, derivatives_switch, source_system.system, source_system.index[i]:source_system.index[i])
+        direct!(target_system, target_index, derivatives_switch, source_system.system, source_system.index[i]:source_system.index[i])
     end
 end
 
