@@ -70,7 +70,10 @@ function Base.setindex!(g::Gravitational, val, i, ::Velocity)
     g.potential[i_VELOCITY,i] .= val
 end
 function Base.setindex!(g::Gravitational, val, i, ::VelocityGradient)
-    reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
+    for (jj,j) in enumerate(i_VELOCITY_GRADIENT)
+        g.potential[j,i] = val[jj]
+    end
+    # reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
 end
 function Base.setindex!(g::Gravitational{TF}, val, i, ::Strength) where TF
     body = g.bodies[i]
