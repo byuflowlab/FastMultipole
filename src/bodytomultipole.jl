@@ -25,7 +25,7 @@ end
 
 function body_to_multipole!(branch::Branch, systems::Tuple, harmonics, expansion_order)
     # iterate over systems
-    for (system, bodies_index, source) in zip(systems, branch.bodies_index)
+    for (system, bodies_index) in zip(systems, branch.bodies_index)
         body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
     end
 end
@@ -511,7 +511,7 @@ end
         xu = x2 - x1
 
         # update values
-        body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, system[i_body, STRENGTH], expansion_order)
+        body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, system[i_body, Strength()], expansion_order)
     end
 end
 
@@ -653,6 +653,28 @@ end
 
         # update values
         body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, system[i_body, STRENGTH], expansion_order)
+    end
+end
+
+@inline function body_to_multipole!(element::Type{Panel{SourceDipole}}, system, branch, bodies_index, harmonics, expansion_order)
+    # extract containers
+    center = branch.source_center
+    multipole_coefficients = branch.multipole_expansion
+
+    # loop over bodies
+    for i_body in bodies_index
+        # relative body position
+        x1 = system[i_body,VERTEX,1]
+        x2 = system[i_body,VERTEX,2]
+        x3 = system[i_body,VERTEX,3]
+        x0 = x1 - center
+        xu = x2 - x1
+        xv = x3 - x1
+
+        # update values
+        strength = system[i_body, Strength()]
+        body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, strength[1], expansion_order)
+        body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, strength[2], expansion_order)
     end
 end
 
