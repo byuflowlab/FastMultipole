@@ -121,9 +121,9 @@ Base.getindex(sys::Matrix{TF}, i, ::VelocityGradient) where TF =
 
 #--- setters ---#
 
-Base.setindex!(sys::Matrix, val, i, ::Position) = sys[i_POSITION, i] .= val
+Base.setindex!(sys::Matrix, val, i, ::Position) = @inbounds sys[i_POSITION, i] .= val
 Base.setindex!(sys::Matrix, val, i, ::ScalarPotential) = sys[i_SCALAR_POTENTIAL, i] = val
-Base.setindex!(sys::Matrix, val, i, ::Velocity) = sys[i_VELOCITY, i] .= val
+Base.setindex!(sys::Matrix, val, i, ::Velocity) = @inbounds sys[i_VELOCITY, i] .= val
 
 function Base.setindex!(sys::Matrix, val, i, ::VelocityGradient)
     for (jj,j) in enumerate(i_VELOCITY_GRADIENT)

@@ -53,7 +53,7 @@ Base.getindex(g::Gravitational, i, ::ScalarPotential) = g.potential[1,i]
 Base.getindex(g::Gravitational, i, ::Velocity) = SVector{3}(g.potential[i_VELOCITY[1],i], g.potential[i_VELOCITY[2],i], g.potential[i_VELOCITY[3],i])
 Base.getindex(g::Gravitational, i, ::VelocityGradient) = SMatrix{3,3}(reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3))
 Base.getindex(g::Gravitational, i, ::Strength) = g.bodies[i].strength
-Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = g.bodies[i], g.potential[:,i]
+Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = (g.bodies[i], g.potential[:,i])
 function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Body)
     body, potential = val
     g.bodies[i] = body

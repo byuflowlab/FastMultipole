@@ -1,28 +1,28 @@
 #--- create interaction lists ---#
 
-function build_interaction_lists(target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
+function build_interaction_lists(target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
 
     # prepare containers
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
 
     # populate lists
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_index, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
+    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_size, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
 
     return m2l_list, direct_list
 end
 
 mean(x) = sum(x) / length(x)
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
 
-    if source_branch.source
+    # if source_branch.source
 
         target_branch = target_branches[i_target]
 
-        if target_branch.target
+        # if target_branch.target
 
             # branch center separation distance
             Δx, Δy, Δz = target_branch.target_center - source_branch.source_center
@@ -44,25 +44,40 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
                 if ff
                     push!(m2l_list, SVector{2}(i_target, j_source))
                 end
+                
+                return nothing
+            end
+            
+            fraction = 0.0
+            for i_sys in 1:length(source_branch.bodies_index)
+                fraction += length(source_branch.bodies_index[i_sys]) / (source_leaf_size[i_sys] * source_leaf_size[i_sys])
+            end
+            n_targets = 0
+            for i_sys in eachindex(target_branch.bodies_index)
+                n_targets += length(target_branch.bodies_index[i_sys])
+            end
+            fraction *= n_targets
 
-            elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
+            if fraction < 4.0 || source_branch.n_branches == target_branch.n_branches == 0
+            # if source_branch.n_branches == target_branch.n_branches == 0 # both leaves
+            # elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
                 nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
 
             elseif source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
 
                 for i_child in target_branch.branch_index
-                    build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
+                    build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
                 end
 
             else # source is not a leaf AND target is a leaf or is smaller
 
                 for j_child in source_branch.branch_index
-                    build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_index, multipole_threshold, farfield, nearfield, self_induced)
+                    build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
                 end
 
             end
-        end
-    end
+        # end
+    # end
 end
 
 @inline preallocate_bodies_index(T::Type{<:Branch{<:Any,NT}}, n) where NT = Tuple(Vector{UnitRange{Int64}}(undef, n) for _ in 1:NT)

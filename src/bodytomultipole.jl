@@ -16,19 +16,17 @@ body_to_multipole!(system::VortexSheetSurface, args...) = body_to_multipole!(Pan
 #     body_to_multipole!(system, branch, branch.bodies_index, harmonics, expansion_order)
 # end
 
-function body_to_multipole!(branches, leaf_index, system, i_system, expansion_order, is_source)
-    if is_source[i_system]
-        for i_branch in leaf_index
-            branch = branches[i_branch]
-            branch.source && body_to_multipole!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
-        end
+function body_to_multipole!(branches, leaf_index, system, i_system, expansion_order)
+    for i_branch in leaf_index
+        branch = branches[i_branch]
+        body_to_multipole!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
     end
 end
 
-function body_to_multipole!(branch::Branch, systems::Tuple, harmonics, expansion_order, is_source)
+function body_to_multipole!(branch::Branch, systems::Tuple, harmonics, expansion_order)
     # iterate over systems
-    for (system, bodies_index, source) in zip(systems, branch.bodies_index, is_source)
-        source && body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
+    for (system, bodies_index, source) in zip(systems, branch.bodies_index)
+        body_to_multipole!(system, branch, bodies_index, harmonics, expansion_order)
     end
 end
 
