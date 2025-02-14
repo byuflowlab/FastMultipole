@@ -673,8 +673,9 @@ end
 
         # update values
         strength = system[i_body, Strength()]
+        normal = system[i_body, Normal()]
         body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, strength[1], expansion_order)
-        body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, strength[2], expansion_order)
+        body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, strength[2] * normal, expansion_order)
     end
 end
 
