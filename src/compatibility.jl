@@ -131,3 +131,21 @@ function Base.setindex!(sys::Matrix, val, i, ::VelocityGradient)
     end
 end
 
+#--- auxilliary functions ---#
+
+function reset!(systems::Tuple)
+    for system in systems
+        reset!(system)
+    end
+end
+
+function reset!(system)
+    z_potential = zero(eltype(system))
+    z_velocity = zero(SVector{3,eltype(system)})
+    z_velocity_gradient = zero(SMatrix{3,3,eltype(system),9})
+    for i in 1:get_n_bodies(system)
+        system[i, ScalarPotential()] = z_potential
+        system[i, Velocity()] = z_velocity
+        system[i, VelocityGradient()] = z_velocity_gradient
+    end
+end

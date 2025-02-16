@@ -114,6 +114,10 @@ include("fmm.jl")
 
 export InteractionList, fmm!
 
+include("autotune.jl")
+
+export tune_fmm!
+
 include("probe.jl")
 
 export ProbeSystem

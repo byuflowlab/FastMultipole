@@ -346,6 +346,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     # back rotate about z axis and accumulate on target branch
     back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
+    return expansion_order
 end
 
 function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_tol) where LH
@@ -522,6 +523,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     # back rotate about z axis and accumulate on target branch
     back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
+    return expansion_order
 end
 
 "defaults to no error prediction"

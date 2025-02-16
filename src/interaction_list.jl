@@ -44,10 +44,10 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
                 if ff
                     push!(m2l_list, SVector{2}(i_target, j_source))
                 end
-                
+
                 return nothing
             end
-            
+
             fraction = 0.0
             for i_sys in 1:length(source_branch.bodies_index)
                 fraction += length(source_branch.bodies_index[i_sys]) / (source_leaf_size[i_sys] * source_leaf_size[i_sys])
