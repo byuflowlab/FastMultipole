@@ -601,16 +601,27 @@ function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, so
     eimϕs = zeros(TF, 2, expansion_order + 1 + error_check)
 
     Pmax = 0
-    for (i_target, j_source) in m2l_list
+    error_success = true
+    Ps = zeros(length(m2l_list))
+    for (i,(i_target, j_source)) in enumerate(m2l_list)
         target_branch = target_branches[i_target]
         source_branch = source_branches[j_source]
         #weights_tmp_1 = target_branch.expansion_storage
         #weights_tmp_2 = source_branch.expansion_storage
-        P = multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
+        P, this_error_success = multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
         Pmax = max(P, Pmax)
+        Ps[i] = P
+        error_success = error_success && this_error_success
     end
 
-    return Pmax
+    println("\n------- M2L Stats: -------")
+    println("\n\tmean: ", mean(Ps))
+    println("\tstd:  ", std(Ps))
+    println("\tmax:  ", maximum(Ps))
+    println("\tmin:  ", minimum(Ps))
+    println("\n--------------------------\n")
+
+    return Pmax, error_success
 end
 
 function horizontal_pass_multithread!(target_branches, source_branches::Vector{Branch{TF,N}}, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads) where {TF,N}
@@ -1059,8 +1070,12 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
                 t_m2l = 0.0
                 Pmax = 0
+                error_success = true
                 if horizontal_pass
-                    t_m2l = @elapsed Pmax = horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs)
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs)
+                end
+                if !error_success
+                    Pmax += 1
                 end
 
                 # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
@@ -1128,5 +1143,5 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     # save_target_tree && (visualize(save_name, target_systems, target_tree))
     # save_source_tree && (visualize(save_name, source_systems, source_tree))
 
-    return target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order
+    return target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order, error_success
 end

@@ -32,8 +32,8 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
     expansion_order=5,
     ε_abs=nothing,
     shrink_recenter=true, lamb_helmholtz=true,
-    multipole_thresholds=range(0.1, stop=0.8, step=0.1),
-    leaf_size_source=20,
+    multipole_thresholds=range(0.1, stop=0.9, step=0.1),
+    leaf_size_source=SVector{length(source_systems)}(20 for _ in source_systems),
     scalar_potential=true, velocity=true, velocity_gradient=false,
     verbose=true
 )
@@ -79,8 +79,19 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
         #--- tune expansion order and leaf size ---#
 
-        _ = @elapsed target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order =
+        # get leaf size
+        _ = @elapsed target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, _, error_success =
             fmm!(target_systems, source_systems;
+                multipole_threshold, leaf_size_source,
+                expansion_order, ε_abs, lamb_helmholtz,
+                scalar_potential, velocity, velocity_gradient,
+                tune=true,
+            )
+        
+        # get expansion order now that leaf_size has been chosen
+        _ = @elapsed target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order, error_success =
+            fmm!(target_systems, source_systems;
+                multipole_threshold, leaf_size_source,
                 expansion_order, ε_abs, lamb_helmholtz,
                 scalar_potential, velocity, velocity_gradient,
                 tune=true,
@@ -88,8 +99,9 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
         #--- benchmark with tuned parameters ---#
 
-        t_fmm = @elapsed target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order =
-            fmm!(target_systems, source_systems;
+        @show 
+        t_fmm = @elapsed fmm!(target_systems, source_systems;
+                multipole_threshold, leaf_size_source,
                 expansion_order, ε_abs, lamb_helmholtz,
                 scalar_potential, velocity, velocity_gradient,
                 tune=true,
@@ -97,7 +109,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
         leaf_size_sources[i_mt] = leaf_size_source
         expansion_orders[i_mt] = expansion_order
-        ts_fmm[i_mt] = t_fmm
+        ts_fmm[i_mt] = error_success ? t_fmm : Inf # if error was not successfully constrained, penalize this case so it is not chosen
 
         if verbose
             tuned_params = (:leaf_size_source => leaf_size_source,
@@ -105,6 +117,8 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                     :multipole_threshold => multipole_threshold)
             println("\t\tparameters: ", tuned_params)
             println("\t\tcost = $t_fmm seconds")
+            println("\t\tlength(m2l_list): ", length(m2l_list))
+            println("\t\tlength(direct_list): ", length(direct_list))
         end
 
     end

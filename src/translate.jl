@@ -346,7 +346,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     # back rotate about z axis and accumulate on target branch
     back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
-    return expansion_order
+    return expansion_order, true
 end
 
 function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_tol) where LH
@@ -453,7 +453,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
             # check total error
             if ε_mp + ε_l <= ε_tol
-                return n-1
+                return n-1, true
             end
         end
 
@@ -477,7 +477,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         WARNING_FLAG_ERROR[] = false
     end
 
-    return n-1
+    return n-1, false
 end
 
 """
@@ -503,7 +503,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_tol)
+    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_tol)
 
     #------- translate multipole to local expansion -------#
 
@@ -523,7 +523,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     # back rotate about z axis and accumulate on target branch
     back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
-    return expansion_order
+    return expansion_order, error_success
 end
 
 "defaults to no error prediction"

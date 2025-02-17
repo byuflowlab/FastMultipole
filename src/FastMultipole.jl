@@ -4,6 +4,7 @@ module FastMultipole
 
 import Base.:^
 using LinearAlgebra
+using Statistics
 using StaticArrays
 using WriteVTK
 
