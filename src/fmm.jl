@@ -589,7 +589,7 @@ end
 #     return εs_obs, εs_pred
 # end
 
-function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs) where {TF,N}
+function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=false) where {TF,N}
 
     # increment the expansion order if ε_abs !== nothing
     error_check = !(isnothing(ε_abs))
@@ -614,12 +614,14 @@ function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, so
         error_success = error_success && this_error_success
     end
 
-    println("\n------- M2L Stats: -------")
-    println("\n\tmean: ", mean(Ps))
-    println("\tstd:  ", std(Ps))
-    println("\tmax:  ", maximum(Ps))
-    println("\tmin:  ", minimum(Ps))
-    println("\n--------------------------\n")
+    if verbose
+        println("\n------- M2L Stats: -------")
+        println("\n\tmean: ", mean(Ps))
+        println("\tstd:  ", std(Ps))
+        println("\tmax:  ", maximum(Ps))
+        println("\tmin:  ", minimum(Ps))
+        println("\n--------------------------\n")
+    end
 
     return Pmax, error_success
 end
@@ -976,6 +978,7 @@ Dispatches `fmm!` using existing `::Tree` objects. Note that systems should be u
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree,  leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple;
     expansion_order=5, ε_abs=nothing, lamb_helmholtz::Bool=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
+    horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
     tune=false,
@@ -1072,7 +1075,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 Pmax = 0
                 error_success = true
                 if horizontal_pass
-                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs)
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=horizontal_pass_verbose)
                 end
                 if !error_success
                     Pmax += 1
