@@ -1,7 +1,7 @@
 import FastMultipole
 using FastMultipole
 using FastMultipole.WriteVTK
-using Distributions
+import Distributions
 import Base: getindex, setindex!
 using FastMultipole.StaticArrays
 const i_POSITION = 1:3
@@ -32,7 +32,7 @@ function Gravitational(bodies::Matrix)
     return Gravitational(bodies2,potential)
 end
 
-function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_factor=1/n_bodies, distribution=Uniform{Float64}(0,1), bodies_fun=(x)->x)
+function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_factor=1/n_bodies, distribution=Distributions.Uniform{Float64}(0,1), bodies_fun=(x)->x)
     Random.seed!(123)
     bodies = rand(distribution,8,n_bodies)
     bodies[4,:] ./= (n_bodies^(1/3)*2)

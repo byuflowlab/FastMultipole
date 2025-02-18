@@ -15,23 +15,23 @@
 
     # test center_radius function
     center, box = FastMultipole.center_box((elements,))
-
+    
     # manually
     test_center = [0.65, 0.65, 0.55]
     x_min, x_max = 0.1, 1.2
     y_min, y_max = 0.2, 1.1
     z_min, z_max = 0.2, 0.9
     test_box = [max(x_max-test_center[1], test_center[1]-x_min),
-                max(y_max-test_center[2], test_center[2]-y_min),
-                max(z_max-test_center[3], test_center[3]-z_min)]
-
+    max(y_max-test_center[2], test_center[2]-y_min),
+    max(z_max-test_center[3], test_center[3]-z_min)]
+    
     for i in 1:3
         @test isapprox(center[i], test_center[i]; atol=1e-12)
     end
     for i in 1:3
         @test isapprox(test_box[i], box[i]; atol=1e-12)
     end
-
+    
     # test branch! function
     expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
     tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=false)
@@ -184,15 +184,15 @@ bodies = rand(8,n_bodies)
 x_presorted = deepcopy(bodies[1:3,:])
 bodies[5:8,2:n_bodies] .= 0.0
 system = (Gravitational(bodies),)
-tree, m2l_list, direct_list, switch = FastMultipole.fmm!(system; unsort_bodies=false)
-x_sorted = deepcopy(bodies[1:3,:])
-FastMultipole.unsort!(system, tree)
+tree, m2l_list, direct_list, switch = FastMultipole.fmm!(system) # always unsorts at the end to avoid ambiguity
 x_unsorted = deepcopy(bodies[1:3,:])
 FastMultipole.resort!(system, tree)
-x_resorted = deepcopy(bodies[1:3,:])
+x_sorted = deepcopy(bodies[1:3,:])
+FastMultipole.unsort!(system, tree)
+x_reunsorted = deepcopy(bodies[1:3,:])
 
 @test isapprox(x_presorted, x_unsorted)
-@test isapprox(x_sorted, x_resorted)
+@test isapprox(x_unsorted, x_reunsorted)
 
 end
 

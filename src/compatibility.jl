@@ -119,6 +119,8 @@ Base.getindex(sys::Matrix{TF}, i, ::VelocityGradient) where TF =
     sys[i_VELOCITY_GRADIENT[4], i], sys[i_VELOCITY_GRADIENT[5], i], sys[i_VELOCITY_GRADIENT[6], i],
     sys[i_VELOCITY_GRADIENT[7], i], sys[i_VELOCITY_GRADIENT[8], i], sys[i_VELOCITY_GRADIENT[9], i])
 
+get_n_bodies(sys::Matrix) = size(sys, 2)
+
 #--- setters ---#
 
 Base.setindex!(sys::Matrix, val, i, ::Position) = @inbounds sys[i_POSITION, i] .= val

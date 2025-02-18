@@ -10,8 +10,8 @@ function evaluate_local!(system, i_system, branches::Vector{Branch{TF,N}}, leaf_
 end
 
 function evaluate_local!(systems::Tuple, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
-    for (system, bodies_index, derivatives_switch, target) in zip(systems, branch.bodies_index, derivatives_switches)
-        target && evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+    for (system, bodies_index, derivatives_switch) in zip(systems, branch.bodies_index, derivatives_switches)
+        evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
     end
 end
 
@@ -30,14 +30,17 @@ end
 function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     for i_body in bodies_index
         scalar_potential, velocity, gradient = evaluate_local(system[i_body,POSITION] - expansion_center, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
-        PS && (system[i_body, SCALAR_POTENTIAL] += scalar_potential)
+        
+        PS && (system[i_body, ScalarPotential()] += scalar_potential)
+
         if VS
             vpx, vpy, vpz = system[i_body, VELOCITY]
-            system[i_body, VELOCITY] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
+            system[i_body, Velocity()] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
         end
+        
         if GS
             v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
-            system[i_body,VELOCITY_GRADIENT] = SMatrix{3,3}(
+            system[i_body, VelocityGradient()] = SMatrix{3,3}(
                 gradient[1] + v1,
                 gradient[2] + v2,
                 gradient[3] + v3,
@@ -87,7 +90,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
     Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
     # scalar potential
-    if PS && !LH # scalar potential is transformed (and nonsensical) to preserve velocity when using Lamb-Helmholtz
+    if PS # && !LH # scalar potential becomes non-sensical to preserve velocity when using Lamb-Helmholtz
         ϕ_n_m_real = local_expansion[1,1,i_n_m]
         ϕ_n_m_imag = local_expansion[2,1,i_n_m]
         u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag

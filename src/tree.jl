@@ -214,8 +214,6 @@ function index_in(bodies_indices, checks)
 end
 
 function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
-    # source = index_in(bodies_index, is_source)
-    # target = index_in(bodies_index, is_target)
 
     n_bodies = SVector{length(bodies_index), Int}(length(bodies_i) for bodies_i in bodies_index)
 
@@ -244,13 +242,17 @@ end
 
 @inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size)
     fraction = 0.0
+    n_bodies = 0
     for i_element in 1:size(cumulative_octant_census, 1)
         # fraction += cumulative_octant_census[i_element,end] / leaf_size[i_element]
-        fraction += cumulative_octant_census[i_element,end] / (leaf_size[i_element] * leaf_size[i_element])
+        n = cumulative_octant_census[i_element,end]
+        n_bodies += n
+        fraction += n / (leaf_size[i_element] * leaf_size[i_element])
         # cumulative_octant_census[i_element,end] > leaf_size[i_element] && (return true)
     end
     fraction *= minimum(leaf_size)
-    return fraction > 0.5
+
+    return fraction > 0.5 && n_bodies > 1
     # return fraction > nextfloat(1.0)
 end
 
@@ -343,9 +345,9 @@ end
 #####
 ##### create buffers; overload for SortWrappers---in case we cannot sort bodies in place,
 #####                 wrap the body in a SortWrapper object with an index which can be sorted
-@inline function get_buffer(system::SortWrapper)
-    return nothing
-end
+# @inline function get_buffer(system::SortWrapper)
+#     return nothing
+# end
 
 @inline function get_buffer(system)
     # return Vector{Int64}(undef,length(system))
@@ -359,9 +361,9 @@ end
     return Tuple(get_buffer(system) for system in systems)
 end
 
-@inline function get_sort_index(system::SortWrapper)
-    return system.index
-end
+# @inline function get_sort_index(system::SortWrapper)
+#     return system.index
+# end
 
 @inline function get_sort_index(system)
     return collect(1:get_n_bodies(system))
@@ -396,16 +398,16 @@ end
 #####
 ##### sort bodies into the octree
 #####
-function sort_bodies!(system::SortWrapper, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
-    # sort indices
-    for i_body in bodies_index
-        i_octant = get_octant(system[i_body,Position()], center)
-        sort_index_buffer[octant_indices[i_octant]] = sort_index[i_body]
-        octant_indices[i_octant] += 1
-    end
-    # place buffers
-    sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
-end
+# function sort_bodies!(system::SortWrapper, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
+#     # sort indices
+#     for i_body in bodies_index
+#         i_octant = get_octant(system[i_body,Position()], center)
+#         sort_index_buffer[octant_indices[i_octant]] = sort_index[i_body]
+#         octant_indices[i_octant] += 1
+#     end
+#     # place buffers
+#     sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
+# end
 
 function sort_bodies!(system, sort_index, octant_indices::AbstractVector, buffer, sort_index_buffer, bodies_index::UnitRange, center)
     # sort indices
@@ -477,9 +479,9 @@ end
     end
 end
 
-@inline function unsort!(system::SortWrapper, buffer, inverse_sort_index)
-    system.index .= view(system.index,inverse_sort_index)
-end
+# @inline function unsort!(system::SortWrapper, buffer, inverse_sort_index)
+#     system.index .= view(system.index,inverse_sort_index)
+# end
 
 """
 Performs the same sort operation as the tree. (Undoes `unsort!` operation.)
@@ -489,6 +491,14 @@ function resort!(systems::Tuple, tree::Tree)
         resort!(system, buffer, sort_index)
     end
 end
+
+# function resort!(system::SortWrapper, buffer, sort_index)
+#     if DEBUG[]
+#         println("HERE")
+#         @show sort_index
+#     end
+#     system.index .= sort_index
+# end
 
 # function resort!(system, tree::SingleTree)
 #     resort!(system, tree.buffer, tree.sort_index)
@@ -506,6 +516,10 @@ function resort!(system, buffer, sort_index)
         system[i_body, Body()] = buffer[i_body]
     end
 end
+
+# function resort!(system::SortWrapper, buffer, sort_index)
+#     system.index .= sort_index
+# end
 
 # @inline function unsorted_index_2_sorted_index(i_unsorted, tree::SingleTree)
 #     return tree.inverse_sort_index[i_unsorted]

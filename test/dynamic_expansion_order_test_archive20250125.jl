@@ -381,9 +381,9 @@ function run_tests(coulombic; fast=false)
     # vortex system
     # system = generate_vortex(123, n_bodies)
 
-    for ε_tol in (1e-3, 1e-6, 1e-9)
+    for ε_abs in (1e-3, 1e-6, 1e-9)
 
-        expansion_order = Dynamic(20,ε_tol)
+        expansion_order = Dynamic(20,ε_abs)
         if fast
             multipole_threshold, leaf_size = 0.5, 260
         else
@@ -428,12 +428,12 @@ function run_tests(coulombic; fast=false)
         output_stuff(v_error; verbose=true)
 
         # log scale comparison
-        v = log10.(abs.(errs_o ./ ε_tol))
-        v_ndp = log10.(abs.(errs_o_ndp ./ ε_tol))
-        v_v = log10.(abs.(errs_o_v_v ./ ε_tol))
-        v_v_ndp = log10.(abs.(errs_o_v_v_ndp ./ ε_tol))
-        v_ub = log10.(abs.(errs_o_ub ./ ε_tol))
-        v_ub_ndp = log10.(abs.(errs_o_ub_ndp ./ ε_tol))
+        v = log10.(abs.(errs_o ./ ε_abs))
+        v_ndp = log10.(abs.(errs_o_ndp ./ ε_abs))
+        v_v = log10.(abs.(errs_o_v_v ./ ε_abs))
+        v_v_ndp = log10.(abs.(errs_o_v_v_ndp ./ ε_abs))
+        v_ub = log10.(abs.(errs_o_ub ./ ε_abs))
+        v_ub_ndp = log10.(abs.(errs_o_ub_ndp ./ ε_abs))
 
         # kde partitioning
         npoints = 2^7
@@ -445,7 +445,7 @@ function run_tests(coulombic; fast=false)
         u_ub_ndp = kde(v_ub_ndp; npoints)
 
         # make preliminary plots
-        fig = figure("dynamic expansion order: tol=1e$(Int(round(log10(ε_tol);sigdigits=1)))")
+        fig = figure("dynamic expansion order: tol=1e$(Int(round(log10(ε_abs);sigdigits=1)))")
         fig.clear()
         fig.add_subplot(111, xlabel=L"\log_{10} ε/ε_{tol}", ylabel="density")
         ax = fig.get_axes()[0]
@@ -458,7 +458,7 @@ function run_tests(coulombic; fast=false)
         # ax.set_xticks([0.0,1.0,2.0,3.0], labels=["1", "10", "100", "1000"])
         # ax.set_xlim([-0.5,4.0])
         legend(["potential", "potential, no dipole", "velocity", "velocity, no dipole", "setting "*L"P_n=1", "setting "*L"P_n=1"*", no dipole"])
-        savefig("figs/dynamic_p_n$(n_bodies)_eps$(Int(round(log10(ε_tol);sigdigits=1)))_coulombic_$(coulombic).png")
+        savefig("figs/dynamic_p_n$(n_bodies)_eps$(Int(round(log10(ε_abs);sigdigits=1)))_coulombic_$(coulombic).png")
 
         # save data
         dynamic_P_performance = zeros(npoints,4)

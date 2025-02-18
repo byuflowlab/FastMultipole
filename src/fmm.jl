@@ -117,10 +117,10 @@ function execute_assignment!(target_systems, target_branches, derivatives_switch
     end
 end
 
-function nearfield_multithread!(systems, branches, is_target, derivatives_switch, direct_list, n_threads)
+function nearfield_multithread!(systems, branches, derivatives_switch, direct_list, n_threads)
     if n_threads == 1 # single thread
 
-        nearfield_singlethread!(systems, branches, is_target, derivatives_switch, direct_list)
+        nearfield_singlethread!(systems, branches, derivatives_switch, direct_list)
 
     else # multithread
 
@@ -301,7 +301,7 @@ end
 end
 
 
-# function upward_pass_singlethread!(branches::Vector{Branch{TF,N}}, systems, expansion_order, lamb_helmholtz, leaf_index, is_source) where {TF,N}
+# function upward_pass_singlethread!(branches::Vector{Branch{TF,N}}, systems, expansion_order, lamb_helmholtz, leaf_index) where {TF,N}
 #
 #     # try preallocating one container to be reused
 #     Ts = zeros(TF, length_Ts(expansion_order))
@@ -312,7 +312,7 @@ end
 #     # multipole expansions
 #     for i_branch in leaf_index
 #         branch = branches[i_branch]
-#         branch.source && body_to_multipole!(branch, systems, branch.harmonics, expansion_order, is_source)
+#         branch.source && body_to_multipole!(branch, systems, branch.harmonics, expansion_order)
 #     end
 #
 #     # loop over branches
@@ -798,16 +798,16 @@ function local_to_body_multithread!(branches::Vector{Branch{TF,<:Any}}, systems,
         assignment = assignments[i_thread]
         for i_task in assignment
             leaf = branches[leaf_index[i_task]]
-            evaluate_local!(systems, leaf, leaf.harmonics, velocity_n_m[i_thread], expansion_order, lamb_helmholtz, derivatives_switches, is_target)
+            evaluate_local!(systems, leaf, leaf.harmonics, velocity_n_m[i_thread], expansion_order, lamb_helmholtz, derivatives_switches)
         end
     end
 end
 
-function downward_pass_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, levels_index, leaf_index, is_target, n_threads)
+function downward_pass_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, levels_index, leaf_index, n_threads)
     if n_threads == 1
 
         # single thread
-        downward_pass_singlethread!(branches, systems, expansion_order, lamb_helmholtz, derivatives_switch, is_target)
+        downward_pass_singlethread!(branches, systems, expansion_order, lamb_helmholtz, derivatives_switch)
 
     else # multithread
 
@@ -815,12 +815,28 @@ function downward_pass_multithread!(branches, systems, derivatives_switch, expan
 	    translate_locals_multithread!(branches, expansion_order, lamb_helmholtz, levels_index, n_threads)
 
         # local to body interaction
-        local_to_body_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, leaf_index, is_target, n_threads)
+        local_to_body_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, leaf_index, n_threads)
 
     end
 end
 
 #--- running FMM ---#
+
+# warn if lamb_helmholtz = true and scalar_potential=true
+
+function warn_scalar_potential_with_lh(switch::DerivativesSwitch{PS,<:Any,<:Any}, lamb_helmholtz) where PS
+    success = !(PS && lamb_helmholtz)
+end
+
+function warn_scalar_potential_with_lh(derivatives_switches::Tuple, lamb_helmholtz)
+    success = true
+    for switch in derivatives_switches
+        success = success && warn_scalar_potential_with_lh(switch, lamb_helmholtz)
+    end
+    if !success
+        @warn "\nScalar potential was requested with lamb_helmholtz=true; this may result in nonsensical potential predictions.\n"
+    end
+end
 
 @inline function to_tuple(input::Tuple)
     return input
@@ -993,6 +1009,9 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         # reset flags
         WARNING_FLAG_ERROR[] = true
 
+        # check that lamb_helmholtz and ScalarPotential are not both true
+        warn_scalar_potential_with_lh(derivatives_switches, lamb_helmholtz)
+
         # wrap lamb_helmholtz in Val
         lamb_helmholtz = Val(lamb_helmholtz)
 
@@ -1020,7 +1039,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
             t1 = Threads.@spawn nearfield && nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
-                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, is_source, n_threads_multipole)
+                    upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
                     horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads_multipole)
 	                downward_pass && translate_locals_multithread!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
                 end
@@ -1081,7 +1100,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                     Pmax += 1
                 end
 
-                # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
+                # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches)
                 if downward_pass
                     downward_pass_singlethread_1!(target_tree.branches, expansion_order, lamb_helmholtz)
                     velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
@@ -1124,10 +1143,10 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
             else
 
-                nearfield && nearfield_multithread!(systems, tree.branches, is_target, is_source, derivatives_switches, direct_list, n_threads)
-                upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.levels_index, tree.leaf_index, is_source, n_threads_2)
+                nearfield && nearfield_multithread!(systems, tree.branches, derivatives_switches, direct_list, n_threads)
+                upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order + error_check, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads_2)
                 horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads)
-                downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, is_target, n_threads)
+                downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads)
             end
 
         end

@@ -349,7 +349,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     return expansion_order, true
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_tol) where LH
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs) where LH
 
     #--- initialize recursive values ---#
 
@@ -439,7 +439,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         end
 
         # check local error if multipole error passes
-        if ε_mp <= ε_tol
+        if ε_mp <= ε_abs
 
             # extract degree n, order 0-1 coefficients for error prediction
             # this function also performs the lamb-helmholtz transformation
@@ -452,7 +452,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
             end
 
             # check total error
-            if ε_mp + ε_l <= ε_tol
+            if ε_mp + ε_l <= ε_abs
                 return n-1, true
             end
         end
@@ -473,7 +473,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
     end
 
     if WARNING_FLAG_ERROR[]
-        @warn "Error tolerance $(ε_tol * ONE_OVER_4π) not reached! Using max expansion order P=$(n-1).\n\tε_mp = $ε_mp, \n\tε_l = $ε_l"
+        @warn "Error tolerance $(ε_abs * ONE_OVER_4π) not reached! Using max expansion order P=$(n-1).\n\tε_mp = $ε_mp, \n\tε_l = $ε_l"
         WARNING_FLAG_ERROR[] = false
     end
 
@@ -483,12 +483,12 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε_tol) where LH
+function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε_abs) where LH
     # extract containers
     source_weights = source_branch.multipole_expansion
 
     # temporary error variables
-    ε_tol *= 4π # multiply from the RHS of the inequality to reduce computational cost
+    ε_abs *= 4π # multiply from the RHS of the inequality to reduce computational cost
 
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -503,7 +503,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_tol)
+    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs)
 
     #------- translate multipole to local expansion -------#
 

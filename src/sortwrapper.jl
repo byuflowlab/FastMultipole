@@ -15,7 +15,6 @@ end
 
 @inline wrap_duplicates(target_systems::Tuple, source_system) = Tuple(target_system == source_system ? SortWrapper(target_system) : target_system for target_system in target_systems)
 
-
 # access functions for SortWrapper
 get_n_bodies(sys::SortWrapper) = get_n_bodies(sys.system)
 
@@ -35,7 +34,7 @@ Base.getindex(sys::SortWrapper, i, parameter::Velocity) = getindex(sys.system, s
 Base.getindex(sys::SortWrapper, i, parameter::VelocityGradient) = getindex(sys.system, sys.index[i], parameter)
 Base.getindex(sys::SortWrapper, i, parameter::Vertex, i_vertex) = Base.getindex(sys.system, sys.index[i], parameter, i_vertex)
 
-Base.eltype(sys::SortWrapper) = Base.eltype(sys.system)
+Base.eltype(sys::SortWrapper) = eltype(sys.system)
 
 body_to_multipole!(system::SortWrapper, branch, bodies_index, harmonics, expansion_order) =
     body_to_multipole!(system.system, branch, system.index[bodies_index], harmonics, expansion_order)

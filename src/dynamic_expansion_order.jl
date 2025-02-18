@@ -109,7 +109,7 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
 
     #--- find minimum P
 
-    ε_tol = 4.0π * ε
+    ε_abs = 4.0π * ε
 
     for P in 0:PMAX
 
@@ -126,8 +126,8 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
         ε_local = LOCAL_INTEGRALS[P+2,iω,iγ] * scalar_local * Q_local
 
         # check if tolerance is reached
-        ε_multipole + ε_local + ε_local_last <= ε_tol && (return P)
-        # if ε_multipole + ε_local + ε_local_last <= ε_tol
+        ε_multipole + ε_local + ε_local_last <= ε_abs && (return P)
+        # if ε_multipole + ε_local + ε_local_last <= ε_abs
         #     print("found P: ")
         #     if ε_multipole > ε_local
         #         print("multipole ")
@@ -243,7 +243,7 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
 
     #--- find minimum P
 
-    ε_tol = 4.0π * ε
+    ε_abs = 4.0π * ε
 
     for P in 0:PMAX
 
@@ -256,8 +256,8 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
         ε_local = LOCAL_INTEGRALS[P+2,iω,iγ] * scalar_local * (P+2)
 
         # check if tolerance is reached
-        ε_multipole + Q_local * (ε_local + ε_local_last) <= ε_tol && (return P)
-        # if ε_multipole + ε_local + ε_local_last <= ε_tol
+        ε_multipole + Q_local * (ε_local + ε_local_last) <= ε_abs && (return P)
+        # if ε_multipole + ε_local + ε_local_last <= ε_abs
         #     print("found P: ")
         #     if ε_multipole > ε_local
         #         print("multipole ")
@@ -341,8 +341,8 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
 
     #--- find minimum P ---#
 
-    ε_tol = 4.0π * ε
-    ε_tol_2 = ε_tol * ε_tol
+    ε_abs = 4.0π * ε
+    ε_abs_2 = ε_abs * ε_abs
 
     for P in 0:PMAX
 
@@ -361,7 +361,7 @@ function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, 
         # check if error is below tolerance
         εχ_real = (χ_real + χ_real_next) * -v̂x + (χ_imag + χ_imag_next) * v̂y
         εχ_imag = (χ_imag + χ_imag_next) * -v̂x - (χ_real + χ_real_next) * v̂y
-        εχ_real * εχ_real + εχ_imag * εχ_imag <= ε_tol_2 && (return P)
+        εχ_real * εχ_real + εχ_imag * εχ_imag <= ε_abs_2 && (return P)
 
         # recurse
         χ_real = χ_real_next

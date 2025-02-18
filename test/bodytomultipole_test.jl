@@ -209,7 +209,7 @@ function Base.getindex(system::VortexPanels, i, ::Normal)
 end
 
 function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
-    return Branch(SVector{1}([bodies_index]), n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order, SVector{1}(true), SVector{1}(true))
+    return Branch(SVector{1}([bodies_index]), n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
 end
 
 @testset "body-to-multipole: point source" begin
