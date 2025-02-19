@@ -14,7 +14,7 @@
     elements = Gravitational(bodies)
 
     # test center_radius function
-    center, box = FastMultipole.center_box((elements,))
+    center, box = FastMultipole.center_box((elements,), Float64)
     
     # manually
     test_center = [0.65, 0.65, 0.55]
@@ -77,8 +77,8 @@ end
     elements = Gravitational(bodies)
 
     # test target box
-    center, box = FastMultipole.center_box((elements,))
-    source_center, source_box = FastMultipole.source_center_box((elements,), FastMultipole.get_bodies_index((elements,)))
+    center, box = FastMultipole.center_box((elements,), Float64)
+    source_center, source_box = FastMultipole.source_center_box((elements,), FastMultipole.get_bodies_index((elements,)), Float64)
 
     # test source box
     target_radius, source_radius = FastMultipole.shrink_radius(center, source_center, (elements,), SVector{1}((1:5,)))

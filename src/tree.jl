@@ -4,13 +4,19 @@ function Tree(systems::Tuple; expansion_order=7, leaf_size=default_leaf_size(sys
     # ensure `systems` isn't empty; otherwise return an empty tree
     if get_n_bodies(systems) > 0
 
+        # determine float type
+        TF = Float64
+        for system in systems
+            TF = promote_type(TF, eltype(system))
+        end
+
         # initialize variables
         octant_container = get_octant_container(systems) # preallocate octant counter; records the total number of bodies in the first octant to start out, but can be reused to count bodies per octant later on
         cumulative_octant_census = get_octant_container(systems) # for creating a cumsum of octant populations
         bodies_index = get_bodies_index(systems)
 
         # root branch
-        center, box = center_box(systems)
+        center, box = center_box(systems, TF)
         bx, by, bz = box
 
         # initial octree generation uses cubic cells
@@ -69,6 +75,9 @@ function Tree(systems::Tuple; expansion_order=7, leaf_size=default_leaf_size(sys
             end
         end
 
+        # allocate expansions
+        expansions = initialize_expansions(expansion_order, length(branches), TF)
+
         # # cost parameters
         # if estimate_cost
         #     params, errors, nearfield_params, nearfield_errors = estimate_tau(systems; read_cost_file=read_cost_file, write_cost_file=write_cost_file)
@@ -79,7 +88,7 @@ function Tree(systems::Tuple; expansion_order=7, leaf_size=default_leaf_size(sys
         # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(systems, leaf_size) : dummy_direct_cost_estimate(systems, leaf_size)
 
         # assemble tree
-        tree = Tree(branches, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)#, cost_parameters)
+        tree = Tree(branches, expansions, levels_index, leaf_index, sort_index, inverse_sort_index, buffer, expansion_order, leaf_size)#, cost_parameters)
 
     else
         tree = EmptyTree(systems)
@@ -113,6 +122,7 @@ end
 function EmptyTree(system::Tuple)
     N = length(system)
     branches = Vector{Branch{Float64,N}}(undef,0)
+    expansions = Array{Float64,4}(undef,0,0,0,0)
     levels_index = Vector{UnitRange{Int64}}(undef,0)
     leaf_index = Int[]
     sort_index_list = Tuple(Int[] for _ in 1:N)
@@ -120,7 +130,7 @@ function EmptyTree(system::Tuple)
     buffer = nothing
     expansion_order = -1
     leaf_size = -1
-    return Tree(branches, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, expansion_order, leaf_size)
+    return Tree(branches, expansions, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, expansion_order, leaf_size)
 end
 
 @inline default_leaf_size(systems::Tuple) = SVector{length(systems)}(100 for _ in eachindex(systems))
@@ -217,7 +227,8 @@ function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, 
 
     n_bodies = SVector{length(bodies_index), Int}(length(bodies_i) for bodies_i in bodies_index)
 
-    return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), ReentrantLock())
+    # return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), ReentrantLock())
+    return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, ReentrantLock())
 end
 
 @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,Position()] for i in bodies_index)
@@ -588,13 +599,13 @@ end
     return center, bounding_box
 end
 
-function center_box(systems)
+function center_box(systems, TF)
     bodies_indices = get_bodies_index(systems)
-    return center_box(systems, bodies_indices)
+    return center_box(systems, bodies_indices, TF)
 end
 
-function center_box(systems::Tuple, bodies_indices)
-    x_min, y_min, z_min = first_body_position(systems, bodies_indices)
+function center_box(systems::Tuple, bodies_indices, TF)
+    x_min, y_min, z_min = first_body_position(systems, bodies_indices, TF)
     x_max, y_max, z_max = x_min, y_min, z_min
     for (system, bodies_index) in zip(systems, bodies_indices)
         x_min, x_max, y_min, y_max, z_min, z_max = max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, system, bodies_index)
@@ -676,8 +687,8 @@ end
     return x_min, x_max, y_min, y_max, z_min, z_max
 end
 
-function source_center_box(systems::Tuple, bodies_indices)
-    x_min, y_min, z_min = first_body_position(systems, bodies_indices)
+function source_center_box(systems::Tuple, bodies_indices, TF)
+    x_min, y_min, z_min = first_body_position(systems, bodies_indices, TF)
     x_max, y_max, z_max = x_min, y_min, z_min
     for (system, bodies_index) in zip(systems, bodies_indices)
         x_min, x_max, y_min, y_max, z_min, z_max = source_max_xyz(x_min, x_max, y_min, y_max, z_min, z_max, system, bodies_index)
@@ -716,9 +727,9 @@ end
 #     return system[bodies_index[1],POSITION]
 # end
 
-@inline function first_body_position(systems::Tuple, bodies_indices)
+@inline function first_body_position(systems::Tuple, bodies_indices, TF)
     for (system, bodies_index) in zip(systems, bodies_indices)
-        length(bodies_index) > 0 && (return system[bodies_index[1],Position()])
+        length(bodies_index) > 0 && (return SVector{3,TF}(system[bodies_index[1],Position()]))
     end
 end
 
@@ -835,14 +846,14 @@ end
     return target_radius, source_radius
 end
 
-function shrink_leaf!(branches, i_branch, system)
+function shrink_leaf!(branches::Vector{Branch{TF,N}}, i_branch, system) where {TF,N}
     # unpack
     branch = branches[i_branch]
     bodies_index = branch.bodies_index
 
     # recenter and target box
-    new_target_center, new_target_box = center_box(system, bodies_index)
-    new_source_center, new_source_box = source_center_box(system, bodies_index)
+    new_target_center, new_target_box = center_box(system, bodies_index, TF)
+    new_source_center, new_source_box = source_center_box(system, bodies_index, TF)
 
     # shrink radii and create source box
     new_target_radius, new_source_radius = shrink_radius(new_target_center, new_source_center, system, bodies_index)
@@ -1018,11 +1029,11 @@ end
     branch_index = branch.branch_index
     i_parent = branch.i_parent
     i_leaf = branch.i_leaf
-    multipole_expansion = branch.multipole_expansion
-    local_expansion = branch.local_expansion
-    harmonics = branch.harmonics
+    # multipole_expansion = branch.multipole_expansion
+    # local_expansion = branch.local_expansion
+    # harmonics = branch.harmonics
     lock = branch.lock
-    branches[i_branch] = TB(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, multipole_expansion, local_expansion, harmonics, lock)
+    branches[i_branch] = TB(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, lock)
 end
 
 # @inline function replace_branch!(branches::Vector{TB}, i_branch, new_charge, new_dipole) where TB
@@ -1054,6 +1065,13 @@ function initialize_expansion(expansion_order, type=Float64)
     return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1)
 end
 
+function initialize_expansions(expansion_order, n_branches, type=Float64)
+    # incrememnt expansion order to make room for error predictions
+    # expansion_order += 1
+
+    return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1, n_branches)
+end
+
 function initialize_velocity_n_m(expansion_order, type=Float64)
     # incrememnt expansion order to make room for error predictions
     # expansion_order += 1
@@ -1073,11 +1091,7 @@ function initialize_harmonics(expansion_order, type=Float64)
 end
 
 function reset_expansions!(tree)
-    T = eltype(tree.branches[1].multipole_expansion)
-    for branch in tree.branches
-        branch.multipole_expansion .= zero(T)
-        branch.local_expansion .= zero(T)
-    end
+    tree.expansions .= zero(eltype(tree.expansions))
 end
 
 #--- debugging functions ---#

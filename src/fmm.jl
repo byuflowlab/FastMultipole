@@ -265,15 +265,17 @@ end
 
 #------- UPWARD PASS -------#
 
-function upward_pass_singlethread_1!(branches::Vector{Branch{TF,N}}, systems, expansion_order, leaf_index) where {TF,N}
+function upward_pass_singlethread_1!(tree::Tree{TF, <:Any, <:Any}, systems, expansion_order) where TF
+
+    harmonics = initialize_harmonics(expansion_order, TF)
 
     # body_to_multipole
     for (i_system, system) in enumerate(systems)
-        body_to_multipole!(branches, leaf_index, system, i_system, expansion_order)
+        body_to_multipole!(tree, harmonics, system, i_system, expansion_order)
     end
 end
 
-function upward_pass_singlethread_2!(branches::Vector{Branch{TF,N}}, expansion_order, lamb_helmholtz, leaf_index) where {TF,N}
+function upward_pass_singlethread_2!(tree::Tree{TF,<:Any,<:Any}, expansion_order, lamb_helmholtz) where TF
 
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
@@ -282,22 +284,24 @@ function upward_pass_singlethread_2!(branches::Vector{Branch{TF,N}}, expansion_o
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
 
     # loop over branches
-    for i_branch in length(branches):-1:1 # no need to create a multipole expansion at the very top level
-        branch = branches[i_branch]
+    for i_branch in length(tree.branches):-1:1 # no need to create a multipole expansion at the very top level
+        branch = tree.branches[i_branch]
+        expansion = view(tree.expansions, :, :, :, i_branch)
 
         if branch.n_branches !== 0 # branch is not a leaf
             # iterate over children
             for i_child in branch.branch_index
-                child_branch = branches[i_child]
-                multipole_to_multipole!(branch, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                child_branch = tree.branches[i_child]
+                child_expansion = view(tree.expansions, :, :, :, i_child)
+                multipole_to_multipole!(expansion, branch, child_expansion, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
 end
 
-@inline function upward_pass_singlethread!(branches::Vector{Branch{TF,N}}, systems, expansion_order, lamb_helmholtz, leaf_index) where {TF,N}
-    upward_pass_singlethread_1!(branches, systems, expansion_order, leaf_index)
-    upward_pass_singlethread_2!(branches, expansion_order, lamb_helmholtz, leaf_index)
+function upward_pass_singlethread!(tree::Tree, systems, expansion_order, lamb_helmholtz)
+    upward_pass_singlethread_1!(tree, systems, expansion_order)
+    upward_pass_singlethread_2!(tree, expansion_order, lamb_helmholtz)
 end
 
 
@@ -412,7 +416,7 @@ function translate_multipoles_multithread!(branches::Vector{Branch{TF,N}}, expan
                 child_branch = branches[i_branch]
                 parent_branch = branches[child_branch.i_parent]
                 Threads.lock(parent_branch.lock) do
-                    multipole_to_multipole!(parent_branch, child_branch, weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                    multipole_to_multipole!(parent_expansion, parent_branch, child_expansion, child_branch, weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
                 end
             end
         end
@@ -589,7 +593,9 @@ end
 #     return εs_obs, εs_pred
 # end
 
-function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=false) where {TF,N}
+function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any,<:Any}, source_tree::Tree{TF2,<:Any,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=false) where {TF1,TF2}
+
+    TF = promote_type(TF1, TF2)
 
     # increment the expansion order if ε_abs !== nothing
     error_check = !(isnothing(ε_abs))
@@ -604,11 +610,11 @@ function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, so
     error_success = true
     Ps = zeros(length(m2l_list))
     for (i,(i_target, j_source)) in enumerate(m2l_list)
-        target_branch = target_branches[i_target]
-        source_branch = source_branches[j_source]
-        #weights_tmp_1 = target_branch.expansion_storage
-        #weights_tmp_2 = source_branch.expansion_storage
-        P, this_error_success = multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
+        target_branch = target_tree.branches[i_target]
+        target_expansion = view(target_tree.expansions, :, :, :, i_target)
+        source_branch = source_tree.branches[j_source]
+        source_expansion = view(source_tree.expansions, :, :, :, j_source)
+        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
         Pmax = max(P, Pmax)
         Ps[i] = P
         error_success = error_success && this_error_success
@@ -626,7 +632,9 @@ function horizontal_pass_singlethread!(target_branches::Vector{Branch{TF,N}}, so
     return Pmax, error_success
 end
 
-function horizontal_pass_multithread!(target_branches, source_branches::Vector{Branch{TF,N}}, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads) where {TF,N}
+function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any,<:Any}, source_tree::Tree{TF2,<:Any,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads) where {TF1, TF2}
+
+    TF = promote_type(TF1, TF2)
 
     if n_threads == 1 # single thread
 
@@ -653,8 +661,8 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{B
             i_start = assignments[i_thread]
             i_stop = min(i_start+n_per_thread-1, length(m2l_list))
             for (i_target, j_source) in m2l_list[i_start:i_stop]
-                Threads.lock(target_branches[i_target].lock) do
-                    multipole_to_local!(target_branches[i_target], source_branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
+                Threads.lock(target_tree.branches[i_target].lock) do
+                    multipole_to_local!(target_tree.branches[i_target], source_tree.branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
                 end
             end
         end
@@ -665,7 +673,7 @@ end
 
 #------- DOWNWARD PASS -------#
 
-function downward_pass_singlethread_1!(branches::Vector{Branch{TF,N}}, expansion_order, lamb_helmholtz) where {TF,N}
+function downward_pass_singlethread_1!(tree::Tree{TF,<:Any,<:Any}, expansion_order, lamb_helmholtz) where TF
 
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
@@ -674,31 +682,34 @@ function downward_pass_singlethread_1!(branches::Vector{Branch{TF,N}}, expansion
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
 
     # loop over branches
-    for i_branch in 1:length(branches)
-        branch = branches[i_branch]
+    for i_branch in 1:length(tree.branches)
+        branch = tree.branches[i_branch]
         if branch.n_branches > 0 # if branch is a non-leaf target
             for i_child_branch in branch.branch_index
-                child_branch = branches[i_child_branch]
-                local_to_local!(child_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                child_branch = tree.branches[i_child_branch]
+                child_expansion = view(tree.expansions, :, :, :, i_child_branch)
+                branch_expansion = view(tree.expansions, :, :, :, i_branch)
+                local_to_local!(child_expansion, child_branch, branch_expansion, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
 end
 
-function downward_pass_singlethread_2!(branches::Vector{<:Branch{TF,<:Any}}, leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m) where TF
+function downward_pass_singlethread_2!(tree::Tree{TF,<:Any,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m) where TF
 
+    harmonics = initialize_harmonics(expansion_order)
     # loop over systems
     for (i_system, system) in enumerate(systems)
-        evaluate_local!(system, i_system, branches, leaf_index, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+        evaluate_local!(system, i_system, tree, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     end
 
 end
 
-@inline function downward_pass_singlethread!(branches, leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+@inline function downward_pass_singlethread!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
 
-    downward_pass_singlethread_1!(branches, expansion_order, lamb_helmholtz)
+    downward_pass_singlethread_1!(tree, expansion_order, lamb_helmholtz)
 
-    downward_pass_singlethread_2!(branches, leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+    downward_pass_singlethread_2!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
 
 end
 
@@ -725,7 +736,7 @@ end
 #     end
 # end
 
-function translate_locals_multithread!(branches::Vector{Branch{TF,<:Any}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
+function translate_locals_multithread!(tree::Tree{TF,<:Any}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
@@ -754,7 +765,9 @@ function translate_locals_multithread!(branches::Vector{Branch{TF,<:Any}}, expan
             # loop over branches
             for i_child in level_index[i_start]:level_index[i_stop]
                 child_branch = branches[i_child]
-                local_to_local!(child_branch, branches[child_branch.i_parent], weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+                child_expansion = view(tree.expansions, :, :, :, i_child)
+                branch_expansion = view(tree.expansions, :, :, :, child_branch.i_parent)
+                local_to_local!(child_expansion, child_branch, branch_expansion, branches[child_branch.i_parent], weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
             end
         end
     end
@@ -1088,13 +1101,13 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 end
 
                 # farfield computations
-                upward_pass && upward_pass_singlethread!(source_tree.branches, source_systems, expansion_order + error_check, lamb_helmholtz, source_tree.leaf_index)
+                upward_pass && upward_pass_singlethread!(source_tree, source_systems, expansion_order + error_check, lamb_helmholtz)
 
                 t_m2l = 0.0
                 Pmax = 0
                 error_success = true
                 if horizontal_pass
-                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=horizontal_pass_verbose)
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=horizontal_pass_verbose)
                 end
                 if !error_success
                     Pmax += 1
@@ -1102,9 +1115,9 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
                 # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches)
                 if downward_pass
-                    downward_pass_singlethread_1!(target_tree.branches, expansion_order, lamb_helmholtz)
+                    downward_pass_singlethread_1!(target_tree, expansion_order, lamb_helmholtz)
                     velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
-                    downward_pass && downward_pass_singlethread_2!(target_tree.branches, target_tree.leaf_index, targets, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+                    downward_pass_singlethread_2!(target_tree, targets, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
                 end
 
                 # unsort sources (back in target tree permutation in case some systems are both sources and targets)

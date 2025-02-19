@@ -50,14 +50,16 @@ expansion_order = 10
 box = SVector{3}(0.0,0.0,0.0)
 
 source_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([0.2, 0.4, -0.15999999999999998]), SVector{3}([0.2, 0.4, -0.15999999999999998]), 0.0, 0.0, box, box, expansion_order)
+multipole_expansion = FastMultipole.initialize_expansion(expansion_order)
 target_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.5, -4.3999999999999995, 0.8]), SVector{3}([2.5, -4.3999999999999995, 0.8]), 0.0, 0.0, box, box, expansion_order)
+local_expansion = FastMultipole.initialize_expansion(expansion_order)
 
 i, i_compressed = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            source_branch.multipole_expansion[1,1,i_compressed] = real(multipole_expansion_test[i])
-            source_branch.multipole_expansion[2,1,i_compressed] = imag(multipole_expansion_test[i])
+            multipole_expansion[1,1,i_compressed] = real(multipole_expansion_test[i])
+            multipole_expansion[2,1,i_compressed] = imag(multipole_expansion_test[i])
             i_compressed += 1
         end
         i += 1
@@ -80,15 +82,15 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(local_expansion, target_branch, multipole_expansion, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            @test isapprox(target_branch.local_expansion[1,1,i_compressed], real(local_expansion_test[i]); atol=1e-12)
-            @test isapprox(target_branch.local_expansion[2,1,i_compressed], imag(local_expansion_test[i]); atol=1e-12)
+            @test isapprox(local_expansion[1,1,i_compressed], real(local_expansion_test[i]); atol=1e-12)
+            @test isapprox(local_expansion[2,1,i_compressed], imag(local_expansion_test[i]); atol=1e-12)
             i_compressed += 1
         end
         i += 1

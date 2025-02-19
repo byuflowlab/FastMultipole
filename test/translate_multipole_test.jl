@@ -40,8 +40,10 @@ expansion_order = 7
 box = SVector{3}(0.0,0.0,0.0)
 
 branch = Branch(1:1, 0, 1:0, 0, 1, x, x, 0.0, 0.0, box, box, expansion_order)
+multipole_expansion = FastMultipole.initialize_expansion(expansion_order)
+harmonics = FastMultipole.initialize_harmonics(expansion_order)
 
-body_to_multipole!(Point{Source}, masses, branch, 1:1, branch.harmonics, expansion_order)
+body_to_multipole!(Point{Source}, masses, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
 
 # translate multipole
 
@@ -64,17 +66,18 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 box = SVector{3}(0.0,0.0,0.0)
 
 branch_2 = Branch(2:2, 0, 1:0, 0, 1, x + SVector{3}(0.1, 0.2, 0.14), x + SVector{3}(0.1, 0.2, 0.14), 0.0, 0.0, box, box, expansion_order)
+multipole_expansion_2 = FastMultipole.initialize_expansion(expansion_order)
 expansion_switch = Val(false)
 
-FastMultipole.multipole_to_multipole!(branch_2, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, expansion_switch)
+FastMultipole.multipole_to_multipole!(multipole_expansion_2, branch_2, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, expansion_switch)
 
 i = 1
 i_compressed = 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            @test isapprox(branch_2.multipole_expansion[1,1,i_compressed], real(translated_weights_test[i]); atol=1e-12)
-            @test isapprox(branch_2.multipole_expansion[2,1,i_compressed], imag(translated_weights_test[i]); atol=1e-12)
+            @test isapprox(multipole_expansion_2[1,1,i_compressed], real(translated_weights_test[i]); atol=1e-12)
+            @test isapprox(multipole_expansion_2[2,1,i_compressed], imag(translated_weights_test[i]); atol=1e-12)
             i_compressed += 1
         end
         i += 1

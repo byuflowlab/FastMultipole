@@ -1,27 +1,30 @@
-function evaluate_local!(system, i_system, branches::Vector{Branch{TF,N}}, leaf_index, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches) where {TF,N}
-
-    derivatives_switch = derivatives_switches[i_system]
+function evaluate_local!(system, i_system, tree::Tree, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
 
     # loop over leaf branches
-    for i_branch in leaf_index
-        branch = branches[i_branch]
-        evaluate_local!(system, branch.bodies_index[i_system], branch.harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+    for i_branch in tree.leaf_index
+        evaluate_local!(system, i_system, tree, i_branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     end
 end
 
-function evaluate_local!(systems::Tuple, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
-    for (system, bodies_index, derivatives_switch) in zip(systems, branch.bodies_index, derivatives_switches)
-        evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
-    end
+function evaluate_local!(system, i_system, tree::Tree, i_branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+    branch = tree.branches[i_branch]
+    local_expansion = view(tree.expansions, :, :, :, i_branch)
+    evaluate_local!(system, branch.bodies_index[i_system], harmonics, velocity_n_m, local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i_system])
 end
 
-function evaluate_local!(systems, branch, expansion_order, lamb_helmholtz, derivatives_switches)
-    harmonics = branch.harmonics
-    velocity_n_m = zeros(2,3,size(branch.multipole_expansion,3))
-    for (i, system) in enumerate(systems)
-        evaluate_local!(system, branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
-    end
-end
+# function evaluate_local!(systems::Tuple, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+#     for (system, bodies_index, derivatives_switch) in zip(systems, branch.bodies_index, derivatives_switches)
+#         evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+#     end
+# end
+
+# function evaluate_local!(systems, branch::Branch{TF,<:Any}, expansion_order, lamb_helmholtz, derivatives_switches) where TF
+#     harmonics = branch.harmonics
+#     velocity_n_m = initialize_velocity_n_m(expansion_order, TF)
+#     for (i, system) in enumerate(systems)
+#         evaluate_local!(system, branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
+#     end
+# end
 
 # function evaluate_local!(system, branch::SingleBranch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
 #     evaluate_local!(system, branch.bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)

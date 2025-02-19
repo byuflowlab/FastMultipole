@@ -141,10 +141,7 @@ function transform_lamb_helmholtz_local!(local_expansion, r, expansion_order)
     end
 end
 
-function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
-    # extract containers
-    source_weights = source_branch.multipole_expansion
-
+function multipole_to_multipole!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
     # translation vector
     Δx = target_branch.source_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
@@ -172,7 +169,7 @@ function multipole_to_multipole!(target_branch, source_branch, weights_tmp_1, we
     back_rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, lamb_helmholtz)
 
     # back rotate about z axis and accumulate on target branch
-    back_rotate_z!(target_branch.multipole_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
+    back_rotate_z!(target_weights, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
 end
 
@@ -300,23 +297,20 @@ function translate_multipole_to_local_z_m01_n(source_weights, t, one_over_t, ::V
     return ϕn0_real, ϕn1_real, ϕn1_imag, χn1_real, χn1_imag
 end
 
-function multipole_to_local!(target_branch::Branch{TF}, source_branch, expansion_order, lamb_helmholtz, ε) where TF
+function multipole_to_local!(target_weights, target_branch::Branch{TF}, source_weights, source_branch, expansion_order, lamb_helmholtz, ε) where TF
     error_check = !isnothing(ε)
     weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
     weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
     Ts = zeros(TF, length_Ts(expansion_order + error_check))
     eimϕs = zeros(TF, 2, expansion_order+1+error_check)
 
-    return multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε)
+    return multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε)
 end
 
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε::Nothing) where LH
-    # extract containers
-    source_weights = source_branch.multipole_expansion
-
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε::Nothing) where LH
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
@@ -344,12 +338,12 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order, lamb_helmholtz)
 
     # back rotate about z axis and accumulate on target branch
-    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
+    back_rotate_z!(target_weights, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
     return expansion_order, true
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs) where LH
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs) where LH
 
     #--- initialize recursive values ---#
 
@@ -483,10 +477,7 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε_abs) where LH
-    # extract containers
-    source_weights = source_branch.multipole_expansion
-
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε_abs) where LH
     # temporary error variables
     ε_abs *= 4π # multiply from the RHS of the inequality to reduce computational cost
 
@@ -503,7 +494,7 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs)
+    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs)
 
     #------- translate multipole to local expansion -------#
 
@@ -521,14 +512,14 @@ function multipole_to_local!(target_branch, source_branch, weights_tmp_1, weight
     back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order, lamb_helmholtz)
 
     # back rotate about z axis and accumulate on target branch
-    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
+    back_rotate_z!(target_weights, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
     return expansion_order, error_success
 end
 
 "defaults to no error prediction"
-multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz) =
-    multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, nothing)
+multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz) =
+    multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, nothing)
 
 #------- LOCAL TO LOCAL -------#
 
@@ -580,10 +571,7 @@ end
 """
 Expects ηs_mag and Hs_π2 to be precomputed. Ts and eimϕs are computed here.
 """
-function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
-    # extract containers
-    source_weights = source_branch.local_expansion
-
+function local_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
     # translation vector
     Δx = target_branch.target_center - source_branch.target_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
@@ -611,7 +599,7 @@ function local_to_local!(target_branch, source_branch, weights_tmp_1, weights_tm
     back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order, lamb_helmholtz)
 
     # back rotate about z axis and accumulate result to target branch
-    back_rotate_z!(target_branch.local_expansion, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
+    back_rotate_z!(target_weights, weights_tmp_2, eimϕs, expansion_order, lamb_helmholtz)
 
 end
 

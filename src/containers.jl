@@ -184,9 +184,9 @@ struct Branch{TF,N}
     target_radius::TF
     source_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
-    multipole_expansion::Array{TF,3} # multipole expansion coefficients
-    local_expansion::Array{TF,3}     # local expansion coefficients
-    harmonics::Array{TF,3}
+    # multipole_expansion::Array{TF,3} # multipole expansion coefficients
+    # local_expansion::Array{TF,3}     # local expansion coefficients
+    # harmonics::Array{TF,3}
     lock::ReentrantLock
 end
 
@@ -202,6 +202,7 @@ sorted_bodies[inverse_index_list] undoes the sort operation performed by the tre
 """
 struct Tree{TF,N,TB}
     branches::Vector{Branch{TF,N}}        # a vector of `Branch` objects composing the tree
+    expansions::Array{TF,4}
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}

@@ -95,7 +95,7 @@ end
 
 #--- actual error prediction functions ---#
 
-function multipole_error(local_branch, multipole_branch, P, error_method::Union{UnequalSpheres, UnequalBoxes}, ::Val{LH}) where LH
+function multipole_error(local_branch, multipole_branch, i_source_branch, expansions, P, error_method::Union{UnequalSpheres, UnequalBoxes}, ::Val{LH}) where LH
 
     @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
 
@@ -105,7 +105,8 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Union{
     r_min, _, _, ρ_max = get_r_ρ(local_branch, multipole_branch, separation_distance_squared, error_method)
 
     # calculate error upper bound
-    A = multipole_branch.multipole_expansion[1,1,1]
+    multipole_expansion = view(expansions, :, :, :, i_source_branch)
+    A = multipole_expansion[1,1,1]
     ρ_max_over_r_min = ρ_max / r_min
     ε = ρ_max_over_r_min * A / (r_min - ρ_max)
     for p in 1:P
@@ -115,16 +116,16 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Union{
     return abs(ε) * ONE_OVER_4π
 end
 
-function multipole_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes}, ::Val{LH}) where LH
+function multipole_error(local_branch, multipole_branch, i_source_branch, expansions, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes}, ::Val{LH}) where LH
     @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
-    return 3 / (2*P+8) * multipole_error(local_branch, multipole_branch, P, UnequalSpheres())
+    return 3 / (2*P+8) * multipole_error(local_branch, multipole_branch, i_source_branch, expansions, P, UnequalSpheres())
     #return 3 / (2*P+8) * sqrt(2/(2*P+3)) * multipole_error(local_branch, multipole_branch, P, UnequalSpheres())
 end
 
 """
     Multipole coefficients up to expansion order `P+1` must be added to `multipole_branch` before calling this function.
 """
-function multipole_error(local_branch, multipole_branch, P, error_method::RotatedCoefficients, lamb_helmholtz::Val)
+function multipole_error(local_branch, multipole_branch, i_source_branch, expansions, P, error_method::RotatedCoefficients, lamb_helmholtz::Val)
 
     # vector from multipole center to local center
     t⃗ = local_branch.target_center - multipole_branch.source_center
@@ -134,7 +135,8 @@ function multipole_error(local_branch, multipole_branch, P, error_method::Rotate
     r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
 
     # calculate error
-    return multipole_error(t⃗, r_mp, multipole_branch.multipole_expansion, P, error_method, lamb_helmholtz)
+    multipole_expansion = view(expansions, :, :, :, i_source_branch)
+    return multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_helmholtz)
 end
 
 function multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_helmholtz::Val{LH}) where LH
@@ -179,7 +181,7 @@ function multipole_error(t⃗, r_mp, multipole_expansion, P, error_method, lamb_
     return ε_mp * ONE_OVER_4π
 end
 
-function local_error(local_branch, multipole_branch, P, error_method::Union{UnequalSpheres, UnequalBoxes}, lamb_helmholtz)
+function local_error(local_branch, multipole_branch, i_source_branch, expansions, P, error_method::Union{UnequalSpheres, UnequalBoxes}, lamb_helmholtz)
 
     @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
 
@@ -192,7 +194,8 @@ function local_error(local_branch, multipole_branch, P, error_method::Union{Uneq
     r_max_over_ρ_min = r_max / ρ_min
     ε = r_max_over_ρ_min
 
-    A = multipole_branch.multipole_expansion[1,1,1]
+    multipole_expansion = view(expansions, :, :, :, i_source_branch)
+    A = multipole_expansion[1,1,1]
     ε *= A / (ρ_min - r_max)
 
     for p in 1:P
@@ -202,7 +205,7 @@ function local_error(local_branch, multipole_branch, P, error_method::Union{Uneq
     return abs(ε) * ONE_OVER_4π
 end
 
-function local_error(local_branch, multipole_branch, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes}, lamb_helmholtz)
+function local_error(local_branch, multipole_branch, i_source_branch, expansions, P, error_method::Union{UniformUnequalSpheres, UniformUnequalBoxes}, lamb_helmholtz)
 
     @assert LH == false "$(error_method) not implmemented with `lamb_helmholtz=true`"
 
@@ -214,7 +217,8 @@ function local_error(local_branch, multipole_branch, P, error_method::Union{Unif
     # local error
     ρ_max2 = ρ_max * ρ_max
     r_bar = r_min - ρ_max
-    A = multipole_branch.multipole_expansion[1,1,1]
+    multipole_expansion = view(expansions, :, :, :, i_source_branch)
+    A = multipole_expansion[1,1,1]
     Γ = 3 * r_max * A / (2 * ρ_max2 * ρ_max)
 
     # distance from multipole center to point closest to the local expansion
@@ -284,7 +288,7 @@ end
 """
     Multipole coefficients up to expansion order `P+1` must be added to `multipole_branch` before calling this function.
 """
-function local_error(local_branch, multipole_branch, P, error_method::RotatedCoefficients, lamb_helmholtz::Val)
+function local_error(local_branch, multipole_branch, i_source_branch, expansions, P, error_method::RotatedCoefficients, lamb_helmholtz::Val)
 
     # vector from multipole center to local center
     t⃗ = local_branch.target_center - multipole_branch.source_center
@@ -293,7 +297,8 @@ function local_error(local_branch, multipole_branch, P, error_method::RotatedCoe
     r_l = sum(local_branch.target_box) * 0.33333333333333333333 * sqrt(3)
 
     # calculate error
-    return local_error(t⃗, r_l, multipole_branch.multipole_expansion, P, error_method, lamb_helmholtz)
+    multipole_expansion = view(expansions, :, :, :, i_source_branch)
+    return local_error(t⃗, r_l, multipole_expansion, P, error_method, lamb_helmholtz)
 end
 
 function local_error(t⃗, r_l, multipole_expansion, P, error_method, lamb_helmholtz::Val{LH}) where LH
@@ -342,9 +347,9 @@ function local_error(t⃗, r_l, multipole_expansion, P, error_method, lamb_helmh
     return ε_l * ONE_OVER_4π
 end
 
-function error(local_branch, multipole_branch, expansion_order, error_method, lamb_helmholtz)
-    ε_multipole = multipole_error(local_branch, multipole_branch, expansion_order, error_method, lamb_helmholtz)
-    ε_local = local_error(local_branch, multipole_branch, expansion_order, error_method, lamb_helmholtz)
+function total_error(local_branch, multipole_branch, i_source_branch, expansions, expansion_order, error_method, lamb_helmholtz)
+    ε_multipole = multipole_error(local_branch, multipole_branch, i_source_branch, expansions, expansion_order, error_method, lamb_helmholtz)
+    ε_local = local_error(local_branch, multipole_branch, i_source_branch, expansions, expansion_order, error_method, lamb_helmholtz)
     return ε_multipole + ε_local
 end
 

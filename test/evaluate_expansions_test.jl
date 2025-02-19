@@ -10,12 +10,13 @@ local_weights_test = -ComplexF64[0.13461314440045802 + 3.3705354655561485e-19im,
 box = SVector{3}(0.0,0.0,0.0)
 
 branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.4, -4.199999999999999, 0.5]), SVector{3}([2.4, -4.199999999999999, 0.5]), 0.0, 0.0, box, box, expansion_order)
+local_expansion = FastMultipole.initialize_expansion(expansion_order)
 i_compressed, i = 1, 1
 for n in 0:expansion_order
     for m in -n:n
         if m >= 0
-            branch.local_expansion[1,1,i_compressed] = real(local_weights_test[i])
-            branch.local_expansion[2,1,i_compressed] = imag(local_weights_test[i])
+            local_expansion[1,1,i_compressed] = real(local_weights_test[i])
+            local_expansion[2,1,i_compressed] = imag(local_weights_test[i])
             i_compressed += 1
         end
         i += 1
@@ -26,9 +27,8 @@ end
 harmonics = initialize_harmonics(expansion_order)
 derivatives_switch = DerivativesSwitch(true,true,true)
 lamb_helmholtz = Val(false)
-velocity_n_m = zeros(2,3,size(harmonics,3))
-u, velocity, gradient = FastMultipole.evaluate_local(Δx, harmonics, velocity_n_m, branch.local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
-
+velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
+u, velocity, gradient = FastMultipole.evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 
 dx = x_target - xs
 dx_norm = sqrt(dx'*dx)
