@@ -1,4 +1,4 @@
-@testset "octree creation" begin
+# @testset "octree creation" begin
 
     # build list of elements to sort
     xs = [
@@ -15,7 +15,7 @@
 
     # test center_radius function
     center, box = FastMultipole.center_box((elements,), Float64)
-    
+
     # manually
     test_center = [0.65, 0.65, 0.55]
     x_min, x_max = 0.1, 1.2
@@ -24,17 +24,17 @@
     test_box = [max(x_max-test_center[1], test_center[1]-x_min),
     max(y_max-test_center[2], test_center[2]-y_min),
     max(z_max-test_center[3], test_center[3]-z_min)]
-    
+
     for i in 1:3
         @test isapprox(center[i], test_center[i]; atol=1e-12)
     end
     for i in 1:3
         @test isapprox(test_box[i], box[i]; atol=1e-12)
     end
-    
+
     # test branch! function
     expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
-    tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=false)
+    tree = FastMultipole.Tree((elements,), false; expansion_order, leaf_size, shrink_recenter=false)
 
     r1 = max(max(tree.branches[1].target_box[1],tree.branches[1].target_box[2]),tree.branches[1].target_box[3])
     r2 = max(max(tree.branches[2].target_box[1],tree.branches[2].target_box[2]),tree.branches[2].target_box[3])
@@ -58,7 +58,7 @@
         end
         @test isapprox(tree.branches[i_branch].target_radius, test_branches[i_branch,5]; atol=1e-7)
     end
-end
+# end
 
 @testset "octree creation: shrinking" begin
 
@@ -75,13 +75,14 @@ end
     ms = rand(size(xs)[1])
     bodies = vcat(xs',radii',ms',zeros(3,length(ms)))
     elements = Gravitational(bodies)
+    buffer = FastMultipole.system_to_buffer(elements)
 
     # test target box
-    center, box = FastMultipole.center_box((elements,), Float64)
-    source_center, source_box = FastMultipole.source_center_box((elements,), FastMultipole.get_bodies_index((elements,)), Float64)
+    center, box = FastMultipole.center_box((buffer,), Float64)
+    source_center, source_box = FastMultipole.source_center_box((buffer,), FastMultipole.get_bodies_index((buffer,)), Float64)
 
     # test source box
-    target_radius, source_radius = FastMultipole.shrink_radius(center, source_center, (elements,), SVector{1}((1:5,)))
+    target_radius, source_radius = FastMultipole.shrink_radius(center, source_center, (buffer,), SVector{1}((1:5,)))
 
     # manually
     x_min, x_max, y_min, y_max, z_min, z_max = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -107,16 +108,16 @@ end
 
     # test branch! function
     expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
-    tree = FastMultipole.Tree((elements,); expansion_order, leaf_size, shrink_recenter=true)
+    tree = FastMultipole.Tree((elements,), false; expansion_order, leaf_size, shrink_recenter=true)
 
     # test branch 3-5 (leaf branches)
-    function test_leaf(branches, elements, i_leaf)
+    function test_leaf(branches, buffer::Matrix, i_leaf)
         branch = tree.branches[i_leaf]
         i_body = branch.bodies_index[1][1]
-        test_target_center = elements.bodies[i_body].position
-        test_source_center = elements.bodies[i_body].position
+        test_target_center = FastMultipole.get_position(buffer, i_body)
+        test_source_center = FastMultipole.get_position(buffer, i_body)
         test_target_radius = 0.0
-        test_source_radius = elements.bodies[i_body].radius
+        test_source_radius = FastMultipole.get_radius(buffer, i_body)
         test_target_box = SVector{3}(0.0,0.0,0.0)
         test_source_box = SVector{3}(test_source_radius for _ in 1:3)
 
@@ -128,11 +129,11 @@ end
         @test isapprox(test_source_box, branch.source_box; atol=1e-12)
     end
 
-    test_leaf(tree.branches, elements, 3)
-    test_leaf(tree.branches, elements, 4)
-    test_leaf(tree.branches, elements, 5)
-    test_leaf(tree.branches, elements, 6)
-    test_leaf(tree.branches, elements, 7)
+    test_leaf(tree.branches, tree.buffers[1], 3)
+    test_leaf(tree.branches, tree.buffers[1], 4)
+    test_leaf(tree.branches, tree.buffers[1], 5)
+    test_leaf(tree.branches, tree.buffers[1], 6)
+    test_leaf(tree.branches, tree.buffers[1], 7)
 
     # test branch 2 (mid level)
     # NOTE: this test works by comparing to body locations
@@ -141,22 +142,22 @@ end
     #       (exactly 1 body each at their centers)
     branch = tree.branches[2]
     bodies_index = branch.bodies_index[1]
-    centers = [elements.bodies[i].position for i in bodies_index]
+    centers = [FastMultipole.get_position(tree.buffers[1], i) for i in bodies_index]
     test_target_center = sum(centers) / length(centers)
 
     # source center
-    min_x_source = minimum([centers[i][1] - elements.bodies[i].radius for i in bodies_index])
-    min_y_source = minimum([centers[i][2] - elements.bodies[i].radius for i in bodies_index])
-    min_z_source = minimum([centers[i][3] - elements.bodies[i].radius for i in bodies_index])
-    max_x_source = maximum([centers[i][1] + elements.bodies[i].radius for i in bodies_index])
-    max_y_source = maximum([centers[i][2] + elements.bodies[i].radius for i in bodies_index])
-    max_z_source = maximum([centers[i][3] + elements.bodies[i].radius for i in bodies_index])
+    min_x_source = minimum([centers[i][1] - FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
+    min_y_source = minimum([centers[i][2] - FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
+    min_z_source = minimum([centers[i][3] - FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
+    max_x_source = maximum([centers[i][1] + FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
+    max_y_source = maximum([centers[i][2] + FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
+    max_z_source = maximum([centers[i][3] + FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
 
     test_source_center = SVector{3}((min_x_source+max_x_source)*0.5, (min_y_source+max_y_source)*0.5, (min_z_source+max_z_source)*0.5)
     test_source_box = SVector{3}((max_x_source-min_x_source)*0.5, (max_y_source-min_y_source)*0.5, (max_z_source-min_z_source)*0.5)
 
-    test_target_radius = maximum([norm(elements.bodies[i].position - branch.target_center) for i in bodies_index])
-    test_source_radius = maximum([norm(elements.bodies[i].position - branch.source_center) + elements.bodies[i].radius for i in bodies_index])
+    test_target_radius = maximum([norm(FastMultipole.get_position(tree.buffers[1],i) - branch.target_center) for i in bodies_index])
+    test_source_radius = maximum([norm(FastMultipole.get_position(tree.buffers[1],i) - branch.source_center) + FastMultipole.get_radius(tree.buffers[1],i) for i in bodies_index])
     bodies_x = [c[1] for c in centers]
     bodies_y = [c[2] for c in centers]
     bodies_z = [c[3] for c in centers]
@@ -177,32 +178,13 @@ end
 
 end
 
-@testset "octree creation: unsort/resort" begin
-
-n_bodies = 101
-bodies = rand(8,n_bodies)
-x_presorted = deepcopy(bodies[1:3,:])
-bodies[5:8,2:n_bodies] .= 0.0
-system = (Gravitational(bodies),)
-tree, m2l_list, direct_list, switch = FastMultipole.fmm!(system) # always unsorts at the end to avoid ambiguity
-x_unsorted = deepcopy(bodies[1:3,:])
-FastMultipole.resort!(system, tree)
-x_sorted = deepcopy(bodies[1:3,:])
-FastMultipole.unsort!(system, tree)
-x_reunsorted = deepcopy(bodies[1:3,:])
-
-@test isapprox(x_presorted, x_unsorted)
-@test isapprox(x_unsorted, x_reunsorted)
-
-end
-
 @testset "octree creation: leaf index" begin
 
 n_bodies = 101
 bodies = rand(8,n_bodies)
 system = (Gravitational(bodies),)
 
-tree = fmm.Tree(system; leaf_size=SVector{1}(5))
+tree = fmm.Tree(system, false; leaf_size=SVector{1}(5))
 leaf_index = tree.leaf_index
 
 i_leaf = 1
@@ -215,3 +197,39 @@ end
 
 end
 
+@testset "octree creation: buffer_to_target!" begin
+
+n_bodies = 5
+bodies = rand(8,n_bodies)
+system = (Gravitational(bodies),)
+
+tree = fmm.Tree(system, true; leaf_size=SVector{1}(5))
+
+# fill potential with index
+for i in 1:FastMultipole.get_n_bodies(system)
+    tree.buffers[1][4,i] = i
+end
+
+# copy back to system
+FastMultipole.buffer_to_target!(system, tree.buffers, (DerivativesSwitch(),), tree.sort_index_list)
+
+# check that potential matches indices
+check_system = zeros(4, n_bodies)
+check_buffer = zeros(4, n_bodies)
+for i in 1:n_bodies
+    check_system[1,i] = system[1].potential[1,i]
+    check_system[2:4,i] .= system[1].bodies[i].position
+    check_buffer[1,i] = tree.buffers[1][4,i]
+    check_buffer[2:4,i] .= tree.buffers[1][1:3,i]
+end
+
+check_system_sorted = sortslices(check_system, dims=2)
+check_buffer_sorted = sortslices(check_buffer, dims=2)
+
+for i in 1:n_bodies
+    for j in 1:4
+        @test isapprox(check_system_sorted[j,i], check_buffer_sorted[j,i]; atol=1e-12)
+    end
+end
+
+end

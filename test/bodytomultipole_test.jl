@@ -15,8 +15,26 @@ function SourcePoints(x, strength::Vector{TF};
     return SourcePoints(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::SourcePoints, i, ::Strength) = system.strength[i]
-Base.getindex(system::SourcePoints, i, ::Position) = system.x[i]
+Base.eltype(::SourcePoints{TF}) where TF = TF
+
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::SourcePoints, i_body)
+    buffer[1:3,i_buffer] .= system.x[i_body]
+    buffer[5,i_buffer] = system.strength[i_body]
+end
+
+FastMultipole.data_per_body(::SourcePoints) = 5
+
+function FastMultipole.reset!(system::SourcePoints{TF}) where TF
+    system.potential .= zero(TF)
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
+
+FastMultipole.strength_dims(::SourcePoints) = 1
+
+FastMultipole.get_n_bodies(system::SourcePoints) = length(system.strength)
+
+FastMultipole.get_position(system::SourcePoints,i) = system.x[i]
 
 struct SourceFilaments{TF}
     x::Matrix{SVector{3,TF}}
@@ -35,9 +53,29 @@ function SourceFilaments(x, strength::Vector{TF};
     return SourceFilaments(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::SourceFilaments, i, ::Strength) = system.strength[i]
-Base.getindex(system::SourceFilaments, i, ::Vertex, i_v) = system.x[i_v,i]
-Base.getindex(system::SourceFilaments, i, ::Position) = (system.x[1,i] + system.x[2,i])/2
+Base.eltype(::SourceFilaments{TF}) where TF = TF
+
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::SourceFilaments, i_body)
+    buffer[1:3,i_buffer] .= (system.x[1,i_body] + system.x[2,i_body]) * 0.5
+    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body])
+    buffer[5,i_buffer] = system.strength[i_body]
+    buffer[6:8,i_buffer] .= system.x[1,i_body]
+    buffer[9:11,i_buffer] .= system.x[2,i_body]
+end
+
+FastMultipole.data_per_body(::SourceFilaments) = 11
+
+function FastMultipole.reset!(system::SourceFilaments{TF}) where TF
+    system.potential .= zero(TF)
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
+
+FastMultipole.strength_dims(::SourceFilaments) = 1
+
+FastMultipole.get_n_bodies(system::SourceFilaments) = length(system.strength)
+
+FastMultipole.get_position(system::SourceFilaments,i) = (system.x[1,i]+system.x[2,i]) * 0.5
 
 struct SourcePanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
@@ -56,17 +94,30 @@ function SourcePanels(x, strength::Vector{TF};
     return SourcePanels(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::SourcePanels, i, ::Strength) = system.strength[i]
-Base.getindex(system::SourcePanels, i, ::Vertex, i_v) = system.x[i][i_v]
-Base.getindex(system::SourcePanels, i, ::Position) = sum(system.x[i]) / 3
-function Base.getindex(system::SourcePanels, i, ::Normal)
-    x1 = system[i,Vertex(),1]
-    x2 = system[i,Vertex(),2]
-    x3 = system[i,Vertex(),3]
-    normal = cross(x2-x1,x3-x1)
-    normal /= norm(normal)
-    return normal
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::SourcePanels, i_body)
+    buffer[1:3,i_buffer] .= (system.x[i_body][1] + system.x[i_body][2] + system.x[i_body][3]) * 0.33333333333333333
+    # buffer[4,i_buffer] =
+    buffer[5,i_buffer] = system.strength[i_body]
+    buffer[6:8,i_buffer] .= system.x[i_body][1]
+    buffer[9:11,i_buffer] .= system.x[i_body][2]
+    buffer[12:14,i_buffer] .= system.x[i_body][3]
 end
+
+FastMultipole.data_per_body(::SourcePanels) = 16
+
+function FastMultipole.reset!(system::SourcePanels{TF}) where TF
+    system.potential .= zero(TF)
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
+
+FastMultipole.strength_dims(::SourcePanels) = 1
+
+FastMultipole.get_n_bodies(system::SourcePanels) = length(system.strength)
+
+FastMultipole.get_position(system::SourcePanels,i) = (system.x[i][1]+system.x[i][2] + system.x[i][3]) * 0.33333333333333333
+
+Base.eltype(::SourcePanels{TF}) where TF = TF
 
 struct DipolePoints{TF}
     x::Vector{SVector{3,TF}}
@@ -85,8 +136,36 @@ function DipolePoints(x, strength::Vector{SVector{3,TF}};
     return DipolePoints(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::DipolePoints, i, ::Strength) = system.strength[i]
-Base.getindex(system::DipolePoints, i, ::Position) = system.x[i]
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipolePoints, i_body)
+    buffer[1:3,i_body] .= system.x[i_body]
+    buffer[5:7,i_body] .= system.strength[i_body]
+end
+
+function FastMultipole.data_per_body(system::DipolePoints)
+    return 7
+end
+
+function Base.eltype(system::DipolePoints{TF}) where TF
+    return TF
+end
+
+function FastMultipole.reset!(system::DipolePoints)
+    system.potential .= zero(eltype(system))
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
+
+function FastMultipole.get_position(system::DipolePoints, i)
+    return system.x[i]
+end
+
+function FastMultipole.get_n_bodies(system::DipolePoints)
+    return length(system.x)
+end
+
+function FastMultipole.strength_dims(system::DipolePoints)
+    return 3
+end
 
 struct DipoleFilaments{TF}
     x::Matrix{SVector{3,TF}}
@@ -105,9 +184,39 @@ function DipoleFilaments(x, strength::Vector{SVector{3,TF}};
     return DipoleFilaments(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::DipoleFilaments, i, ::Strength) = system.strength[i]
-Base.getindex(system::DipoleFilaments, i, ::Vertex, i_v) = system.x[i_v,i]
-Base.getindex(system::DipoleFilaments, i, ::Position) = (system.x[1,i] + system.x[2,i])/2
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipoleFilaments, i_body)
+    buffer[1:3,i_body] .= (system.x[1,i_body] + system.x[2,i_body]) * 0.5
+    buffer[4,i_body] = norm(system.x[2,i_body] - system.x[1,i_body])
+    buffer[5:7,i_body] .= system.strength[i_body]
+    buffer[8:10,i_body] .= system.x[1,i_body]
+    buffer[11:13,i_body] .= system.x[2,i_body]
+end
+
+function FastMultipole.data_per_body(system::DipoleFilaments)
+    return 13
+end
+
+function Base.eltype(system::DipoleFilaments{TF}) where TF
+    return TF
+end
+
+function FastMultipole.reset!(system::DipoleFilaments)
+    system.potential .= zero(eltype(system))
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
+
+function FastMultipole.get_position(system::DipoleFilaments, i)
+    return (system.x[1,i] + system.x[2,i]) * 0.5
+end
+
+function FastMultipole.get_n_bodies(system::DipoleFilaments)
+    return length(system.strength)
+end
+
+function FastMultipole.strength_dims(system::DipoleFilaments)
+    return 3
+end
 
 struct DipolePanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
@@ -126,16 +235,39 @@ function DipolePanels(x, strength::Vector{SVector{3,TF}};
     return DipolePanels(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::DipolePanels, i, ::Strength) = system.strength[i]
-Base.getindex(system::DipolePanels, i, ::Vertex, i_v) = system.x[i][i_v]
-Base.getindex(system::DipolePanels, i, ::Position) = sum(system.x[i]) / 3
-function Base.getindex(system::DipolePanels, i, ::Normal)
-    x1 = system[i,Vertex(),1]
-    x2 = system[i,Vertex(),2]
-    x3 = system[i,Vertex(),3]
-    normal = cross(x2-x1,x3-x1)
-    normal /= norm(normal)
-    return normal
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipolePanels, i_body)
+    buffer[1:3,i_body] .= (system.x[i_body][1] + system.x[i_body][2] + system.x[i_body][3]) * 0.33333333333333333
+    # buffer[4,i_body] =
+    buffer[5:7,i_body] .= system.strength[i_body]
+    buffer[8:10,i_body] .= system.x[i_body][1]
+    buffer[11:13,i_body] .= system.x[i_body][2]
+    buffer[14:16,i_body] .= system.x[i_body][3]
+end
+
+function FastMultipole.data_per_body(system::DipolePanels)
+    return 16
+end
+
+function Base.eltype(system::DipolePanels{TF}) where TF
+    return TF
+end
+
+function FastMultipole.reset!(system::DipolePanels)
+    system.potential .= zero(eltype(system))
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
+
+function FastMultipole.get_position(system::DipolePanels, i)
+    return (system.x[i][1] + system.x[i][2] + system.x[i][3]) * 0.3333333333333333333
+end
+
+function FastMultipole.get_n_bodies(system::DipolePanels)
+    return length(system.strength)
+end
+
+function FastMultipole.strength_dims(system::DipolePanels)
+    return 3
 end
 
 struct Vortons{TF}
@@ -155,8 +287,22 @@ function Vortons(position::Vector{SVector{3,TF}}, strength;
     return Vortons(position, strength, potential, force, gradient)
 end
 
-Base.getindex(system::Vortons, i, ::Strength) = system.strength[i]
-Base.getindex(system::Vortons, i, ::Position) = system.position[i]
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::Vortons, i_body)
+    buffer[1:3,i_buffer] .= system.position[i_body]
+    buffer[5:7,i_buffer] .= system.strength[i_body]
+end
+
+function FastMultipole.strength_dims(system::Vortons)
+    return 3
+end
+
+FastMultipole.get_n_bodies(system::Vortons) = length(system.position)
+
+FastMultipole.data_per_body(::Vortons) = 7
+
+Base.eltype(::Vortons{TF}) where TF = TF
+
+FastMultipole.get_position(system::Vortons, i) = system.position[i]
 
 struct VortexFilaments{TF}
     x::Matrix{SVector{3,TF}}
@@ -175,9 +321,31 @@ function VortexFilaments(x, strength::Vector{SVector{3,TF}};
     return VortexFilaments(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::VortexFilaments, i, ::Strength) = system.strength[i]
-Base.getindex(system::VortexFilaments, i, ::Vertex, i_v) = system.x[i_v,i]
-Base.getindex(system::VortexFilaments, i, ::Position) = (system.x[1,i] + system.x[2,i])/2
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexFilaments, i_body)
+    buffer[1:3,i_buffer] .= (system.x[1,i_body]  + system.x[2,i_body])
+    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
+    buffer[5:7,i_buffer] .= system.strength[i_body]
+    buffer[8:10,i_buffer] .= system.x[1,i_body]
+    buffer[11:13,i_buffer] .= system.x[2,i_body]
+end
+
+function FastMultipole.strength_dims(system::VortexFilaments)
+    return 3
+end
+
+FastMultipole.get_n_bodies(system::VortexFilaments) = length(system.strength)
+
+FastMultipole.data_per_body(::VortexFilaments) = 13
+
+Base.eltype(::VortexFilaments{TF}) where TF = TF
+
+FastMultipole.get_position(system::VortexFilaments, i) = (system.x[1,i] + system.x[2,i]) * 0.5
+
+function FastMultipole.reset!(system::VortexFilaments)
+    system.potential .= zero(eltype(system.potential))
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
+end
 
 struct VortexPanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
@@ -196,16 +364,31 @@ function VortexPanels(x, strength::Vector{SVector{3,TF}};
     return VortexPanels(x, strength, potential, force, gradient)
 end
 
-Base.getindex(system::VortexPanels, i, ::Strength) = system.strength[i]
-Base.getindex(system::VortexPanels, i, ::Vertex, i_v) = system.x[i][i_v]
-Base.getindex(system::VortexPanels, i, ::Position) = sum(system.x[i]) / 3
-function Base.getindex(system::VortexPanels, i, ::Normal)
-    x1 = system[i,Vertex(),1]
-    x2 = system[i,Vertex(),2]
-    x3 = system[i,Vertex(),3]
-    normal = cross(x2-x1,x3-x1)
-    normal /= norm(normal)
-    return normal
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexPanels, i_body)
+    buffer[1:3,i_buffer] .= (system.x[i_body][1] + system.x[i_body][2] + system.x[i_body][3]) * 0.33333333333333333
+    # buffer[4,i_buffer] =
+    buffer[5:7,i_buffer] .= system.strength[i_body]
+    buffer[8:10,i_buffer] .= system.x[i_body][1]
+    buffer[11:13,i_buffer] .= system.x[i_body][2]
+    buffer[14:16,i_buffer] .= system.x[i_body][3]
+end
+
+function FastMultipole.strength_dims(system::VortexPanels)
+    return 3
+end
+
+FastMultipole.get_n_bodies(system::VortexPanels) = length(system.strength)
+
+FastMultipole.data_per_body(::VortexPanels) = 16
+
+Base.eltype(::VortexPanels{TF}) where TF = TF
+
+FastMultipole.get_position(system::VortexPanels, i) = (system.x[i][1] + system.x[i][2] + system.x[i][3]) * 0.33333333333333333
+
+function FastMultipole.reset!(system::VortexPanels)
+    system.potential .= zero(eltype(system.potential))
+    system.force .= zero(eltype(system.force))
+    system.gradient .= zero(eltype(system.gradient))
 end
 
 function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
@@ -219,13 +402,14 @@ xs = x + SVector{3}(-0.2,0.07,-0.1)
 bodies = zeros(5,1)
 bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
+buffer = FastMultipole.system_to_buffer(masses)
 expansion_order = 10
 box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(1:1, 0, 1:0, 0, 1, x, x, 0.0, 0.0, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
 
-body_to_multipole!(Point{Source}, masses, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Point{Source}, masses, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 Δx = SVector{3}(bodies[1:3]) - branch.source_center
 ρ, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx...)
@@ -301,7 +485,7 @@ velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
 # compute local coefficients directly
 target_branch_2 = deepcopy(target_branch)
 target_expansion_2 = initialize_expansion(expansion_order)
-body_to_local_point!(Point{Source}, target_expansion_2, harmonics, masses[1,Position()] - target_branch_2.target_center, masses[1,Strength()], expansion_order)
+body_to_local_point!(Point{Source}, target_expansion_2, harmonics, masses.bodies[1].position - target_branch_2.target_center, masses.bodies[1].strength, expansion_order)
 
 velocity_n_m .= 0.0
 ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(x_target - target_center, harmonics, velocity_n_m, target_expansion_2, expansion_order, lamb_helmholtz, DerivativesSwitch())
@@ -325,7 +509,7 @@ vector_to_expansion!(multipole_check_expansion, multipole_check, 1, expansion_or
 
 # define system
 system = DipolePoints([xs], [q])
-
+buffer = FastMultipole.system_to_buffer(system)
 
 # create branch
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
@@ -333,7 +517,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
 harmonics = initialize_harmonics(expansion_order)
-body_to_multipole!(Point{Dipole}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Point{Dipole}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 test_expansion!(multipole_expansion, -multipole_check_expansion, 1, expansion_order)
 
@@ -363,8 +547,8 @@ velocity_n_m = zeros(2,3,size(harmonics,3))
 ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, velocity_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 # analytic
-q = system[1,Strength()]
-x_point = system[1,Position()]
+q = FastMultipole.get_strength(buffer,system,1)
+x_point = FastMultipole.get_position(system,1)
 Δx = xt - x_point
 Δx̂ = Δx / norm(Δx)
 r = norm(Δx)
@@ -392,6 +576,7 @@ xs = SVector{3}(1.0,1.0,1.0)
 q = SVector{3}(1.0,0,0)
 
 system = Vortons([xs], [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 # create branch
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0
@@ -402,7 +587,7 @@ branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, 
 multipole_expansion = initialize_expansion(expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 
-body_to_multipole!(Point{Vortex}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Point{Vortex}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 # test_expansion!(branch.multipole_expansion, multipole_check_expansion, 1, expansion_order; throwme=true)
 # test_expansion!(branch.multipole_expansion, multipole_check_expansion, 2, expansion_order)
@@ -446,7 +631,7 @@ velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
 # generate local expansion directly
 target_branch_2 = deepcopy(target_branch)
 target_expansion_2 = initialize_expansion(expansion_order)
-body_to_local_point!(Point{Vortex}, target_expansion_2, harmonics, system[1,Position()] - target_branch_2.target_center, system[1,Strength()], expansion_order)
+body_to_local_point!(Point{Vortex}, target_expansion_2, harmonics, FastMultipole.get_position(system,1) - target_branch_2.target_center, FastMultipole.get_strength(buffer,system,1), expansion_order)
 velocity_n_m .= 0.0
 ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(xt - target_center, harmonics, velocity_n_m, target_expansion_2, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
@@ -541,6 +726,7 @@ q = 1.0
 x[1,1] = x1
 x[2,1] = x2
 system = SourceFilaments(x, [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(0.0, 0.3, 8.5)
 
@@ -570,7 +756,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
-body_to_multipole!(Filament{Source}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Filament{Source}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, multipole_expansion, DerivativesSwitch(), expansion_order)
 
 @test isapprox(ϕ_check, ϕ_m2b; atol=1e-12)
@@ -588,6 +774,7 @@ q = SVector{3}(0,1.0,0)
 x[1,1] = x1
 x[2,1] = x2
 system = DipoleFilaments(x, [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(4.0, 0.3, 0.0)
 
@@ -663,7 +850,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
-body_to_multipole!(Filament{Dipole}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Filament{Dipole}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 s = harmonics[1,1,:] .+ im .* harmonics[2,1,:]
 p = harmonics[1,2,:] .+ im .* harmonics[2,2,:]
@@ -698,6 +885,7 @@ q = SVector{3}(0,1.0,0)
 x[1,1] = x1
 x[2,1] = x2
 system = VortexFilaments(x, [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(4.0, 0.3, 0.0)
 
@@ -727,7 +915,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
-body_to_multipole!(Filament{Vortex}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Filament{Vortex}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 ϕnm_filament = multipole_expansion[1,1,:] .+ multipole_expansion[2,1,:] .* im
 χnm_filament = multipole_expansion[1,2,:] .+ multipole_expansion[2,2,:] .* im
@@ -773,12 +961,13 @@ vertices = SVector(x1,x2,x3)
 x = [vertices]
 q = 1.0
 system = SourcePanels(x, [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(0.2, 0.3, 5.7)
 
-normal = system[1,Normal()]
-strength = system[1,Strength()]
-centroid = system[1,Position()]
+normal = FastMultipole.get_normal(buffer, system, 1)
+strength = FastMultipole.get_strength(buffer, system, 1)
+centroid = FastMultipole.get_position(buffer, 1)
 ϕ_check, v_check, g_check = induced(xt, vertices, normal, strength, centroid, Panel{Source}, DerivativesSwitch(true,true,true))
 
 expansion_order = 10
@@ -790,7 +979,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
 harmonics = initialize_harmonics(expansion_order)
-body_to_multipole!(Panel{Source}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Panel{Source}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 ϕnm_panel = multipole_expansion[1,1,:] .+ multipole_expansion[2,1,:] .* im
 χnm_panel = multipole_expansion[1,2,:] .+ multipole_expansion[2,2,:] .* im
@@ -804,7 +993,7 @@ system_point = SourcePoints([x_point], [q_point])
 branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 expansion_point = initialize_expansion(expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
-body_to_multipole!(Point{Source}, system_point, expansion_point, branch_point.source_center, 1:1, harmonics_point, expansion_order)
+body_to_multipole!(Point{Source}, system_point, expansion_point, buffer, branch_point.source_center, 1:1, harmonics_point, expansion_order)
 #ϕ_point, v_point, g_point = evaluate_multipole(xt, branch_point.source_center, branch_point.multipole_expansion, DerivativesSwitch(true,true,true), expansion_order)
 
 ϕnm_point = expansion_point[1,1,:] .+ expansion_point[2,1,:] .* im
@@ -867,12 +1056,13 @@ vertices = SVector(x1,x2,x3)
 x = [vertices]
 q = SVector{3}(0,0,1.0)
 system = DipolePanels(x, [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(0.2, 0.3, 5.7)
 
-normal = system[1,Normal()]
-strength = system[1,Strength()]
-centroid = system[1,Position()]
+normal = FastMultipole.get_normal(buffer,system,1)
+strength = FastMultipole.get_strength(buffer,system,1)
+centroid = FastMultipole.get_position(buffer,1)
 ϕ_check, v_check, g_check = induced(xt, vertices, normal, SVector{1}(norm(strength)), centroid, Panel{Dipole}, DerivativesSwitch(true,true,true))
 
 expansion_order = 10
@@ -884,7 +1074,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
 harmonics = initialize_harmonics(expansion_order)
-body_to_multipole!(Panel{Dipole}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Panel{Dipole}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 ϕnm_panel = multipole_expansion[1,1,:] .+ multipole_expansion[2,1,:] .* im
 χnm_panel = multipole_expansion[1,2,:] .+ multipole_expansion[2,2,:] .* im
@@ -895,10 +1085,12 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = DipolePoints([x_point], [q_point])
+buffer_point = FastMultipole.system_to_buffer(system_point)
+
 branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 expansion_point = initialize_expansion(expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
-body_to_multipole!(Point{Dipole}, system_point, expansion_point, branch_point.source_center, 1:1, harmonics_point, expansion_order)
+body_to_multipole!(Point{Dipole}, system_point, expansion_point, buffer_point, branch_point.source_center, 1:1, harmonics_point, expansion_order)
 
 ϕnm_point = expansion_point[1,1,:] .+ expansion_point[2,1,:] .* im
 χnm_point = expansion_point[1,2,:] .+ expansion_point[2,2,:] .* im
@@ -961,12 +1153,13 @@ vertices = SVector(x1,x2,x3)
 x = [vertices]
 q = SVector{3}(0,1.0,0.0)
 system = VortexPanels(x, [q])
+buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(0.2, 0.3, 5.7)
 
-normal = system[1,Normal()]
-strength = system[1,Strength()]
-centroid = system[1,Position()]
+normal = FastMultipole.get_normal(buffer,system,1)
+strength = FastMultipole.get_strength(buffer,system,1)
+centroid = FastMultipole.get_position(buffer,1)
 #ϕ_check, v_check, g_check = induced(xt, vertices, normal, SVector{1}(norm(strength)), centroid, Panel{Vortex}, DerivativesSwitch(true,true,true))
 
 nodes = zeros(3,3)
@@ -996,7 +1189,7 @@ box = SVector{3}(0.0,0.0,0.0)
 branch = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics = initialize_harmonics(expansion_order)
 multipole_expansion = initialize_expansion(expansion_order)
-body_to_multipole!(Panel{Vortex}, system, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Panel{Vortex}, system, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 ϕnm_panel = multipole_expansion[1,1,:] .+ multipole_expansion[2,1,:] .* im
 χnm_panel = multipole_expansion[1,2,:] .+ multipole_expansion[2,2,:] .* im
@@ -1007,10 +1200,12 @@ area = norm(cross(x2-x1,x3-x1))/2
 q_point = q * area
 
 system_point = Vortons([x_point], [q_point])
+buffer_point = FastMultipole.system_to_buffer(system_point)
+
 branch_point = Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, center, center, radius, radius, box, box, expansion_order)
 harmonics_point = initialize_harmonics(expansion_order)
 expansion_point = initialize_expansion(expansion_order)
-body_to_multipole!(Point{Vortex}, system_point, expansion_point, branch_point.source_center, 1:1, harmonics_point, expansion_order)
+body_to_multipole!(Point{Vortex}, system_point, expansion_point, buffer_point, branch_point.source_center, 1:1, harmonics_point, expansion_order)
 
 ϕnm_point = expansion_point[1,1,:] .+ expansion_point[2,1,:] .* im
 χnm_point = expansion_point[1,2,:] .+ expansion_point[2,2,:] .* im

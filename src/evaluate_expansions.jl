@@ -32,29 +32,13 @@ end
 
 function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     for i_body in bodies_index
-        scalar_potential, velocity, gradient = evaluate_local(system[i_body,POSITION] - expansion_center, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+        scalar_potential, velocity, gradient = evaluate_local(get_position(system, i_body) - expansion_center, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
         
-        PS && (system[i_body, ScalarPotential()] += scalar_potential)
+        PS && set_scalar_potential!(system, i_body, scalar_potential)
 
-        if VS
-            vpx, vpy, vpz = system[i_body, VELOCITY]
-            system[i_body, Velocity()] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
-        end
+        VS && set_velocity!(system, i_body, velocity)
         
-        if GS
-            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VELOCITY_GRADIENT]
-            system[i_body, VelocityGradient()] = SMatrix{3,3}(
-                gradient[1] + v1,
-                gradient[2] + v2,
-                gradient[3] + v3,
-                gradient[4] + v4,
-                gradient[5] + v5,
-                gradient[6] + v6,
-                gradient[7] + v7,
-                gradient[8] + v8,
-                gradient[9] + v9
-            )
-        end
+        GS && set_velocity_gradient!(system, i_body, gradient)
     end
 end
 

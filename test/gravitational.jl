@@ -11,9 +11,8 @@ const i_POTENTIAL = 1:4
 const i_VELOCITY = 5:7
 const i_VELOCITY_GRADIENT = 8:16
 
-#####
-##### gravitational kernel and mass elements
-#####
+#------- gravitational kernel and mass elements -------#
+
 struct Body{TF}
     position::SVector{3,TF}
     radius::TF
@@ -44,79 +43,6 @@ function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_fact
     system = Gravitational(bodies)
 end
 
-function reset!(system::Gravitational{TF}) where TF
-    system.potential .= zero(TF)
-end
-
-function Base.getindex(g::Gravitational, i, ::Position)
-    g.bodies[i].position
-end
-Base.getindex(g::Gravitational, i, ::Radius) = g.bodies[i].radius
-#Base.getindex(g::Gravitational, i, ::FastMultipole.VectorPotential) = view(g.potential,2:4,i)
-Base.getindex(g::Gravitational, i, ::ScalarPotential) = g.potential[1,i]
-Base.getindex(g::Gravitational, i, ::Velocity) = SVector{3}(g.potential[i_VELOCITY[1],i], g.potential[i_VELOCITY[2],i], g.potential[i_VELOCITY[3],i])
-Base.getindex(g::Gravitational, i, ::VelocityGradient) = SMatrix{3,3}(reshape(view(g.potential,i_VELOCITY_GRADIENT,i),3,3))
-Base.getindex(g::Gravitational, i, ::Strength) = g.bodies[i].strength
-Base.getindex(g::Gravitational, i, ::FastMultipole.Body) = (g.bodies[i], g.potential[:,i])
-function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.Body)
-    body, potential = val
-    g.bodies[i] = body
-    g.potential[:,i] .= potential
-    return nothing
-end
-function Base.setindex!(g::Gravitational, val, i, ::ScalarPotential)
-    g.potential[i_POTENTIAL[1],i] = val
-end
-#function Base.setindex!(g::Gravitational, val, i, ::FastMultipole.VectorPotential)
-#    g.potential[i_POTENTIAL[2:4],i] .= val
-#end
-function Base.setindex!(g::Gravitational, val, i, ::Velocity)
-    g.potential[i_VELOCITY,i] .= val
-end
-function Base.setindex!(g::Gravitational, val, i, ::VelocityGradient)
-    for (jj,j) in enumerate(i_VELOCITY_GRADIENT)
-        g.potential[j,i] = val[jj]
-    end
-    # reshape(g.potential[i_VELOCITY_GRADIENT,i],3,3) .= val
-end
-function Base.setindex!(g::Gravitational{TF}, val, i, ::Strength) where TF
-    body = g.bodies[i]
-    new_body = Body{TF}(body.position, body.radius, val)
-    g.bodies[i] = new_body
-end
-FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
-Base.eltype(::Gravitational{TF}) where TF = TF
-
-FastMultipole.buffer_element(g::Gravitational) = (deepcopy(g.bodies[1]),zeros(eltype(g),52))
-
-FastMultipole.body_to_multipole!(system::Gravitational, args...) = FastMultipole.body_to_multipole!(Point{Source}, system, args...)
-
-function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_index)
-    # nbad = 0
-    for i_source in source_index
-        source_x, source_y, source_z = source_system[i_source,FastMultipole.POSITION]
-        source_strength = source_system.bodies[i_source].strength
-        for j_target in target_index
-            target_x, target_y, target_z = target_system[j_target,FastMultipole.POSITION]
-            dx = target_x - source_x
-            dy = target_y - source_y
-            dz = target_z - source_z
-            r2 = dx*dx + dy*dy + dz*dz
-            # te = @elapsed begin
-            if r2 > 0
-                r = sqrt(r2)
-                dϕ = source_strength / r * FastMultipole.ONE_OVER_4π
-                target_system[j_target,FastMultipole.SCALAR_POTENTIAL] += dϕ
-                dF = SVector{3}(dx,dy,dz) * source_strength / r^3 * FastMultipole.ONE_OVER_4π
-                target_system[j_target,FastMultipole.VELOCITY] += dF
-            end
-        # end
-        # if te > 0.00001; nbad += 1; end
-        end
-    end
-    # println("nbad = $nbad")
-end
-
 function save_vtk(filename, element::Gravitational, nt=0; compress=false, extra_fields=nothing)
     _, n = size(element.bodies)
     WriteVTK.vtk_grid(filename*"_point_masses."*string(nt)*".vts", reshape(view(element.bodies,1:3,:),3,n,1,1); compress) do vtk
@@ -131,3 +57,77 @@ function save_vtk(filename, element::Gravitational, nt=0; compress=false, extra_
         end
     end
 end
+
+#------- FastMultipole compatibility functions -------#
+
+Base.eltype(::Gravitational{TF}) where TF = TF
+
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::Gravitational, i_body)
+    buffer[1:3, i_buffer] .= system.bodies[i_body].position
+    buffer[4, i_buffer] = system.bodies[i_body].radius
+    buffer[5, i_buffer] = system.bodies[i_body].strength
+end
+
+function FastMultipole.data_per_body(system::Gravitational)
+    return 5
+end
+
+function FastMultipole.reset!(system::Gravitational{TF}) where TF
+    system.potential .= zero(TF)
+end
+
+function FastMultipole.get_position(g::Gravitational, i)
+    return g.bodies[i].position
+end
+
+function FastMultipole.strength_dims(system::Gravitational)
+    return 1
+end
+
+FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
+
+FastMultipole.body_to_multipole!(system::Gravitational, args...) = FastMultipole.body_to_multipole!(Point{Source}, system, args...)
+
+function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_buffer, source_index)
+    # nbad = 0
+    for i_source in source_index
+        source_x, source_y, source_z = FastMultipole.get_position(source_buffer, i_source)
+        source_strength = FastMultipole.get_strength(source_buffer, source_system, i_source)[1]
+        for j_target in target_index
+            target_x, target_y, target_z = FastMultipole.get_position(target_system, j_target)
+            dx = target_x - source_x
+            dy = target_y - source_y
+            dz = target_z - source_z
+            r2 = dx*dx + dy*dy + dz*dz
+            # te = @elapsed begin
+            if r2 > 0
+                r = sqrt(r2)
+                dϕ = source_strength / r * FastMultipole.ONE_OVER_4π
+                FastMultipole.set_scalar_potential!(target_system, j_target, dϕ)
+                dF = SVector{3}(dx,dy,dz) * source_strength / (r2 * r) * FastMultipole.ONE_OVER_4π
+                FastMultipole.set_velocity!(target_system, j_target, dF)
+            end
+        # end
+        # if te > 0.00001; nbad += 1; end
+        end
+    end
+    # println("nbad = $nbad")
+end
+
+function FastMultipole.buffer_to_target_system!(target_system::Gravitational, i_target, ::FastMultipole.DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
+    # get values
+    TF = eltype(target_buffer)
+    scalar_potential = PS ? FastMultipole.get_scalar_potential(target_buffer, i_buffer) : zero(TF)
+    velocity = VS ? FastMultipole.get_velocity(target_buffer, i_buffer) : zero(SVector{3,TF})
+    velocity_gradient = GS ? FastMultipole.get_velocity_gradient(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
+
+    # update system
+    target_system.potential[i_POTENTIAL[1], i_target] = scalar_potential
+    target_system.potential[i_VELOCITY, i_target] .= velocity
+    for (jj,j) in enumerate(i_VELOCITY_GRADIENT)
+        target_system.potential[j, i_target] = velocity_gradient[jj]
+    end
+end
+
+Base.eltype(::Gravitational{TF}) where TF = TF
+

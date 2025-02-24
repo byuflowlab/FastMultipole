@@ -19,8 +19,9 @@ body_to_multipole!(system::VortexSheetSurface, args...) = body_to_multipole!(Pan
 function body_to_multipole!(tree::Tree, harmonics, system, i_system, expansion_order)
     for i_branch in tree.leaf_index
         branch = tree.branches[i_branch]
+        buffer = tree.buffers[i_system]
         multipole_coefficients = view(tree.expansions, :, :, :, i_branch)
-        body_to_multipole!(system, multipole_coefficients, branch.source_center, branch.bodies_index[i_system], harmonics, expansion_order)
+        body_to_multipole!(system, multipole_coefficients, buffer, branch.source_center, branch.bodies_index[i_system], harmonics, expansion_order)
     end
 end
 
@@ -383,15 +384,18 @@ end
 
 #--- point elements ---#
 
-function body_to_multipole!(element::Type{<:Point}, system, multipole_coefficients, center, bodies_index, harmonics, expansion_order)
+function body_to_multipole!(element::Type{<:Point}, system, multipole_coefficients, buffer::Matrix, center, bodies_index, harmonics, expansion_order)
     # loop over bodies
     for i_body in bodies_index
         # relative body position
-        x = system[i_body,POSITION]
+        x = get_position(buffer, i_body)
         Δx = x - center
 
+        # get strength
+        strength = SVector{strength_dims(system)}(view(buffer, 5:4+strength_dims(system), i_body))
+
         # update values
-        body_to_multipole_point!(element, multipole_coefficients, harmonics, Δx, system[i_body, Strength()], expansion_order)
+        body_to_multipole_point!(element, multipole_coefficients, harmonics, Δx, strength, expansion_order)
     end
 
 end
@@ -404,7 +408,7 @@ end
     # invert the sign of the strength so v=∇ϕ instead of v=-∇ϕ
     # this will allow induced velocities to be added to those induced by vortex elements
     # we'll invert the potential again at the end
-    strength = -strength
+    strength = -strength[1]
 
     # calculate q (regular harmonics)
     calculate_q!(harmonics, ξ_real, ξ_imag, η_real, η_imag, z, expansion_order)
@@ -493,18 +497,22 @@ end
 
 #--- filament elements ---#
 
-@inline function body_to_multipole!(element::Type{<:Filament}, system, multipole_coefficients, center, bodies_index, harmonics, expansion_order)
+@inline function body_to_multipole!(element::Type{<:Filament}, system, multipole_coefficients, buffer, center, bodies_index, harmonics, expansion_order)
 
     # loop over bodies
     for i_body in bodies_index
         # relative body position
-        x1 = system[i_body,VERTEX,1]
-        x2 = system[i_body,VERTEX,2]
+        i1 = 5 + strength_dims(system)
+        x1 = SVector{3}(buffer[i1,i_body], buffer[i1+1,i_body], buffer[i1+2,i_body])
+        x2 = SVector{3}(buffer[i1+3,i_body], buffer[i1+4,i_body], buffer[i1+5,i_body])
         x0 = x1 - center
         xu = x2 - x1
 
+        # strength
+        strength = SVector{strength_dims(system)}(view(buffer, 5:4+strength_dims(system), i_body))
+
         # update values
-        body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, system[i_body, Strength()], expansion_order)
+        body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
     end
 end
 
@@ -528,7 +536,7 @@ function body_to_multipole_filament!(::Type{Filament{Source}}, multipole_coeffic
     # invert the sign of the strength so v=∇ϕ instead of v=-∇ϕ
     # this will allow induced velocities to be added to those induced by vortex elements
     # we'll invert the potential again at the end
-    strength = -strength
+    strength = -strength[1]
 
     # jacobian of the transformation to simplex
     Δx = norm(xu)
@@ -629,31 +637,38 @@ end
 
 #--- panel elements ---#
 
-function body_to_multipole!(element::Type{<:Panel}, system, multipole_coefficients, center, bodies_index, harmonics, expansion_order)
+function body_to_multipole!(element::Type{<:Panel}, system, multipole_coefficients, buffer, center, bodies_index, harmonics, expansion_order)
     # loop over bodies
     for i_body in bodies_index
         # relative body position
-        x1 = system[i_body,VERTEX,1]
-        x2 = system[i_body,VERTEX,2]
-        x3 = system[i_body,VERTEX,3]
+        # i1 = 5 + strength_dims(system)
+        # x1 = SVector{3}(buffer[i1,i_body], buffer[i1+1,i_body], buffer[i1+2,i_body])
+        # x2 = SVector{3}(buffer[i1+3,i_body], buffer[i1+4,i_body], buffer[i1+5,i_body])
+        # x3 = SVector{3}(buffer[i1+6,i_body], buffer[i1+7,i_body], buffer[i1+8,i_body])
+        x1 = get_vertex(buffer, system, i_body, 1)
+        x2 = get_vertex(buffer, system, i_body, 2)
+        x3 = get_vertex(buffer, system, i_body, 3)
         x0 = x1 - center
         xu = x2 - x1
         xv = x3 - x1
 
         # get normal
-        normal = system[i_body,Normal()]
+        # normal = get_normal(buffer, system, i_body)
+
+        # get strength
+        strength = SVector{strength_dims(system)}(view(buffer, 5:4+strength_dims(system), i_body))
 
         # update values
-        body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, normal, system[i_body, STRENGTH], expansion_order)
+        body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{SourceDipole}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
-    body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength[1], expansion_order)
-    body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength[2] * normal, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{SourceDipole}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
+    body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, SVector{1}(strength[1]), expansion_order)
+    body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, SVector{3}(strength[2], strength[3], strength[4]), expansion_order)
 end
 
-function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -683,7 +698,7 @@ function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients,
     # invert the sign of the strength so v=∇ϕ instead of v=-∇ϕ
     # this will allow induced velocities to be added to those induced by vortex elements
     # we'll invert the potential again at the end
-    strength = -strength
+    strength = -strength[1]
 
     # jacobian of the transformation to simplex
     Δx = norm(cross(xu,xv))
@@ -707,7 +722,7 @@ function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients,
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -764,7 +779,7 @@ function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients,
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Vortex}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{Vortex}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(-x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(-xu)

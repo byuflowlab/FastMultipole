@@ -6,11 +6,11 @@ n_bodies = 10000
 shrink_recenter = true
 seed = 123
 validation_system = generate_gravitational(seed, n_bodies; radius_factor=0.0)
-FastMultipole.direct!(validation_system)
+@time FastMultipole.direct!(validation_system)
 validation_potential = validation_system.potential[1,:]
 
 validation_system2 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-FastMultipole.direct!(validation_system2)
+@time FastMultipole.direct!(validation_system2)
 validation_potential2 = validation_system2.potential[1,:]
 
 @assert validation_potential == validation_potential2
@@ -22,7 +22,7 @@ system2 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 
 # println("\n===== radius factor = 0.0 =====\n")
 
-tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, ε_abs)
+@time tree, m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, ε_abs)
 
 # @show length(m2l_list) length(direct_list)
 potential = system.potential[1,:]
@@ -34,7 +34,7 @@ velocity_err = [norm(system.potential[5:7,i] - validation_system.potential[5:7,i
 
 # println("\n===== radius factor = 0.1 =====\n")
 
-tree2, m2l_list2, direct_list2, derivatives_switches2 = FastMultipole.fmm!(system2; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, ε_abs)
+@time tree2, m2l_list2, direct_list2, derivatives_switches2 = FastMultipole.fmm!(system2; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, ε_abs)
 
 # @show length(m2l_list2) length(direct_list2)
 potential2 = system2.potential[1,:]

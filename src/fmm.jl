@@ -1,19 +1,21 @@
 #------- direct interactions -------#
 
-function nearfield_singlethread!(targets, target_branches, source_systems, source_branches, derivatives_switches, direct_list)
+function nearfield_singlethread!(targets, target_branches, source_systems, source_buffers, source_branches, derivatives_switches, direct_list)
     # loop over sources
     t_nf = @MVector zeros(length(targets))
-    for (i_source_system, source_system) in enumerate(source_systems)
+    for i_source_system in eachindex(source_systems)
+        source_system = source_systems[i_source_system]
+        source_buffer = source_buffers[i_source_system]
 
         # perform direct interactions
-        t_elapsed = @elapsed nearfield_loop!(targets, target_branches, source_system, i_source_system, source_branches, direct_list, derivatives_switches)
+        t_elapsed = @elapsed nearfield_loop!(targets, target_branches, source_system, source_buffer, i_source_system, source_branches, direct_list, derivatives_switches)
         t_nf[i_source_system] = t_elapsed
     end
 
     return t_nf
 end
 
-function nearfield_loop!(targets, target_branches, source_system, i_source_system, source_branches, direct_list, derivatives_switches)
+function nearfield_loop!(targets, target_branches, source_system, source_buffer, i_source_system, source_branches, direct_list, derivatives_switches)
     # loop over target systems
     for (i_target_system, target_system) in enumerate(targets)
 
@@ -30,7 +32,7 @@ function nearfield_loop!(targets, target_branches, source_system, i_source_syste
             target_index = target_branches[i_target].bodies_index[i_target_system]
 
             # compute interaction
-            _direct!(target_system, target_index, derivatives_switch, source_system, source_index)
+            direct!(target_system, target_index, derivatives_switch, source_system, source_buffer, source_index)
 
         end
 
@@ -265,7 +267,7 @@ end
 
 #------- UPWARD PASS -------#
 
-function upward_pass_singlethread_1!(tree::Tree{TF, <:Any, <:Any}, systems, expansion_order) where TF
+function upward_pass_singlethread_1!(tree::Tree{TF, <:Any}, systems, expansion_order) where TF
 
     harmonics = initialize_harmonics(expansion_order, TF)
 
@@ -275,7 +277,7 @@ function upward_pass_singlethread_1!(tree::Tree{TF, <:Any, <:Any}, systems, expa
     end
 end
 
-function upward_pass_singlethread_2!(tree::Tree{TF,<:Any,<:Any}, expansion_order, lamb_helmholtz) where TF
+function upward_pass_singlethread_2!(tree::Tree{TF,<:Any}, expansion_order, lamb_helmholtz) where TF
 
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
@@ -593,7 +595,7 @@ end
 #     return εs_obs, εs_pred
 # end
 
-function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any,<:Any}, source_tree::Tree{TF2,<:Any,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=false) where {TF1,TF2}
+function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=false) where {TF1,TF2}
 
     TF = promote_type(TF1, TF2)
 
@@ -632,7 +634,7 @@ function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any,<:Any}, sourc
     return Pmax, error_success
 end
 
-function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any,<:Any}, source_tree::Tree{TF2,<:Any,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads) where {TF1, TF2}
+function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads) where {TF1, TF2}
 
     TF = promote_type(TF1, TF2)
 
@@ -673,7 +675,7 @@ end
 
 #------- DOWNWARD PASS -------#
 
-function downward_pass_singlethread_1!(tree::Tree{TF,<:Any,<:Any}, expansion_order, lamb_helmholtz) where TF
+function downward_pass_singlethread_1!(tree::Tree{TF,<:Any}, expansion_order, lamb_helmholtz) where TF
 
     # try preallocating one container to be reused
     Ts = zeros(TF, length_Ts(expansion_order))
@@ -695,7 +697,7 @@ function downward_pass_singlethread_1!(tree::Tree{TF,<:Any,<:Any}, expansion_ord
     end
 end
 
-function downward_pass_singlethread_2!(tree::Tree{TF,<:Any,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m) where TF
+function downward_pass_singlethread_2!(tree::Tree{TF,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m) where TF
 
     harmonics = initialize_harmonics(expansion_order)
     # loop over systems
@@ -867,47 +869,47 @@ end
     return SVector{n}(input for _ in 1:n)
 end
 
-# combine into tuple of unique systems
-function unique_tuple(target_systems, source_systems, leaf_size_target::AbstractVector, leaf_size_source::AbstractVector)
-
-    # unique tuple containing all systems
-    systems = (target_systems..., (source_system for source_system in source_systems if !(source_system in target_systems))...)
-
-    # tag telling which systems are targets
-    is_target = SVector{length(systems),Bool}((true for _ in eachindex(target_systems))..., (false for _ in length(target_systems)+1:length(systems))...)
-
-    # tag telling which systems are sources
-    is_source = SVector{length(systems),Bool}(system in source_systems for system in systems)
-
-    return systems, is_target, is_source
-end
-
-function match_unique(v_target::AbstractVector, v_source::AbstractVector, systems, target_systems, source_systems)
-    # convert vector to match unique systems tuple
-    v_unique = SVector{length(systems),eltype(v_target)}((val for val in v_target)..., (v_source[i] for i in eachindex(v_source) if !(source_systems[i] in target_systems))...)
-
-    return v_unique
-end
-
-function system_to_target!(target, system)
-    for i in 1:get_n_bodies(system)
-        target[i,Position()] = system[i,Position()]
-    end
-end
-
-function target_to_system!(system, target, ::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
-    for i in 1:get_n_bodies(system)
-        if PS
-            system[i,ScalarPotential()] += target[i,ScalarPotential()]
-        end
-        if VS
-            system[i,Velocity()] += target[i,Velocity()]
-        end
-        if GS
-            system[i,VelocityGradient()] += target[i,VelocityGradient()]
-        end
-    end
-end
+# # combine into tuple of unique systems
+# function unique_tuple(target_systems, source_systems, leaf_size_target::AbstractVector, leaf_size_source::AbstractVector)
+#
+#     # unique tuple containing all systems
+#     systems = (target_systems..., (source_system for source_system in source_systems if !(source_system in target_systems))...)
+#
+#     # tag telling which systems are targets
+#     is_target = SVector{length(systems),Bool}((true for _ in eachindex(target_systems))..., (false for _ in length(target_systems)+1:length(systems))...)
+#
+#     # tag telling which systems are sources
+#     is_source = SVector{length(systems),Bool}(system in source_systems for system in systems)
+#
+#     return systems, is_target, is_source
+# end
+#
+# function match_unique(v_target::AbstractVector, v_source::AbstractVector, systems, target_systems, source_systems)
+#     # convert vector to match unique systems tuple
+#     v_unique = SVector{length(systems),eltype(v_target)}((val for val in v_target)..., (v_source[i] for i in eachindex(v_source) if !(source_systems[i] in target_systems))...)
+#
+#     return v_unique
+# end
+#
+# function system_to_target!(target, system)
+#     for i in 1:get_n_bodies(system)
+#         target[i,Position()] = system[i,Position()]
+#     end
+# end
+#
+# function target_to_system!(system, target, ::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
+#     for i in 1:get_n_bodies(system)
+#         if PS
+#             system[i,ScalarPotential()] += target[i,ScalarPotential()]
+#         end
+#         if VS
+#             system[i,Velocity()] += target[i,Velocity()]
+#         end
+#         if GS
+#             system[i,VelocityGradient()] += target[i,VelocityGradient()]
+#         end
+#     end
+# end
 
 fmm!(system; optargs...) = fmm!(system, system; optargs...)
 
@@ -920,6 +922,8 @@ function fmm!(target_systems, source_systems; optargs...)
 end
 
 function fmm!(target_systems::Tuple, source_systems::Tuple;
+    target_buffers=allocate_buffers(target_systems, true), target_small_buffers = allocate_small_buffers(target_systems),
+    source_buffers=allocate_buffers(source_systems, false), source_small_buffers = allocate_small_buffers(source_systems),
     leaf_size_target=nothing,
     leaf_size_source=default_leaf_size(source_systems),
     expansion_order=5,
@@ -933,12 +937,8 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     leaf_size_target = to_vector(isnothing(leaf_size_target) ? minimum(leaf_size_source) : leaf_size_target, length(target_systems))
 
     # create trees
-    target_tree = Tree(target_systems; expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_target, shrink_recenter)
-    source_tree = Tree(source_systems; expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_source, shrink_recenter)
-
-    # unsort systems
-    unsort!(source_systems, source_tree)
-    unsort!(target_systems, target_tree)
+    target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_target, shrink_recenter)
+    source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_source, shrink_recenter)
 
     return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_abs, optargs...)
 end
@@ -1067,25 +1067,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
             if n_threads == 1
 
-                # sort into target tree
-                resort!(target_systems, target_tree)
-
-                # allocate target matrices
-                targets = [zeros(i_VELOCITY_GRADIENT[end], get_n_bodies(system)) for system in target_systems]
-
-                # copy system information to targets
-                for (target, system) in zip(targets, target_systems)
-                    system_to_target!(target, system)
-                end
-
-                # unsort targets NO NEED TO DO THIS YET?
-                # unsort!(target_systems, target_tree)
-
-                # sort into source tree
-                resort!(source_systems, source_tree)
-
                 # perform nearfield calculations
-                t_direct = nearfield_singlethread!(targets, target_tree.branches, source_systems, source_tree.branches, derivatives_switches, direct_list)
+                t_direct = nearfield_singlethread!(target_tree.buffers, target_tree.branches, source_systems, source_tree.buffers, source_tree.branches, derivatives_switches, direct_list)
 
                 # check number of interactions
                 if tune
@@ -1117,27 +1100,13 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 if downward_pass
                     downward_pass_singlethread_1!(target_tree, expansion_order, lamb_helmholtz)
                     velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
-                    downward_pass_singlethread_2!(target_tree, targets, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+                    downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
                 end
-
-                # unsort sources (back in target tree permutation in case some systems are both sources and targets)
-                unsort!(source_systems, source_tree)
 
                 # copy results to target systems
-                for (system, target, derivatives_switch) in zip(target_systems, targets, derivatives_switches)
-                    target_to_system!(system, target, derivatives_switch)
-                end
-
-                # unsort targets
-                unsort!(target_systems, target_tree)
-
+                buffer_to_target!(target_systems, target_tree, derivatives_switches)
                 if tune
-                    #=
-                    println("\n#------- Tuning FastMultipole -------#\n\tDirect Cost:    $t_nf\n\tExpansion Cost: $t_exp")
-                    suggestion = t_nf > t_exp * 1.25 ? "decreasing" : t_nf < t_exp * 0.75 ? "increasing" : "keeping current"
-                    println("\tSuggest " * suggestion * " leaf size")
-                    println("#------------------------------------#\n")
-                    =#
+
                     if length(m2l_list) > 0
                         #--- compute optimal leaf_size_source ---#
 
@@ -1169,14 +1138,6 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         @warn "fmm! called but either sources or targets are empty; foregoing calculation"
 
     end
-
-    # unsort bodies
-    # n_target_bodies > 0 && unsort_target_bodies && unsort!(target_systems, source_tree)
-    # n_source_bodies > 0 && unsort_source_bodies && unsort!(source_systems, source_tree)
-
-    # visualize tree
-    # save_target_tree && (visualize(save_name, target_systems, target_tree))
-    # save_source_tree && (visualize(save_name, source_systems, source_tree))
 
     return target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order, error_success
 end

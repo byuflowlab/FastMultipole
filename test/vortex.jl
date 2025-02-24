@@ -5,9 +5,8 @@ import FastMultipole.WriteVTK
 using FastMultipole
 using SpecialFunctions:erf
 
-#####
-##### classic vortex particle method
-#####
+#------- classic vortex particle method -------#
+
 const ONE_OVER_4PI = 1/4/pi
 const sqrt2 = sqrt(2)
 const i_POSITION_vortex = 1:3
@@ -51,49 +50,104 @@ struct Euler{TF} <: IntegrationScheme
     dt::TF
 end
 
-#####
-##### overload compatibility functions
-#####
+#------- overload compatibility functions -------#
 
-Base.getindex(vp::VortexParticles, i, ::Position) = vp.bodies[i].position
-Base.getindex(vp::VortexParticles, i, ::Radius) = vp.bodies[i].sigma
-#Base.getindex(vp::VortexParticles, i, ::fmm.VectorPotential) = view(vp.potential,2:4,i)
-Base.getindex(vp::VortexParticles, i, ::ScalarPotential) = vp.potential[1,i]
-Base.getindex(vp::VortexParticles, i, ::Velocity) = view(vp.velocity_stretching,i_VELOCITY_vortex,i)
-Base.getindex(vp::VortexParticles, i, ::VelocityGradient) = reshape(view(vp.potential,i_VELOCITY_GRADIENT_vortex,i),3,3)
-Base.getindex(vp::VortexParticles, i, ::Strength) = vp.bodies[i].strength
-Base.getindex(vp::VortexParticles, i, ::FastMultipole.Body) = vp.bodies[i], vp.potential[:,i], vp.velocity_stretching[:,i]
+function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexParticles, i_body)
+    buffer[1:3, i_buffer] .= system.bodies[i_body].position
+    buffer[4, i_buffer] = system.bodies[i_body].sigma
+    buffer[5:7, i_buffer] .= system.bodies[i_body].strength
+end
 
-function Base.setindex!(vp::VortexParticles, val, i, ::Position)
-    vp.bodies[i] = Vorton(val, vp.bodies[i].strength, vp.bodies[i].sigma)
-    return nothing
+function FastMultipole.data_per_body(system::VortexParticles)
+    return 7
 end
-function Base.setindex!(vp::VortexParticles, val, i, ::Strength)
-    vp.bodies[i] = Vorton(vp.bodies[i].position, val, vp.bodies[i].sigma)
-    return nothing
+
+function FastMultipole.get_position(system::VortexParticles, i_body)
+    return system.bodies[i_body].position
 end
-function Base.setindex!(vp::VortexParticles, val, i, ::FastMultipole.Body)
-    body, potential, velocity = val
-    vp.bodies[i] = body
-    vp.potential[:,i] .= potential
-    vp.velocity_stretching[:,i] .= velocity
-    return nothing
+
+function FastMultipole.strength_dims(system::VortexParticles)
+    return 3
 end
-function Base.setindex!(vp::VortexParticles, val, i, ::ScalarPotential)
-    # vp.potential[i_POTENTIAL[1],i] = val
-    return nothing
+
+function FastMultipole.get_n_bodies(system::VortexParticles)
+    return length(system.bodies)
 end
-#function Base.setindex!(vp::VortexParticles, val, i, ::fmm.VectorPotential)
-#    vp.potential[i_POTENTIAL_VECTOR,i] .= val
-#end
-function Base.setindex!(vp::VortexParticles, val, i, ::Velocity)
-    vp.velocity_stretching[i_VELOCITY_vortex,i] .= val
+
+fmm.body_to_multipole!(system::VortexParticles, args...) = body_to_multipole!(Point{Vortex}, system, args...)
+
+"""
+Classical formulation so far.
+"""
+function fmm.direct!(target_system, target_index, derivatives_switch::FastMultipole.DerivativesSwitch{S,V,VG}, source_system::VortexParticles, source_buffer, source_index) where {S,V,VG}
+    for j_source in source_index
+        x_source = FastMultipole.get_position(source_buffer, j_source)
+        Γx, Γy, Γz = FastMultipole.get_strength(source_buffer,  source_system, j_source)
+        for i_target in target_index
+            x_target = FastMultipole.get_position(target_system, i_target)
+            dx, dy, dz = x_target - x_source
+            r2 = dx * dx + dy * dy + dz * dz
+            if FastMultipole.DEBUG[]
+            println("\n\tdirect!: x_source = $x_source, x_target = $x_target")
+        end
+            if r2 > 0
+                # distance away
+                r = sqrt(r2)
+                rinv = 1 / r
+                rinv2 = rinv * rinv
+
+                # useful denominator
+                denom = FastMultipole.ONE_OVER_4π * rinv * rinv2
+
+                # induced velocity
+                vx, vy, vz = zero(r2), zero(r2), zero(r2)
+                if V
+                    vx = (dz * Γy - dy * Γz) * denom
+                    vy = (dx * Γz - dz * Γx) * denom
+                    vz = (dy * Γx - dx * Γy) * denom
+                    FastMultipole.set_velocity!(target_system, i_target, SVector{3}(vx,vy,vz))
+                end
+
+                # velocity gradient
+                if VG
+                    denom *= rinv2
+                    vxx = -3 * dx * (Γy * dz - Γz * dy) * denom
+                    vxy = (-3 * dx * (Γz * dx - Γx * dz) + Γz * r2) * denom
+                    vxz = (-3 * dx * (Γx * dy - Γy * dx) - Γy * r2) * denom
+                    vyx = (-3 * dy * (Γy * dz - Γz * dy) - Γz * r2) * denom
+                    vyy = -3 * dy * (Γz * dx - Γx * dz) * denom
+                    vyz = (-3 * dy * (Γx * dy - Γy * dx) + Γx * r2) * denom
+                    vzx = (-3 * dz * (Γy * dz - Γz * dy) + Γy * r2) * denom
+                    vzy = (-3 * dz * (Γz * dx - Γx * dz) - Γx * r2) * denom
+                    vzz = -3 * dz * (Γx * dy - Γy * dx) * denom
+                    FastMultipole.set_velocity_gradient!(target_system, i_target, SMatrix{3,3}(vxx, vxy, vxz, vyx, vyy, vyz, vzx, vzy, vzz))
+                end
+
+            end
+        end
+    end
 end
-function Base.setindex!(vp::VortexParticles, val, i, ::VelocityGradient)
-    vp.potential[i_VELOCITY_GRADIENT_vortex,i] .= reshape(val,9)
+
+function FastMultipole.buffer_to_target_system!(target_system::VortexParticles, i_target, ::FastMultipole.DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
+    # retrieve fields
+    TF = eltype(target_system)
+    velocity = VS ? FastMultipole.get_velocity(target_buffer, i_buffer) : zero(SVector{3,TF})
+    velocity_gradient = GS ? FastMultipole.get_velocity_gradient(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
+
+    # update system
+    if VS
+        target_system.velocity_stretching[i_VELOCITY_vortex, i_target] .+= velocity
+    end
+    if GS
+        target_system.potential[i_VELOCITY_GRADIENT_vortex, i_target] .+= reshape(velocity_gradient, 9)
+    end
 end
+
 FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
+
 Base.eltype(::VortexParticles{TF}) where TF = TF
+
+#------- additional functions -------#
 
 function flatten_derivatives!(jacobian, hessian, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     if VS
@@ -117,61 +171,6 @@ function flatten_derivatives!(jacobian, hessian, derivatives_switch::Derivatives
     end
 end
 
-"""
-Classical formulation so far.
-"""
-function fmm.direct!(target_system, target_index, derivatives_switch::FastMultipole.DerivativesSwitch{S,V,VG}, source_system::VortexParticles, source_index) where {S,V,VG}
-    for j_source in source_index
-        x_source = source_system[j_source,Position()]
-        Γx, Γy, Γz = source_system[j_source,Strength()]
-        for i_target in target_index
-            x_target = target_system[i_target,Position()]
-            dx, dy, dz = x_target - x_source
-            r2 = dx * dx + dy * dy + dz * dz
-            if r2 > 0
-                # distance away
-                r = sqrt(r2)
-                rinv = 1 / r
-                rinv2 = rinv * rinv
-
-                # useful denominator
-                denom = FastMultipole.ONE_OVER_4π * rinv * rinv2
-
-                # induced velocity
-                vx, vy, vz = zero(r2), zero(r2), zero(r2)
-
-                if V
-                    vx = (dz * Γy - dy * Γz) * denom
-                    vy = (dx * Γz - dz * Γx) * denom
-                    vz = (dy * Γx - dx * Γy) * denom
-                    v = target_system[i_target, Velocity()]
-                    target_system[i_target, Velocity()] = v + SVector{3}(vx,vy,vz)
-                end
-
-                # velocity gradient
-                if VG
-                    denom *= rinv2
-                    vxx = -3 * dx * (Γy * dz - Γz * dy) * denom
-                    vxy = (-3 * dx * (Γz * dx - Γx * dz) + Γz * r2) * denom
-                    vxz = (-3 * dx * (Γx * dy - Γy * dx) - Γy * r2) * denom
-                    vyx = (-3 * dy * (Γy * dz - Γz * dy) - Γz * r2) * denom
-                    vyy = -3 * dy * (Γz * dx - Γx * dz) * denom
-                    vyz = (-3 * dy * (Γx * dy - Γy * dx) + Γx * r2) * denom
-                    vzx = (-3 * dz * (Γy * dz - Γz * dy) + Γy * r2) * denom
-                    vzy = (-3 * dz * (Γz * dx - Γx * dz) - Γx * r2) * denom
-                    vzz = -3 * dz * (Γx * dy - Γy * dx) * denom
-                    vgxx, vgxy, vgxz, vgyx, vgyy, vgyz, vgzx, vgzy, vgzz = target_system[i_target, VelocityGradient()]
-                    target_system[i_target, VelocityGradient()] = SMatrix{3,3}(vxx+vgxx, vxy+vgxy, vxz+vgxz, vyx+vgyx, vyy+vgyy, vyz+vgyz, vzx+vgzx, vzy+vgzy, vzz+vgzz)
-                end
-
-            end
-        end
-    end
-end
-
-fmm.buffer_element(system::VortexParticles) = (deepcopy(system.bodies[1]),zeros(eltype(system),52),zeros(eltype(system),6))
-
-fmm.body_to_multipole!(system::VortexParticles, args...) = body_to_multipole!(Point{Vortex}, system, args...)
 
 function VortexParticles(position, strength;
     N = size(position)[2],

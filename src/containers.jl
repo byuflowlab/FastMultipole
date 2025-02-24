@@ -2,32 +2,21 @@
 
 abstract type Indexable end
 
-struct Body <: Indexable end
-const BODY = Body()
-
 struct Position <: Indexable end
-const POSITION = Position()
 
 struct Radius <: Indexable end
-const RADIUS = Radius()
 
 struct ScalarPotential <: Indexable end
-const SCALAR_POTENTIAL = ScalarPotential()
 
 struct Velocity <: Indexable end
-const VELOCITY = Velocity()
 
 struct VelocityGradient <: Indexable end
-const VELOCITY_GRADIENT = VelocityGradient()
 
 struct Vertex <: Indexable end
-const VERTEX = Vertex()
 
 struct Normal <: Indexable end
-const NORMAL = Normal()
 
 struct Strength <: Indexable end
-const STRENGTH = Strength()
 
 #------- dispatch convenience functions for multipole creation definition -------#
 
@@ -200,14 +189,14 @@ Base.eltype(::Branch{TF,<:Any}) where TF = TF
 bodies[index_list] is the same sort operation as performed by the tree
 sorted_bodies[inverse_index_list] undoes the sort operation performed by the tree
 """
-struct Tree{TF,N,TB}
+struct Tree{TF,N}
     branches::Vector{Branch{TF,N}}        # a vector of `Branch` objects composing the tree
     expansions::Array{TF,4}
     levels_index::Vector{UnitRange{Int64}}
     leaf_index::Vector{Int}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
-    buffers::TB
+    buffers::NTuple{N,Matrix{TF}}
     expansion_order::Int64
     leaf_size::SVector{N,Int64}    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}

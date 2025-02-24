@@ -1,10 +1,10 @@
 @testset "interaction list: sort convenience function" begin
 
 Random.seed!(456)
-n_bodies = 10_000
+n_bodies = 1_000_000
 bodies = rand(8,n_bodies)
 masses = Gravitational(bodies)
-tree = Tree(masses; leaf_size = SVector{1}(100))
+tree = Tree((masses,), false; leaf_size = SVector{1}(100))
 mac = 0.5
 
 m2l_list, direct_list = build_interaction_lists(tree.branches, tree.branches, tree.leaf_index, mac, true, true, true)

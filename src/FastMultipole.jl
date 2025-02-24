@@ -17,12 +17,6 @@ const π2 = 2*π
 const DEBUG = Array{Bool,0}(undef)
 DEBUG[] = false
 
-const WARNING_FLAG_LEAF_SIZE = Array{Bool,0}(undef)
-WARNING_FLAG_LEAF_SIZE[] = true
-
-const WARNING_FLAG_PMAX = Array{Bool,0}(undef)
-WARNING_FLAG_PMAX[] = true
-
 # multithreading parameters
 const MIN_NPT_B2M = 100
 const MIN_NPT_M2M = 100
@@ -40,11 +34,14 @@ const ηs_mag = Float64[1.0]
 
 #------- WARNING FLAGS -------#
 
+const WARNING_FLAG_LEAF_SIZE = Array{Bool,0}(undef)
+WARNING_FLAG_LEAF_SIZE[] = true
+
+const WARNING_FLAG_PMAX = Array{Bool,0}(undef)
+WARNING_FLAG_PMAX[] = true
+
 const WARNING_FLAG_ERROR = Array{Bool,0}(undef)
 WARNING_FLAG_ERROR[] = true
-
-const WARNING_FLAG_RADIUS = Array{Bool,0}(undef)
-WARNING_FLAG_RADIUS[] = true
 
 const WARNING_FLAG_SCALAR_POTENTIAL = Array{Bool,0}(undef)
 WARNING_FLAG_SCALAR_POTENTIAL[] = true
@@ -118,10 +115,6 @@ export InteractionList, fmm!
 include("autotune.jl")
 
 export tune_fmm!
-
-include("probe.jl")
-
-export ProbeSystem
 
 include("visualize.jl")
 

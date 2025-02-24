@@ -36,6 +36,7 @@ xs = x + SVector{3}(-0.2,0.07,-0.1)
 bodies = zeros(5,1)
 bodies[:,1] .= [xs[1], xs[2], xs[3], 0.0, 0.7]
 masses = Gravitational(bodies)
+buffer = FastMultipole.system_to_buffer(masses)
 expansion_order = 7
 box = SVector{3}(0.0,0.0,0.0)
 
@@ -43,7 +44,7 @@ branch = Branch(1:1, 0, 1:0, 0, 1, x, x, 0.0, 0.0, box, box, expansion_order)
 multipole_expansion = FastMultipole.initialize_expansion(expansion_order)
 harmonics = FastMultipole.initialize_harmonics(expansion_order)
 
-body_to_multipole!(Point{Source}, masses, multipole_expansion, branch.source_center, 1:1, harmonics, expansion_order)
+body_to_multipole!(Point{Source}, masses, multipole_expansion, buffer, branch.source_center, 1:1, harmonics, expansion_order)
 
 # translate multipole
 
