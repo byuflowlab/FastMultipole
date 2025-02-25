@@ -133,9 +133,9 @@ function body_to_multipole!(system, multipole_coefficients, buffer, expansion_ce
 end
 
 """
-    direct!(target_system, target_index, derivatives_switch::DerivativesSwitch{PS,VS,GS}, ::{UserDefinedSystem}, source_buffer, source_index) where {PS,VS,GS}
+    direct!(target_buffer, target_index, derivatives_switch::DerivativesSwitch{PS,VS,GS}, ::{UserDefinedSystem}, source_buffer, source_index) where {PS,VS,GS}
 
-Calculates direct (nearfield) interactions of `source_system` on `target_system`. Should be overloaded or each user-defined system object (where `{UserDefinedSystem}` is replaced with the type of the user-defined system), for all source bodies in `source_index`, at all target bodies in `target_index`, as follows:
+Calculates direct (nearfield) interactions of `source_system` on `target_buffer`. Should be overloaded or each user-defined system object (where `{UserDefinedSystem}` is replaced with the type of the user-defined system), for all source bodies in `source_index`, at all target bodies in `target_index`, as follows:
 
 ```julia
 # loop over source bodies
@@ -147,19 +147,19 @@ for i_source in source_index
     for i_target in target_index
 
         # get target position
-        target_position = get_position(target_system, i_target)
+        target_position = get_position(target_buffer, i_target)
 
         # evaluate influence here...
 
         # update appropriate quantities
         if PS
-            set_scalar_potential!(target_system, i_target, scalar_potential)
+            set_scalar_potential!(target_buffer, i_target, scalar_potential)
         end
         if VS
-            set_velocity!(target_system, i_target, velocity)
+            set_velocity!(target_buffer, i_target, velocity)
         end
         if GS
-            set_velocity_gradient!(target_system, i_target, velocity_gradient)
+            set_velocity_gradient!(target_buffer, i_target, velocity_gradient)
         end
 
     end
@@ -175,7 +175,7 @@ The following convenience getter functions are available for accessing the sourc
 * `get_vertex(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int, i_vertex::Int)`: returns an SVector containing the x, y, and z coordinates of the `i_vertex` vertex of the `i_body` body
 
 """
-function direct!(target_system, target_index, derivatives_switch, source_system, source_buffer, source_index)
+function direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
     if WARNING_FLAG_DIRECT[]
         @warn "direct! not overloaded for type $(typeof(source_system)); interaction ignored"
         WARNING_FLAG_DIRECT[] = false
