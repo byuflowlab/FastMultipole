@@ -168,6 +168,12 @@ end
 
 Note that `::{UserDefinedSystem}` is used purely for overloading the method for the appropriate system, and should NOT be accessed in this function, since it will NOT be indexed according to `source_index`. Rather, `source_buffer`, which is updated using `source_system_to_buffer!`, should be accessed.
 
+The following convenience getter functions are available for accessing the source system:
+
+* `get_position(source_system::{UserDefinedSystem}, i_body::Int)`: returns an SVector of length 3 containing the position of the `i_body` body
+* `get_strength(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int)`: returns an SVector containing the strength of the `i_body` body
+* `get_vertex(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int, i_vertex::Int)`: returns an SVector containing the x, y, and z coordinates of the `i_vertex` vertex of the `i_body` body
+
 """
 function direct!(target_system, target_index, derivatives_switch, source_system, source_buffer, source_index)
     if WARNING_FLAG_DIRECT[]
