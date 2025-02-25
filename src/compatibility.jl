@@ -194,6 +194,12 @@ Compatibility function used to update target systems. It should be overloaded fo
 
 Note that any system acting only as a source (and not as a target) need not overload `buffer_to_target_system!`.
 
+The following convenience functions can may be used to access the buffer:
+
+* `get_scalar_potential(target_buffer, i_buffer::Int)`: returns the scalar potential induced at the `i_buffer` body in `target_buffer`
+* `get_velocity(target_buffer, i_buffer::Int)`: returns an SVector of length 3 containing the velocity induced at the `i_buffer` body in `target_buffer`
+* `get_velocity_gradient(target_buffer, i_buffer::Int)`: returns an SMatrix of size 3x3 containing the velocity gradient induced at the `i_buffer` body in `target_buffer`
+
 """
 function buffer_to_target_system!(target_system, i_target, derivatives_switch, target_buffer, i_buffer)
 
