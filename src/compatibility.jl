@@ -333,7 +333,9 @@ Accumulates `velocity` to `target_buffer`.
 
 """
 function set_velocity!(system::Matrix, i, velocity)
-    system[5:7, i] .+= velocity
+    system[5,i] += velocity[1]
+    system[6,i] += velocity[2]
+    system[7,i] += velocity[3]
 end
 
 """
