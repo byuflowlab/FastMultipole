@@ -392,7 +392,7 @@ function body_to_multipole!(element::Type{<:Point}, system, multipole_coefficien
         Δx = x - center
 
         # get strength
-        strength = SVector{strength_dims(system)}(view(buffer, 5:4+strength_dims(system), i_body))
+        strength = get_strength(buffer, system, i_body)
 
         # update values
         body_to_multipole_point!(element, multipole_coefficients, harmonics, Δx, strength, expansion_order)
@@ -509,7 +509,7 @@ end
         xu = x2 - x1
 
         # strength
-        strength = SVector{strength_dims(system)}(view(buffer, 5:4+strength_dims(system), i_body))
+        strength = get_strength(buffer, system, i_body)
 
         # update values
         body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
@@ -653,22 +653,22 @@ function body_to_multipole!(element::Type{<:Panel}, system, multipole_coefficien
         xv = x3 - x1
 
         # get normal
-        # normal = get_normal(buffer, system, i_body)
+        normal = get_normal(buffer, system, i_body)
 
         # get strength
-        strength = SVector{strength_dims(system)}(view(buffer, 5:4+strength_dims(system), i_body))
+        strength = get_strength(buffer, system, i_body)
 
         # update values
-        body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
+        body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{SourceDipole}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
-    body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, SVector{1}(strength[1]), expansion_order)
-    body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, SVector{3}(strength[2], strength[3], strength[4]), expansion_order)
+function body_to_multipole_panel!(::Type{Panel{SourceDipole}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
+    body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, normal, SVector{1}(strength[1]), expansion_order)
+    body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, normal, SVector{1}(strength[2]), expansion_order)
 end
 
-function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -722,7 +722,7 @@ function body_to_multipole_panel!(::Type{Panel{Source}}, multipole_coefficients,
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(xu)
@@ -752,7 +752,7 @@ function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients,
     # invert the sign of the strength so v=∇ϕ instead of v=-∇ϕ
     # this will allow induced velocities to be added to those induced by vortex elements
     # we'll invert the potential again at the end
-    qx, qy, qz = -strength
+    qx, qy, qz = -normal * strength[1]
 
     # convert to dipole coefficients
     i_source, i_dipole = 1, 2
@@ -779,7 +779,7 @@ function body_to_multipole_panel!(::Type{Panel{Dipole}}, multipole_coefficients,
     end
 end
 
-function body_to_multipole_panel!(::Type{Panel{Vortex}}, multipole_coefficients, harmonics, x0, xu, xv, strength, expansion_order)
+function body_to_multipole_panel!(::Type{Panel{Vortex}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
     # transform to ξ, η, z
     ξ0_real, ξ0_imag, η0_real, η0_imag, z0 = xyz_to_ξηz(-x0)
     ξu_real, ξu_imag, ηu_real, ηu_imag, zu = xyz_to_ξηz(-xu)

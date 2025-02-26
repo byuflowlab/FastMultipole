@@ -220,13 +220,13 @@ end
 
 struct DipolePanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
-    strength::Vector{SVector{3,TF}}
+    strength::Vector{SVector{1,TF}}
     potential::Vector{TF}
     force::Vector{SVector{3,TF}}
     gradient::Vector{SMatrix{3,3,TF,9}}
 end
 
-function DipolePanels(x, strength::Vector{SVector{3,TF}};
+function DipolePanels(x, strength::Vector{SVector{1,TF}};
         potential = zeros(length(x)),
         force = zeros(SVector{3,TF},size(x,2)),
         gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
@@ -238,17 +238,17 @@ end
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipolePanels, i_body)
     buffer[1:3,i_body] .= (system.x[i_body][1] + system.x[i_body][2] + system.x[i_body][3]) * 0.33333333333333333
     # buffer[4,i_body] =
-    buffer[5:7,i_body] .= system.strength[i_body]
-    buffer[8:10,i_body] .= system.x[i_body][1]
-    buffer[11:13,i_body] .= system.x[i_body][2]
-    buffer[14:16,i_body] .= system.x[i_body][3]
+    buffer[5,i_body] = system.strength[i_body][1]
+    buffer[6:8,i_body] .= system.x[i_body][1]
+    buffer[9:11,i_body] .= system.x[i_body][2]
+    buffer[12:14,i_body] .= system.x[i_body][3]
 end
 
 function FastMultipole.data_per_body(system::DipolePanels)
-    return 16
+    return 14
 end
 
-function Base.eltype(system::DipolePanels{TF}) where TF
+function Base.eltype(::DipolePanels{TF}) where TF
     return TF
 end
 
@@ -267,7 +267,7 @@ function FastMultipole.get_n_bodies(system::DipolePanels)
 end
 
 function FastMultipole.strength_dims(system::DipolePanels)
-    return 3
+    return 1
 end
 
 struct Vortons{TF}
@@ -1054,7 +1054,7 @@ x2 = x1 + SVector{3,Float64}(0.0,0.03,0.0) * 10
 x3 = x2 + SVector{3,Float64}(-0.05,0,0) * 10
 vertices = SVector(x1,x2,x3)
 x = [vertices]
-q = SVector{3}(0,0,1.0)
+q = SVector{1}(1.0)
 system = DipolePanels(x, [q])
 buffer = FastMultipole.system_to_buffer(system)
 
@@ -1082,7 +1082,7 @@ body_to_multipole!(Panel{Dipole}, system, multipole_expansion, buffer, branch.so
 # equivalent point dipole
 x_point = centroid
 area = norm(cross(x2-x1,x3-x1))/2
-q_point = q * area
+q_point = q[1] * area * normal
 
 system_point = DipolePoints([x_point], [q_point])
 buffer_point = FastMultipole.system_to_buffer(system_point)

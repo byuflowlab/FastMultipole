@@ -57,15 +57,7 @@ function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=no
     end
 
     # update target systems
-    if DEBUG[]
-        println("\nASLAN")
-        @show target_systems[1].velocity_stretching[1:3,:]
-    end
     buffer_to_target!(target_systems, target_buffers, derivatives_switches)
-    if DEBUG[]
-        println("\nthere:")
-        @show target_systems[1].velocity_stretching[1:3,:]
-    end
 
 end
 

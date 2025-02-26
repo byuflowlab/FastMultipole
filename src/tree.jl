@@ -112,7 +112,7 @@ function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, ta
         # cost_parameters = Threads.nthreads() > 1 ? direct_cost_estimate(systems, leaf_size) : dummy_direct_cost_estimate(systems, leaf_size)
 
         # assemble tree
-        tree = Tree(branches, expansions, levels_index, leaf_index, sort_index, inverse_sort_index, buffers, expansion_order, leaf_size)#, cost_parameters)
+        tree = Tree(branches, expansions, levels_index, leaf_index, sort_index, inverse_sort_index, buffers, small_buffers, expansion_order, leaf_size)#, cost_parameters)
 
     else
         tree = EmptyTree(systems)

@@ -1,23 +1,23 @@
 #------- direct interactions -------#
 
-function nearfield_singlethread!(targets, target_branches, source_systems, source_buffers, source_branches, derivatives_switches, direct_list)
+function nearfield_singlethread!(target_buffers, target_branches, source_systems, source_buffers, source_branches, derivatives_switches, direct_list)
     # loop over sources
-    t_nf = @MVector zeros(length(targets))
+    t_nf = @MVector zeros(length(source_systems))
     for i_source_system in eachindex(source_systems)
         source_system = source_systems[i_source_system]
         source_buffer = source_buffers[i_source_system]
 
         # perform direct interactions
-        t_elapsed = @elapsed nearfield_loop!(targets, target_branches, source_system, source_buffer, i_source_system, source_branches, direct_list, derivatives_switches)
+        t_elapsed = @elapsed nearfield_loop!(target_buffers, target_branches, source_system, source_buffer, i_source_system, source_branches, direct_list, derivatives_switches)
         t_nf[i_source_system] = t_elapsed
     end
 
     return t_nf
 end
 
-function nearfield_loop!(targets, target_branches, source_system, source_buffer, i_source_system, source_branches, direct_list, derivatives_switches)
+function nearfield_loop!(target_buffers, target_branches, source_system, source_buffer, i_source_system, source_branches, direct_list, derivatives_switches)
     # loop over target systems
-    for (i_target_system, target_system) in enumerate(targets)
+    for (i_target_system, target_system) in enumerate(target_buffers)
 
         # extract derivatives switch
         derivatives_switch = derivatives_switches[i_target_system]
@@ -1139,5 +1139,13 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
     end
 
-    return target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order, error_success
+    # pack up optimal arguments for next fmm! call
+    optimized_args = (:target_buffers => target_tree.buffers,
+                    :target_small_buffers => target_tree.small_buffers,
+                    :source_buffers => source_tree.buffers,
+                    :source_small_buffers => source_tree.small_buffers,
+                    :leaf_size_source => leaf_size_source,
+                    :expansion_order => expansion_order)
+
+    return optimized_args, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success
 end

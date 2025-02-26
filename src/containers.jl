@@ -197,6 +197,7 @@ struct Tree{TF,N}
     sort_index_list::NTuple{N,Vector{Int}}
     inverse_sort_index_list::NTuple{N,Vector{Int}}
     buffers::NTuple{N,Matrix{TF}}
+    small_buffers::Vector{Matrix{TF}}
     expansion_order::Int64
     leaf_size::SVector{N,Int64}    # max number of bodies in a leaf
     # cost_parameters::MultiCostParameters{N}
