@@ -304,49 +304,6 @@ Base.eltype(::Vortons{TF}) where TF = TF
 
 FastMultipole.get_position(system::Vortons, i) = system.position[i]
 
-struct VortexFilaments{TF}
-    x::Matrix{SVector{3,TF}}
-    strength::Vector{SVector{3,TF}}
-    potential::Vector{TF}
-    force::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
-end
-
-function VortexFilaments(x, strength::Vector{SVector{3,TF}};
-        potential = zeros(size(x,2)),
-        force = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
-    ) where TF
-
-    return VortexFilaments(x, strength, potential, force, gradient)
-end
-
-function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexFilaments, i_body)
-    buffer[1:3,i_buffer] .= (system.x[1,i_body]  + system.x[2,i_body])
-    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
-    buffer[5:7,i_buffer] .= system.strength[i_body]
-    buffer[8:10,i_buffer] .= system.x[1,i_body]
-    buffer[11:13,i_buffer] .= system.x[2,i_body]
-end
-
-function FastMultipole.strength_dims(system::VortexFilaments)
-    return 3
-end
-
-FastMultipole.get_n_bodies(system::VortexFilaments) = length(system.strength)
-
-FastMultipole.data_per_body(::VortexFilaments) = 13
-
-Base.eltype(::VortexFilaments{TF}) where TF = TF
-
-FastMultipole.get_position(system::VortexFilaments, i) = (system.x[1,i] + system.x[2,i]) * 0.5
-
-function FastMultipole.reset!(system::VortexFilaments)
-    system.potential .= zero(eltype(system.potential))
-    system.force .= zero(eltype(system.force))
-    system.gradient .= zero(eltype(system.gradient))
-end
-
 struct VortexPanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
     strength::Vector{SVector{3,TF}}
@@ -888,21 +845,6 @@ system = VortexFilaments(x, [q])
 buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(4.0, 0.3, 0.0)
-
-function vortex_filament(x1,x2,xt,q)
-    r1 = xt - x1
-    r2 = xt - x2
-
-    nr1 = norm(r1)
-    nr2 = norm(r2)
-
-    f1 = cross(r1, r2)/(nr1*nr2 + dot(r1, r2))
-    f2 = (1/nr1 + 1/nr2)
-
-    V = (f1*f2)/(4*pi) * norm(q)
-
-    return V
-end
 
 v_check = vortex_filament(x1, x2, xt, q)
 

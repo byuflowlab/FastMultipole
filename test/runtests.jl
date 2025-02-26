@@ -13,6 +13,7 @@ using Test
 
 include("./gravitational.jl")
 include("./vortex.jl")
+include("./vortex_filament.jl")
 include("./panels.jl")
 include("evaluate_multipole.jl")
 include("bodytolocal.jl")
