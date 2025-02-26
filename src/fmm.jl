@@ -1140,12 +1140,12 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     end
 
     # pack up optimal arguments for next fmm! call
-    optimized_args = (:target_buffers => target_tree.buffers,
-                    :target_small_buffers => target_tree.small_buffers,
-                    :source_buffers => source_tree.buffers,
-                    :source_small_buffers => source_tree.small_buffers,
-                    :leaf_size_source => leaf_size_source,
-                    :expansion_order => expansion_order)
+    optimized_args = (target_buffers = target_tree.buffers,
+                    target_small_buffers = target_tree.small_buffers,
+                    source_buffers = source_tree.buffers,
+                    source_small_buffers = source_tree.small_buffers,
+                    leaf_size_source = leaf_size_source,
+                    expansion_order = expansion_order)
 
     return optimized_args, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success
 end
