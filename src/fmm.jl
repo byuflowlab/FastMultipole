@@ -1010,7 +1010,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
-    tune=false,
+    tune=false, update_target_systems=true,
 )
 
     # check if systems are empty
@@ -1104,7 +1104,9 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 end
 
                 # copy results to target systems
-                buffer_to_target!(target_systems, target_tree, derivatives_switches)
+                update_target_systems && buffer_to_target!(target_systems, target_tree, derivatives_switches)
+
+                # finish autotuning
                 if tune
 
                     if length(m2l_list) > 0
@@ -1140,12 +1142,15 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     end
 
     # pack up optimal arguments for next fmm! call
-    optimized_args = (target_buffers = target_tree.buffers,
-                    target_small_buffers = target_tree.small_buffers,
-                    source_buffers = source_tree.buffers,
-                    source_small_buffers = source_tree.small_buffers,
-                    leaf_size_source = leaf_size_source,
-                    expansion_order = expansion_order)
+    optimized_args = (
+                       target_buffers = target_tree.buffers,
+                       target_small_buffers = target_tree.small_buffers,
+                       source_buffers = source_tree.buffers,
+                       source_small_buffers = source_tree.small_buffers,
+                       leaf_size_source = leaf_size_source,
+                       expansion_order = expansion_order,
+                       multipole_threshold = multipole_threshold,
+                      )
 
     return optimized_args, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success
 end
