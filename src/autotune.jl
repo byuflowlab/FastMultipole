@@ -43,7 +43,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
     ε_abs=nothing,
     shrink_recenter=true, lamb_helmholtz=true,
     max_expansion_order=20,
-    multipole_thresholds=range(0.3, stop=0.7, step=0.1),
+    multipole_thresholds=range(0.3, stop=0.9, step=0.1),
     leaf_size_source=default_leaf_size(source_systems),
     scalar_potential=true, velocity=true, velocity_gradient=false,
     verbose=true
