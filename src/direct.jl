@@ -18,7 +18,7 @@ Applies all interactions of `systems` acting on itself without multipole acceler
 
 """
 function direct!(systems::Tuple; args...)
-    direct!(systems, systems, args...)
+    direct!(systems, systems; args...)
 end
 
 function direct!(system; args...)
@@ -28,7 +28,7 @@ end
 function direct!(target_system, source_system; args...)
     target_system = to_tuple(target_system)
     source_system = to_tuple(source_system)
-    direct!((target_system,), (source_system,); args...)
+    direct!(target_system, source_system; args...)
 end
 
 function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(true, length(target_systems)), velocity=fill(true, length(target_systems)), velocity_gradient=fill(true, length(target_systems)))
