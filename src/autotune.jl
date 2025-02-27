@@ -115,7 +115,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
         #--- benchmark with tuned parameters ---#
 
-        t_fmm = @elapsed fmm!(target_systems, source_systems;
+        t_fmm = @elapsed _, _, _, _, _, _, error_success = fmm!(target_systems, source_systems;
                 source_buffers, target_buffers,
                 source_small_buffers, target_small_buffers,
                 multipole_threshold, leaf_size_source,
@@ -155,6 +155,12 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                     leaf_size_source = leaf_size_source,
                     expansion_order = expansion_order,
                     multipole_threshold = multipole_threshold
+                    ε_abs = ε_abs,
+                    shrink_recenter = shrink_recenter,
+                    lamb_helmholtz = lamb_helmholtz,
+                    scalar_potential = scalar_potential,
+                    velocity = velocity,
+                    velocity_gradient = velocity_gradient
                    )
 
     #--- return ---#
