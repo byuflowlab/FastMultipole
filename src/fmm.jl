@@ -1148,7 +1148,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                        source_buffers = source_tree.buffers,
                        source_small_buffers = source_tree.small_buffers,
                        leaf_size_source = leaf_size_source,
-                       expansion_order = expansion_order,
+                       expansion_order = max(expansion_order, 1),
                        multipole_threshold = multipole_threshold,
                       )
 
