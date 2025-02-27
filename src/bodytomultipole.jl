@@ -505,11 +505,17 @@ end
         i1 = 5 + strength_dims(system)
         x1 = SVector{3}(buffer[i1,i_body], buffer[i1+1,i_body], buffer[i1+2,i_body])
         x2 = SVector{3}(buffer[i1+3,i_body], buffer[i1+4,i_body], buffer[i1+5,i_body])
-        x0 = x1 - center
+
+        # delta
         xu = x2 - x1
+        x0 = x1 - center
 
         # strength
         strength = get_strength(buffer, system, i_body)
+
+        if dot(strength, xu) < 0.0
+            throw("it looks like vortex filaments were defined with points in the wrong order; their strength vector should point from point 1 to point 2")
+        end
 
         # update values
         body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
