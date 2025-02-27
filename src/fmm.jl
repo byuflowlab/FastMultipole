@@ -962,7 +962,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
-    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches; optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches; multipole_threshold, optargs...)
 end
 
 """
@@ -1010,7 +1010,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
-    tune=false, update_target_systems=true,
+    tune=false, update_target_systems=true, multipole_threshold=0.5
 )
 
     # check if systems are empty
