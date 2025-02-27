@@ -89,7 +89,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
         #--- tune expansion order and leaf size ---#
 
         # get leaf size
-        _ = @elapsed target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, _, error_success =
+        _ = @elapsed optargs, _ =
             fmm!(target_systems, source_systems;
                 source_buffers, target_buffers,
                 source_small_buffers, target_small_buffers,
@@ -99,8 +99,10 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                 tune=true,
             )
 
+            leaf_size_source = optargs.leaf_size_source
+
         # get expansion order now that leaf_size has been chosen
-        _ = @elapsed target_tree, source_tree, m2l_list, direct_list, derivatives_switches, leaf_size_source, expansion_order, error_success =
+        _ = @elapsed optargs, _ =
             fmm!(target_systems, source_systems;
                 source_buffers, target_buffers,
                 source_small_buffers, target_small_buffers,
@@ -109,6 +111,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                 scalar_potential, velocity, velocity_gradient,
                 tune=true,
             )
+            expansion_order = optargs.expansion_order
 
         #--- benchmark with tuned parameters ---#
 
