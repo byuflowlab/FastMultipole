@@ -204,7 +204,7 @@ end
 
 #--- auxilliary functions ---#
 
-@inline default_leaf_size(systems::Tuple) = SVector{length(systems)}(100 for _ in eachindex(systems))
+@inline default_leaf_size(systems::Tuple) = SVector{length(systems)}(20 for _ in eachindex(systems))
 
 @inline full_leaf_size(systems::Tuple) = SVector{length(systems)}(get_n_bodies(system) for system in systems)
 
