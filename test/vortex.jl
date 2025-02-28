@@ -143,8 +143,6 @@ function FastMultipole.buffer_to_target_system!(target_system::VortexParticles, 
     end
 end
 
-FastMultipole.get_n_bodies(vp::VortexParticles) = length(vp.bodies)
-
 Base.eltype(::VortexParticles{TF}) where TF = TF
 
 #------- additional functions -------#
@@ -284,17 +282,13 @@ function save_vtk(filename, vortex_particles::VortexParticles, nt=0; compress=fa
 
     n_bodies = length(vortex_particles.bodies)
 
-    positions = reshape([vortex_particles[j, Position()][i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
-    vectorstrength = reshape([vortex_particles[j, Strength()][i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
-    scalarpotential = reshape([vortex_particles[j, ScalarPotential()] for j in 1:n_bodies], n_bodies, 1, 1)
-    vectorpotential = reshape(vortex_particles.potential[i_POTENTIAL_VECTOR,:],3,n_bodies,1,1)
+    positions = reshape([FastMultipole.get_position(vortex_particles, j)[i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
+    vectorstrength = reshape([vortex_particles.bodies[j].strength[i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
     velocity = reshape(vortex_particles.velocity_stretching[i_VELOCITY_vortex,:],3,n_bodies,1,1)
     stretching = reshape(vortex_particles.velocity_stretching[i_STRETCHING_vortex,:],3,n_bodies,1,1)
 
     WriteVTK.vtk_grid(filename*"."*string(nt)*".vts", positions; compress) do vtk
         vtk["vector strength"] = vectorstrength
-        vtk["scalar potential"] = scalarpotential
-        vtk["vector potential"] = vectorpotential
         vtk["velocity"] = velocity
         vtk["stretching"] = stretching
     end

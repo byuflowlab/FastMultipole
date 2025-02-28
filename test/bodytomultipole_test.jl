@@ -846,7 +846,8 @@ buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(4.0, 0.3, 0.0)
 
-v_check = vortex_filament(x1, x2, xt, q)
+q_mag = norm(q) * sign(dot(q, x2-x1))
+v_check = vortex_filament(x1, x2, xt, q_mag)
 
 expansion_order = 10
 bodies_index, n_branches, branch_index, i_parent, i_leaf_index = 1:1, 0, 1:0, 0, 0

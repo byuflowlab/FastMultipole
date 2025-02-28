@@ -128,6 +128,3 @@ function FastMultipole.buffer_to_target_system!(target_system::Gravitational, i_
         target_system.potential[j, i_target] = velocity_gradient[jj]
     end
 end
-
-Base.eltype(::Gravitational{TF}) where TF = TF
-

@@ -1,18 +1,133 @@
 struct VortexFilaments{TF}
     x::Matrix{SVector{3,TF}}
     strength::Vector{SVector{3,TF}}
+    core_size::Vector{TF}
     potential::Vector{TF}
     force::Vector{SVector{3,TF}}
     gradient::Vector{SMatrix{3,3,TF,9}}
 end
 
+function viz(fname, vortex_filaments::VortexFilaments)
+    # create points
+    pts = zeros(3, length(vortex_filaments.strength)+1)
+    for i in 1:length(vortex_filaments.strength)
+        pts[:,i] .= vortex_filaments.x[1,i]
+    end
+    pts[:,end] .= vortex_filaments.x[2,end]
+
+    # create lines
+    lines = [MeshCell(PolyData.Lines(), (i, i + 1)) for i in 1:length(vortex_filaments.strength)]
+
+    vtk_grid(fname, pts, lines) do vtk
+        vtk["strength"] = vortex_filaments.strength
+        vtk["velocity"] = vortex_filaments.force
+    end
+end
+
 function VortexFilaments(x, strength::Vector{SVector{3,TF}};
+        core_size = fill(1e-2, size(x,2)),
         potential = zeros(size(x,2)),
         force = zeros(SVector{3,TF},size(x,2)),
         gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return VortexFilaments(x, strength, potential, force, gradient)
+    return VortexFilaments(x, strength, core_size, potential, force, gradient)
+end
+
+function generate_inline_filaments(n_bodies; strength, noise=false, noise_strength=0.1)
+    Random.seed!(123)
+    pts = zeros(SVector{3,Float64}, 2, n_bodies)
+    strength_vec = zeros(SVector{3,Float64}, size(pts,2))
+    x1 = SVector{3}(0.0, 0.0, 0.0)
+    i_filament = 1
+
+    dx = 5.0 / n_bodies
+    for x in range(0, stop=5.0, length=n_bodies+1)
+        if x > eps()
+            x2 = SVector{3}(x,0.0,0.0)
+            if noise
+                x2 += SVector{3}(1.0-2*rand(), 1.0-2*rand(), 1.0-2*rand()) * dx * noise_strength
+            end
+            pts[1,i_filament] = x1
+            pts[2,i_filament] = x2
+
+            # determine strength
+            Γ = x2 - x1
+            Γ *= strength / norm(Γ)
+            strength_vec[i_filament] = Γ
+
+            # recurse
+            x1 = x2
+            i_filament += 1
+        end
+    end
+    # create filaments
+    core_size = fill(1e-2, size(x,2))
+    potential = zeros(length(strength_vec))
+    force = zeros(SVector{3,Float64}, length(strength_vec))
+    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+
+    return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
+end
+
+function refine_filaments(filaments::VortexFilaments, max_length)
+    # determine how many we need
+    n_filaments = 0
+    for i in 1:length(filaments.strength)
+        len = norm(filaments.x[2,i] - filaments.x[1,i])
+        n_here = Int(div(len, max_length)) + 1
+        n_filaments += n_here
+    end
+
+    # preallocate
+    refined_filaments = zeros(SVector{3,Float64}, 2, n_filaments)
+    strength_vec = zeros(SVector{3,Float64}, n_filaments)
+
+    # create
+    i_filament = 1
+    for i in 1:length(filaments.strength)
+        old_strength = filaments.strength[i]
+        dx_vec = filaments.x[2,i] - filaments.x[1,i]
+        len = norm(dx_vec)
+        n_here = Int(div(len, max_length)) + 1
+
+        x1 = filaments.x[1,i]
+        dx = len / n_here
+        dx_vec *= dx / len
+
+        for j in 1:n_here
+            x2 = x1 + dx_vec
+            refined_filaments[1,i_filament] = x1
+            refined_filaments[2,i_filament] = x2
+            strength_vec[i_filament] = old_strength
+
+            # recurse
+            x1 = x2
+            i_filament += 1
+        end
+    end
+
+    @assert i_filament == n_filaments + 1
+
+    # create filaments
+    core_size = fill(1e-2, size(x,2))
+    potential = zeros(length(strength_vec))
+    force = zeros(SVector{3,Float64}, length(strength_vec))
+    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+
+    return VortexFilaments(refined_filaments, strength_vec, core_size, potential, force, gradient)
+end
+
+function total_length(filaments::VortexFilaments)
+    l = 0.0
+    for i in 1:length(filaments.strength)
+        x1 = filaments.x[1,i]
+        x2 = filaments.x[2,i]
+        this_l = norm(x2 - x1)
+        l += this_l
+    end
+
+    return l
 end
 
 function generate_vortex_filaments(ntheta; nrings=2, r=1.0, dz=1.0, strength=1e-2)
@@ -43,11 +158,151 @@ function generate_vortex_filaments(ntheta; nrings=2, r=1.0, dz=1.0, strength=1e-
     end
 
     # create filaments
+    core_size = fill(1e-2, size(x,2))
     potential = zeros(length(strength_vec))
     force = zeros(SVector{3,Float64}, length(strength_vec))
     gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, potential, force, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
+end
+
+function generate_filament_field(n_filaments, length_scale; strength_scalar=1/n_filaments)
+    centers = rand(SVector{3,Float64}, n_filaments)
+    pts = zeros(SVector{3,Float64}, 2, n_filaments)
+    strength_vec= zeros(SVector{3,Float64}, n_filaments)
+    for (i,center) in enumerate(centers)
+        dx = (rand(SVector{3,Float64}) * 2 .- 1.0) * 0.5 * length_scale
+        pts[1,i] = center - dx
+        pts[2,i] = center + dx
+        Γ = dx / norm(dx) * rand() * strength_scalar
+        strength_vec[i] = Γ
+    end
+
+    # create filaments
+    core_size = fill(1e-2, size(x,2))
+    potential = zeros(length(strength_vec))
+    force = zeros(SVector{3,Float64}, length(strength_vec))
+    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+
+    return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
+end
+
+function minimum_distance(x1, x2, P)
+
+    # direction vector of the segment
+    Δx = x2 - x1
+
+    # vector from x1 to P
+    v = P - x1
+
+    # scalar projection of v onto Δx
+    dot_vd = dot(v, Δx)
+    x2 = dot(Δx, Δx)
+    t = dot_vd / x2
+
+    # clamp t to ensure the closest point is within the segment
+    t = clamp(t, zero(t), one(t))
+
+    # get distance
+    return norm(P - (x1 + t * Δx))
+end
+
+function vortex_filament_gauss(x1,x2,xt,q,core_size,σ)
+
+    # intermediate values
+    r1 = xt - x1
+    r2 = xt - x2
+    nr1 = norm(r1)
+    nr2 = norm(r2)
+    nr1nr2 = nr1*nr2
+    rcross = cross(r1, r2)
+    rdot = dot(r1, r2)
+
+    if abs(rdot + nr1nr2) < eps(max(nr1, nr2)) # at the midpoint, so return zero
+        return zero(typeof(r1))
+    end
+
+    r1s, r2s, εs = nr1*nr1, nr2*nr2, core_size*core_size
+    f1 = rcross/(r1s*r2s - rdot*rdot + εs*(r1s + r2s - 2*nr1nr2))
+    f2 = (r1s - rdot)/sqrt(r1s + εs) + (r2s - rdot)/sqrt(r2s + εs)
+    Vhat = (f1*f2)/(4*pi)
+
+    return Vhat * q
+
+end
+
+function mysign(x)
+    if abs(x) > zero(x)
+        return sign(x)
+    end
+
+    return one(x)
+end
+
+function get_δ_try1(distance, core_size)
+    δ = distance < core_size ? -distance + core_size : zero(distance)
+    return δ
+end
+
+function get_δ(distance, core_size)
+    δ = distance < core_size ? (distance-core_size) * (distance-core_size) : zero(distance)
+    return δ
+end
+
+function vortex_filament_finite_core_2(x1,x2,xt,q,core_size)
+    # intermediate values
+    r1 = xt - x1
+    r2 = xt - x2
+
+    nr1 = norm(r1)
+    nr2 = norm(r2)
+
+    num = cross(r1, r2)
+    denom = nr1 * nr2 + dot(r1, r2)
+
+    # core size comes into play here
+    distance_1 = norm((x1+x2)*0.5 - xt)
+    δ1 = get_δ(distance_1, core_size)
+
+    distance_2 = norm(x1 - xt)
+    δ2 = get_δ(distance_2, core_size)
+
+    distance_3 = norm(x2 - xt)
+    δ3 = get_δ(distance_3, core_size)
+
+    # desingularized terms
+    f1 = num/(denom + δ1)
+    f2 = 1/(nr1+δ2)
+    f3 = 1/(nr2+δ3)
+
+    # evaluate velocity
+    V = (f1*(f2+f3))/(4*pi) * q
+
+    return V
+end
+
+function vortex_filament_finite_core(x1,x2,xt,q,core_size)
+
+    # intermediate values
+    r1 = xt - x1
+    r2 = xt - x2
+    nr1 = norm(r1)
+    nr2 = norm(r2)
+    nr1nr2 = nr1*nr2
+    rcross = cross(r1, r2)
+    rdot = dot(r1, r2)
+
+    if abs(rdot + nr1nr2) < eps(max(nr1, nr2)) # at the midpoint, so return zero
+        return zero(typeof(r1))
+    end
+
+    r1s, r2s, εs = nr1*nr1, nr2*nr2, core_size*core_size
+    f1 = rcross/(r1s*r2s - rdot*rdot + εs*(r1s + r2s - 2*nr1nr2))
+    f2 = (r1s - rdot)/sqrt(r1s + εs) + (r2s - rdot)/sqrt(r2s + εs)
+    Vhat = (f1*f2)/(4*pi)
+
+    return Vhat * q
+
 end
 
 function vortex_filament(x1,x2,xt,q)
@@ -58,15 +313,16 @@ function vortex_filament(x1,x2,xt,q)
     nr2 = norm(r2)
 
     num = cross(r1, r2)
-    norm_num = norm(num)
-    if norm_num < eps() * 10
+    denom = nr1 * nr2 + dot(r1, r2)
+    if abs(denom) < eps(max(nr1,nr2))
         return zero(SVector{3,eltype(x1)})
     end
 
-    f1 = cross(r1, r2)/(nr1*nr2 + dot(r1, r2))
+    f1 = num/denom
     f2 = (1/nr1 + 1/nr2)
 
-    V = (f1*f2)/(4*pi) * norm(q)
+    # evaluate velocity
+    V = (f1*f2)/(4*pi) * q
 
     return V
 end
@@ -83,10 +339,11 @@ end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexFilaments, i_body)
     buffer[1:3,i_buffer] .= (system.x[1,i_body]  + system.x[2,i_body]) * 0.5
-    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
+    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body]) * 2
     buffer[5:7,i_buffer] .= system.strength[i_body]
     buffer[8:10,i_buffer] .= system.x[1,i_body]
     buffer[11:13,i_buffer] .= system.x[2,i_body]
+    buffer[14,i_buffer] = system.core_size[i_body]
 end
 
 function FastMultipole.strength_dims(system::VortexFilaments)
@@ -95,7 +352,7 @@ end
 
 FastMultipole.get_n_bodies(system::VortexFilaments) = length(system.strength)
 
-FastMultipole.data_per_body(::VortexFilaments) = 13
+FastMultipole.data_per_body(::VortexFilaments) = 14
 
 Base.eltype(::VortexFilaments{TF}) where TF = TF
 
@@ -112,12 +369,18 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch::
         x1 = FastMultipole.get_vertex(source_buffer, source_system, i_source, 1)
         x2 = FastMultipole.get_vertex(source_buffer, source_system, i_source, 2)
         q = FastMultipole.get_strength(source_buffer, source_system, i_source)
+        core_size = source_buffer[14, i_source]
 
         for i_target in target_index
             xt = FastMultipole.get_position(target_system, i_target)
 
             if VS
-                v = vortex_filament(x1,x2,xt,q)
+                # determine sign of q
+                q_mag = norm(q) * sign(dot(q, x2-x1))
+
+                # calculate velocity
+                # v = vortex_filament(x1,x2,xt,q_mag)
+                v = vortex_filament_finite_core_2(x1,x2,xt,q_mag,core_size)
                 FastMultipole.set_velocity!(target_system, i_target, v)
             end
         end
@@ -149,4 +412,129 @@ optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, 
 v_fmm = deepcopy(filaments.force)
 
 @show maximum(norm.(v_fmm - v_direct))
+=#
+
+#------- inline filaments -------#
+
+#=
+n_bodies=100
+filaments = generate_inline_filaments(n_bodies; strength=1e-1, noise=true, noise_strength=0.01)
+
+l = total_length(filaments)
+max_length = l / n_bodies / 4
+refined_filaments = refine_filaments(filaments, max_length)
+
+direct!(filaments)
+v_direct = deepcopy(filaments.force)
+
+reset!(filaments)
+direct!(filaments, refined_filaments)
+v_direct_r = deepcopy(filaments.force)
+
+@show maximum(norm.(v_direct - v_direct_r))
+
+expansion_order = 15
+
+reset!(filaments)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_threshold=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
+
+v_fmm = deepcopy(filaments.force)
+
+@show maximum(norm.(v_fmm - v_direct))
+
+# try refined filaments
+reset!(filaments)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments, refined_filaments; leaf_size_source=1, multipole_threshold=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
+
+v_fmm_r = deepcopy(filaments.force)
+
+@show maximum(norm.(v_fmm_r - v_direct))
+=#
+
+#=
+#------- rotor -------#
+
+filaments = generate_rotor()
+l = total_length(filaments)
+n = size(filaments.x, 2)
+# refined_filaments = refine_filaments(filaments, l / n / 20)
+
+direct!(filaments)
+v_direct = deepcopy(filaments.force)
+
+# reset!(filaments)
+# direct!(filaments, refined_filaments)
+# v_direct_r = deepcopy(filaments.force)
+
+# @show maximum(norm.(v_direct - v_direct_r))
+
+reset!(filaments)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_threshold=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
+
+v_fmm = deepcopy(filaments.force)
+
+@show maximum(norm.(v_fmm - v_direct))
+=#
+
+#=
+#------- random filament field -------#
+
+n_filaments = 200000
+length_scale = 1.0 / n_filaments^(1/3)
+filaments = generate_filament_field(n_filaments, length_scale; strength_scalar=1/n_filaments)
+
+# direct!(filaments)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_threshold=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
+v_direct = deepcopy(filaments.force)
+
+reset!(filaments)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_threshold=0.4, expansion_order=10, lamb_helmholtz=true, ε_abs=nothing)
+
+v_fmm = deepcopy(filaments.force)
+
+@show maximum(norm.(v_fmm - v_direct))
+=#
+
+#=
+#------- test velocity functions -------#
+function velocity_comparison(ys;
+    x1 = SVector{3}(0.0, 0.0, 0),
+    x2 = SVector{3}(0.1, 0, 0),
+    q = (x2 - x1) * 1.7308e-2,
+    core_size = 1e-6)
+
+    q_mag = norm(q)*sign(dot(q,x2-x1))
+
+    vs_fc = zeros(length(ys))
+    vs_fc2 = zeros(length(ys))
+    vs_check = zeros(length(ys))
+
+    for (i,y) in enumerate(ys)
+
+        xt = SVector{3}(0.05,y,0.0)
+        v_fc = vortex_filament_finite_core(x1,x2,xt,q_mag,core_size)
+        v_fc2 = vortex_filament_finite_core_2(x1,x2,xt,q_mag,core_size)
+        v_check = vortex_filament(x1,x2,xt,q_mag)
+
+        vs_fc[i] = v_fc[3]
+        vs_fc2[i] = v_fc2[3]
+        vs_check[i] = v_check[3]
+    end
+
+    return vs_fc, vs_fc2, vs_check
+end
+
+ys = range(0.0, stop=1.0e-1, length=100000)
+vs_fc, vs_fc2, vs_check = velocity_comparison(ys; core_size=1e-2)
+
+fig = figure("filament")
+fig.clear()
+fig.add_subplot(111, xlabel="distance", ylabel="velocity magnitude")
+ax = fig.get_axes()[0]
+ax.plot(ys, vs_fc)
+ax.plot(ys, vs_fc2, "--")
+ax.plot(ys, vs_check, ":")
+ax.legend(["finite core model 1", "finite core model 2", "infinite core"])
+# ax.set_ylim([0.0, 300.0])
+ax.set_yscale("log")
 =#
