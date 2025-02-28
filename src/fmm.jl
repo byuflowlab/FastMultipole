@@ -1042,8 +1042,12 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         n_threads = Threads.nthreads()
 
         # reset trees
-        reset_target_tree && (reset_expansions!(target_tree))
-        reset_source_tree && (reset_expansions!(source_tree))
+        if reset_target_tree
+            reset_expansions!(target_tree)
+        end
+        if reset_source_tree
+            reset_expansions!(source_tree)
+        end
 
         # begin FMM
         if nearfield_device # use GPU
