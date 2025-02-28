@@ -339,11 +339,12 @@ end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexFilaments, i_body)
     buffer[1:3,i_buffer] .= (system.x[1,i_body]  + system.x[2,i_body]) * 0.5
-    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body]) * 2
+    core_size = system.core_size[i_body]
+    buffer[4,i_buffer] = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5 + core_size
     buffer[5:7,i_buffer] .= system.strength[i_body]
     buffer[8:10,i_buffer] .= system.x[1,i_body]
     buffer[11:13,i_buffer] .= system.x[2,i_body]
-    buffer[14,i_buffer] = system.core_size[i_body]
+    buffer[14,i_buffer] = core_size
 end
 
 function FastMultipole.strength_dims(system::VortexFilaments)
