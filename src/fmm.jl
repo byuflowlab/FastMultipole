@@ -937,16 +937,17 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     leaf_size_target = to_vector(isnothing(leaf_size_target) ? minimum(leaf_size_source) : leaf_size_target, length(target_systems))
 
     # create trees
-    target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_target, shrink_recenter)
-    source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_source, shrink_recenter)
+    t_target_tree = @elapsed target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_target, shrink_recenter)
+    t_source_tree = @elapsed source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order=expansion_order+!(isnothing(ε_abs)), leaf_size=leaf_size_source, shrink_recenter)
 
-    return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_abs, optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_abs, t_source_tree, t_target_tree, optargs...)
 end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree;
     leaf_size_source=default_leaf_size(source_systems), multipole_threshold=0.4,
     scalar_potential=true, velocity=true, velocity_gradient=true,
     farfield=true, nearfield=true, self_induced=true,
+    t_source_tree=0.0, t_target_tree=0.0,
     optargs...
 )
 
@@ -959,10 +960,10 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
-    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced)
+    t_lists = @elapsed m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced)
 
     # run fmm
-    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches; multipole_threshold, optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches; multipole_threshold, t_source_tree, t_target_tree, t_lists, optargs...)
 end
 
 """
@@ -1010,7 +1011,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
-    tune=false, update_target_systems=true, multipole_threshold=0.5
+    tune=false, update_target_systems=true, multipole_threshold=0.5,
+    t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0
 )
 
     # check if systems are empty
@@ -1088,7 +1090,10 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 end
 
                 # farfield computations
-                upward_pass && upward_pass_singlethread!(source_tree, source_systems, expansion_order + error_check, lamb_helmholtz)
+                t_up = 0.0
+                if upward_pass 
+                    t_up = @elapsed upward_pass_singlethread!(source_tree, source_systems, expansion_order + error_check, lamb_helmholtz)
+                end
 
                 t_m2l = 0.0
                 Pmax = 0
@@ -1101,10 +1106,11 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 end
 
                 # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches)
+                t_dp = 0.0
                 if downward_pass
-                    downward_pass_singlethread_1!(target_tree, expansion_order, lamb_helmholtz)
-                    velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
-                    downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+                    t_dp = @elapsed downward_pass_singlethread_1!(target_tree, expansion_order, lamb_helmholtz)
+                    t_dp += @elapsed velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
+                    t_dp += @elapsed downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
                 end
 
                 # copy results to target systems
@@ -1117,6 +1123,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                         #--- compute optimal leaf_size_source ---#
 
                         # t per m2l transformation
+                        t_m2l += t_up + t_dp + t_target_tree + t_source_tree + t_lists
                         t_m2l /= length(m2l_list)
 
                         # t_per_interaction * LS^2 = t_per_m2l
