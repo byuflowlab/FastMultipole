@@ -278,7 +278,7 @@ function source_to_dipole!(harmonics, i_dipole, i_source, qx, qy, qz, expansion_
 end
 
 """
-my novel derivation
+my derivation
 """
 function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength, i_source, multiplier, expansion_order)
 
@@ -300,9 +300,9 @@ function mirrored_source_to_vortex!(multipole_coefficients, harmonics, strength,
             multipole_coefficients[1,1,i] += multiplier * _1_m * ((-vx * q_n_mm1_real + vy * q_n_mm1_imag) * nmmp1_2 + (vx * q_n_mp1_real + vy * q_n_mp1_imag) * npmp1_2 - vz * m * q_n_m_imag) * _1_np1
             multipole_coefficients[2,1,i] += multiplier * _1_m * ((vx * q_n_mm1_imag + vy * q_n_mm1_real) * nmmp1_2 + (-vx * q_n_mp1_imag + vy * q_n_mp1_real) * npmp1_2 - vz * m * q_n_m_real) * _1_np1
 
-            if n == 0 && m == 0 && (abs(multiplier * _1_m * ((-vx * q_n_mm1_real + vy * q_n_mm1_imag) * nmmp1_2 + (vx * q_n_mp1_real + vy * q_n_mp1_imag) * npmp1_2 - vz * m * q_n_m_imag) * _1_np1) > 0.0 || (multiplier * _1_m * ((vx * q_n_mm1_imag + vy * q_n_mm1_real) * nmmp1_2 + (-vx * q_n_mp1_imag + vy * q_n_mp1_real) * npmp1_2 - vz * m * q_n_m_real) * _1_np1) > 0.0)
-                throw("vortex element not zero for n=m=0")
-            end
+            # if n == 0 && m == 0 && (abs(multiplier * _1_m * ((-vx * q_n_mm1_real + vy * q_n_mm1_imag) * nmmp1_2 + (vx * q_n_mp1_real + vy * q_n_mp1_imag) * npmp1_2 - vz * m * q_n_m_imag) * _1_np1) > 0.0 || (multiplier * _1_m * ((vx * q_n_mm1_imag + vy * q_n_mm1_real) * nmmp1_2 + (-vx * q_n_mp1_imag + vy * q_n_mp1_real) * npmp1_2 - vz * m * q_n_m_real) * _1_np1) > 0.0)
+            #     throw("vortex element not zero for n=m=0")
+            # end
 
             # recurse
             i += 1
@@ -497,25 +497,22 @@ end
 
 #--- filament elements ---#
 
-@inline function body_to_multipole!(element::Type{<:Filament}, system, multipole_coefficients, buffer, center, bodies_index, harmonics, expansion_order)
+function body_to_multipole!(element::Type{<:Filament}, system, multipole_coefficients, buffer, center, bodies_index, harmonics, expansion_order)
 
     # loop over bodies
     for i_body in bodies_index
+
         # relative body position
         i1 = 5 + strength_dims(system)
         x1 = SVector{3}(buffer[i1,i_body], buffer[i1+1,i_body], buffer[i1+2,i_body])
         x2 = SVector{3}(buffer[i1+3,i_body], buffer[i1+4,i_body], buffer[i1+5,i_body])
 
-        # delta
-        xu = x2 - x1
-        x0 = x1 - center
-
         # strength
         strength = get_strength(buffer, system, i_body)
 
-        if dot(strength, xu) < 0.0
-            throw("it looks like vortex filaments were defined with points in the wrong order; their strength vector should point from point 1 to point 2")
-        end
+        # delta
+        xu = x2 - x1
+        x0 = x1 - center
 
         # update values
         body_to_multipole_filament!(element, multipole_coefficients, harmonics, x0, xu, strength, expansion_order)
