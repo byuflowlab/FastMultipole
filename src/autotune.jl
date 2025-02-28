@@ -21,11 +21,11 @@ function get_max_expansion_order(ε_abs, multipole_threshold, max_expansion_orde
     end
 
     if !reached_max_expansion_order
-        optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems; target_buffers, source_buffers, target_small_buffers, source_small_buffers, expansion_order, ε_abs, multipole_threshold)
+        optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems; target_buffers, source_buffers, target_small_buffers, source_small_buffers, expansion_order=max_expansion_order, ε_abs, multipole_threshold)
         leaf_size_source = optargs.leaf_size_source
     end
 
-    return expansion_order, leaf_size_source
+    return max_expansion_order, leaf_size_source
 end
 
 tune_fmm!(system; optargs...) = tune_fmm!(system, system; optargs...)

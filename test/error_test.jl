@@ -98,12 +98,12 @@ function expansion_errors(tree::FastMultipole.Tree{TF,<:Any,<:Any}, m2l_list, sy
         @assert length(local_error) == length(local_branch.bodies_index[1])
         local_errs_mean[i] = mean(local_error)
         local_errs_max[i] = maximum(local_error)
-        
+
         # zero velocity influence
         for i in local_branch.bodies_index[1]
             system[i,Velocity()] = zero(system[i,Velocity()])
         end
-        
+
         # overall velocity error
         local_expansion = initialize_expansion(expansion_order)
         FastMultipole.multipole_to_local!(local_expansion, local_branch, multipole_expansion, multipole_branch, expansion_order, lamb_helmholtz, nothing)
@@ -142,7 +142,7 @@ function run_gravitational_system(expansion_order; debug=false)
     # create system
     seed = 123
     n_bodies = 10000
-    system = generate_gravitational(seed, n_bodies; radius_factor=0.0, strength_factor=1/(0.07891333941819023*n_bodies))
+    system = generate_gravitational(seed, n_bodies; radius_factor=0.0, strength_scale=1/(0.07891333941819023*n_bodies))
 
     # generate multipole expansions and m2l-list
     leaf_size, multipole_threshold, lamb_helmholtz = SVector{1}(50), 0.5, false

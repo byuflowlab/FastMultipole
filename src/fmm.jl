@@ -843,13 +843,13 @@ function warn_scalar_potential_with_lh(switch::DerivativesSwitch{PS,<:Any,<:Any}
     success = !(PS && lamb_helmholtz)
 end
 
-function warn_scalar_potential_with_lh(derivatives_switches::Tuple, lamb_helmholtz)
+function warn_scalar_potential_with_lh(derivatives_switches::Tuple, lamb_helmholtz::Bool)
     success = true
     for switch in derivatives_switches
         success = success && warn_scalar_potential_with_lh(switch, lamb_helmholtz)
     end
     if !success
-        @warn "\nScalar potential was requested with lamb_helmholtz=true; this may result in nonsensical potential predictions.\n"
+        @warn "\nScalar potential was requested with lamb_helmholtz=$lamb_helmholtz; this may result in nonsensical potential predictions.\n"
     end
 end
 

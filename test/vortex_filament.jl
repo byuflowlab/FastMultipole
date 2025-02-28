@@ -166,7 +166,7 @@ function generate_vortex_filaments(ntheta; nrings=2, r=1.0, dz=1.0, strength=1e-
     return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
 end
 
-function generate_filament_field(n_filaments, length_scale; strength_scalar=1/n_filaments)
+function generate_filament_field(n_filaments, length_scale; strength_scale=1/n_filaments)
     centers = rand(SVector{3,Float64}, n_filaments)
     pts = zeros(SVector{3,Float64}, 2, n_filaments)
     strength_vec= zeros(SVector{3,Float64}, n_filaments)
@@ -174,7 +174,7 @@ function generate_filament_field(n_filaments, length_scale; strength_scalar=1/n_
         dx = (rand(SVector{3,Float64}) * 2 .- 1.0) * 0.5 * length_scale
         pts[1,i] = center - dx
         pts[2,i] = center + dx
-        Γ = dx / norm(dx) * rand() * strength_scalar
+        Γ = dx / norm(dx) * rand() * strength_scale
         strength_vec[i] = Γ
     end
 
@@ -482,7 +482,7 @@ v_fmm = deepcopy(filaments.force)
 
 n_filaments = 200000
 length_scale = 1.0 / n_filaments^(1/3)
-filaments = generate_filament_field(n_filaments, length_scale; strength_scalar=1/n_filaments)
+filaments = generate_filament_field(n_filaments, length_scale; strength_scale=1/n_filaments)
 
 # direct!(filaments)
 optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_threshold=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
