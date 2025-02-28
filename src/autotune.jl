@@ -7,7 +7,7 @@ function get_max_expansion_order(ε_abs, multipole_threshold, max_expansion_orde
 
     for expansion_order in 4:3:max_expansion_order
 
-        optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems; target_buffers, source_buffers, target_small_buffers, source_small_buffers, expansion_order, ε_abs, multipole_threshold, update_target_systems=false)
+        optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems; target_buffers, source_buffers, target_small_buffers, source_small_buffers, expansion_order, ε_abs, multipole_threshold, update_target_systems=false, tune=true)
         leaf_size_source = optargs.leaf_size_source
 
         if error_success
@@ -21,7 +21,7 @@ function get_max_expansion_order(ε_abs, multipole_threshold, max_expansion_orde
     end
 
     if !reached_max_expansion_order
-        optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems; target_buffers, source_buffers, target_small_buffers, source_small_buffers, expansion_order=max_expansion_order, ε_abs, multipole_threshold, update_target_systems=false)
+        optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems; target_buffers, source_buffers, target_small_buffers, source_small_buffers, expansion_order=max_expansion_order, ε_abs, multipole_threshold, update_target_systems=false, tune=true)
         leaf_size_source = optargs.leaf_size_source
     end
 
@@ -71,7 +71,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
     #--- preallocate buffers ---#
 
-    optargs, _ = fmm!(target_systems, source_systems; expansion_order=1, update_target_systems=false)
+    optargs, _ = fmm!(target_systems, source_systems; expansion_order=1, update_target_systems=false, tune=true)
     source_buffers = optargs.source_buffers
     target_buffers = optargs.target_buffers
     source_small_buffers = optargs.source_small_buffers
