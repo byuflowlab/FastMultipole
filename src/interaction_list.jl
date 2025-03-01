@@ -39,15 +39,6 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
             summed_radii = source_branch.source_radius + target_branch.target_radius
             # summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
 
-            if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
-            #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
-                if ff
-                    push!(m2l_list, SVector{2}(i_target, j_source))
-                end
-
-                return nothing
-            end
-
             fraction = 0.0
             for i_sys in 1:length(source_branch.bodies_index)
                 fraction += length(source_branch.bodies_index[i_sys]) / (source_leaf_size[i_sys] * source_leaf_size[i_sys])
@@ -62,7 +53,16 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
             # if source_branch.n_branches == target_branch.n_branches == 0 # both leaves
             # elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
                 nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
+                return nothing
+            end
 
+            if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
+            #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
+                if ff
+                    push!(m2l_list, SVector{2}(i_target, j_source))
+                end
+
+                return nothing
             elseif source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
 
                 for i_child in target_branch.branch_index
