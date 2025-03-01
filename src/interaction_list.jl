@@ -58,7 +58,7 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
             end
             fraction *= n_targets
 
-            if fraction < 4.0 || source_branch.n_branches == target_branch.n_branches == 0
+            if fraction < 1.0 || source_branch.n_branches == target_branch.n_branches == 0
             # if source_branch.n_branches == target_branch.n_branches == 0 # both leaves
             # elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
                 nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
