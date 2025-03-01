@@ -312,14 +312,17 @@ end
 #     return SVector{3}(view(source_buffer, 1:3, i_body))
 # end
 
-get_position(system::Matrix{TF}, i) where TF = SVector{3,TF}(system[1, i], system[2, i], system[3, i])
+function get_position(system::Matrix{TF}, i) where TF
+    @inbounds val = SVector{3,TF}(system[1, i], system[2, i], system[3, i])
+    return val
+end
 
-get_scalar_potential(system::Matrix, i) = system[4, i]
+get_scalar_potential(system::Matrix, i) = @inbounds system[4, i]
 
-get_velocity(system::Matrix{TF}, i) where TF = SVector{3,TF}(system[5,i], system[6,i], system[7,i])
+get_velocity(system::Matrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
 
 get_velocity_gradient(system::Matrix{TF}, i) where TF =
-    SMatrix{3,3,TF,9}(system[8, i], system[9, i], system[10, i],
+    @inbounds SMatrix{3,3,TF,9}(system[8, i], system[9, i], system[10, i],
     system[11, i], system[12, i], system[13, i],
     system[14, i], system[15, i], system[16, i])
 
@@ -334,7 +337,7 @@ Accumulates `scalar_potential` to `target_buffer`.
 
 """
 function set_scalar_potential!(system::Matrix, i, scalar_potential)
-    system[4, i] += scalar_potential
+    @inbounds system[4, i] += scalar_potential
 end
 
 """
@@ -344,9 +347,9 @@ Accumulates `velocity` to `target_buffer`.
 
 """
 function set_velocity!(system::Matrix, i, velocity)
-    system[5,i] += velocity[1]
-    system[6,i] += velocity[2]
-    system[7,i] += velocity[3]
+    @inbounds system[5,i] += velocity[1]
+    @inbounds system[6,i] += velocity[2]
+    @inbounds system[7,i] += velocity[3]
 end
 
 """
@@ -356,15 +359,15 @@ Accumulates `velocity_gradient` to `target_buffer`.
 
 """
 function set_velocity_gradient!(system::Matrix, i, velocity_gradient)
-    system[8, i] += velocity_gradient[1]
-    system[9, i] += velocity_gradient[2]
-    system[10, i] += velocity_gradient[3]
-    system[11, i] += velocity_gradient[4]
-    system[12, i] += velocity_gradient[5]
-    system[13, i] += velocity_gradient[6]
-    system[14, i] += velocity_gradient[7]
-    system[15, i] += velocity_gradient[8]
-    system[16, i] += velocity_gradient[9]
+    @inbounds system[8, i] += velocity_gradient[1]
+    @inbounds system[9, i] += velocity_gradient[2]
+    @inbounds system[10, i] += velocity_gradient[3]
+    @inbounds system[11, i] += velocity_gradient[4]
+    @inbounds system[12, i] += velocity_gradient[5]
+    @inbounds system[13, i] += velocity_gradient[6]
+    @inbounds system[14, i] += velocity_gradient[7]
+    @inbounds system[15, i] += velocity_gradient[8]
+    @inbounds system[16, i] += velocity_gradient[9]
 end
 
 #--- auxilliary functions ---#

@@ -945,7 +945,7 @@ end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree;
     leaf_size_source=default_leaf_size(source_systems), multipole_threshold=0.4,
-    scalar_potential=true, velocity=true, velocity_gradient=true,
+    scalar_potential=false, velocity=true, velocity_gradient=false,
     farfield=true, nearfield=true, self_induced=true,
     t_source_tree=0.0, t_target_tree=0.0,
     optargs...
@@ -1091,7 +1091,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
                 # farfield computations
                 t_up = 0.0
-                if upward_pass 
+                if upward_pass
                     t_up = @elapsed upward_pass_singlethread!(source_tree, source_systems, expansion_order + error_check, lamb_helmholtz)
                 end
 

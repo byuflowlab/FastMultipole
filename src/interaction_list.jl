@@ -14,70 +14,103 @@ end
 
 mean(x) = sum(x) / length(x)
 
+function build_interaction_lists_barba!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+    # unpack
+    source_branch = source_branches[j_source]
+    target_branch = target_branches[i_target]
+
+    # branch center separation distance
+    Δx, Δy, Δz = target_branch.target_center - source_branch.source_center
+    separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
+
+    # decide whether or not to accept the multipole expansion
+    summed_radii = source_branch.source_radius + target_branch.target_radius
+    # summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
+
+    if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
+    #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
+        if ff
+            push!(m2l_list, SVector{2}(i_target, j_source))
+        end
+        return nothing
+    end
+
+    # both are leaves, so direct!
+    if source_branch.n_branches == target_branch.n_branches == 0
+        nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
+        return nothing
+    end
+
+    # source is a leaf OR target is not a leaf and is bigger or the same size, so subdivide target branch
+    if source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0)
+
+        for i_child in target_branch.branch_index
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+        end
+
+    # source is not a leaf AND target is a leaf or is smaller, so subdivide source branch
+    else
+        for j_child in source_branch.branch_index
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+        end
+    end
+
+end
+
 function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
+    target_branch = target_branches[i_target]
 
-    # if source_branch.source
+    # predict if direct cost is less than multipole cost
+    fraction = 0.0
+    for i_sys in 1:length(source_branch.bodies_index)
+        fraction += source_branch.n_bodies[i_sys] / (source_leaf_size[i_sys] * source_leaf_size[i_sys])
+    end
+    n_targets = sum(target_branch.n_bodies)
+    fraction *= n_targets
 
-        target_branch = target_branches[i_target]
+    # cost of direct is less than M2L, or both branches are leaves, so no need to continue subdividing
+    if fraction < 1.0 || source_branch.n_branches == target_branch.n_branches == 0
+        nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
+        return nothing
+    end
 
-        # if target_branch.target
+    # branch center separation distance
+    Δx, Δy, Δz = target_branch.target_center - source_branch.source_center
+    separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
 
-            # branch center separation distance
-            Δx, Δy, Δz = target_branch.target_center - source_branch.source_center
-            separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
+    # decide whether or not to accept the multipole expansion
+    summed_radii = source_branch.source_radius + target_branch.target_radius
 
-            # get r_min, r_max, ρ_min, ρ_max here, based on error method
-            # r_min, r_max, ρ_min, ρ_max = get_r_ρ(target_branch, source_branch, separation_distance_squared)
+    # distance is greater than multipole threshold, perform M2L
+    if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
+    #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
+        if ff
+            push!(m2l_list, SVector{2}(i_target, j_source))
+        end
+        return nothing
+    end
 
-            #    # Barba's multipole acceptance test- slightly different than mine
-            #    summed_radii = target_branch.target_radius + source_branch.source_radius
-            #    mac = separation_distance * multipole_threshold >= summed_radii # meet M2L criteria
+    # count number of sources
+    n_sources = sum(source_branch.n_bodies)
 
-            # decide whether or not to accept the multipole expansion
-            summed_radii = source_branch.source_radius + target_branch.target_radius
-            # summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
+    # too close for M2L, and source is a leaf OR target is not a leaf and is bigger or the same size, so subdivide targets
+    # if source_branch.n_branches == 0 || (n_targets >= n_sources && target_branch.n_branches != 0)
+    if source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0)
 
-            fraction = 0.0
-            for i_sys in 1:length(source_branch.bodies_index)
-                fraction += length(source_branch.bodies_index[i_sys]) / (source_leaf_size[i_sys] * source_leaf_size[i_sys])
-            end
-            n_targets = 0
-            for i_sys in eachindex(target_branch.bodies_index)
-                n_targets += length(target_branch.bodies_index[i_sys])
-            end
-            fraction *= n_targets
+        for i_child in target_branch.branch_index
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+        end
 
-            if fraction < 1.0 || source_branch.n_branches == target_branch.n_branches == 0
-            # if source_branch.n_branches == target_branch.n_branches == 0 # both leaves
-            # elseif source_branch.n_branches == target_branch.n_branches == 0 # both leaves
-                nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
-                return nothing
-            end
+    # source is not a leaf AND target is a leaf or is smaller, so subdivide source
+    else
 
-            if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
-            #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
-                if ff
-                    push!(m2l_list, SVector{2}(i_target, j_source))
-                end
+        for j_child in source_branch.branch_index
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+        end
 
-                return nothing
-            elseif source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0) # source is a leaf OR target is not a leaf and is bigger or the same size
-
-                for i_child in target_branch.branch_index
-                    build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
-                end
-
-            else # source is not a leaf AND target is a leaf or is smaller
-
-                for j_child in source_branch.branch_index
-                    build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
-                end
-
-            end
-        # end
-    # end
+    end
 end
 
 @inline preallocate_bodies_index(T::Type{<:Branch{<:Any,NT}}, n) where NT = Tuple(Vector{UnitRange{Int64}}(undef, n) for _ in 1:NT)

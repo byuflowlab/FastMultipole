@@ -79,7 +79,7 @@ fmm.body_to_multipole!(system::VortexParticles, args...) = body_to_multipole!(Po
 """
 Classical formulation so far.
 """
-function fmm.direct!(target_system, target_index, derivatives_switch::FastMultipole.DerivativesSwitch{S,V,VG}, source_system::VortexParticles, source_buffer, source_index) where {S,V,VG}
+function fmm.direct!(target_system::Matrix{TF}, target_index, ::FastMultipole.DerivativesSwitch{S,V,VG}, source_system::VortexParticles, source_buffer, source_index) where {TF,S,V,VG}
     for j_source in source_index
         x_source = FastMultipole.get_position(source_buffer, j_source)
         Γx, Γy, Γz = FastMultipole.get_strength(source_buffer,  source_system, j_source)
@@ -87,9 +87,7 @@ function fmm.direct!(target_system, target_index, derivatives_switch::FastMultip
             x_target = FastMultipole.get_position(target_system, i_target)
             dx, dy, dz = x_target - x_source
             r2 = dx * dx + dy * dy + dz * dz
-            if FastMultipole.DEBUG[]
-            println("\n\tdirect!: x_source = $x_source, x_target = $x_target")
-        end
+
             if r2 > 0
                 # distance away
                 r = sqrt(r2)
@@ -105,7 +103,7 @@ function fmm.direct!(target_system, target_index, derivatives_switch::FastMultip
                     vx = (dz * Γy - dy * Γz) * denom
                     vy = (dx * Γz - dz * Γx) * denom
                     vz = (dy * Γx - dx * Γy) * denom
-                    FastMultipole.set_velocity!(target_system, i_target, SVector{3}(vx,vy,vz))
+                    FastMultipole.set_velocity!(target_system, i_target, SVector{3,TF}(vx,vy,vz))
                 end
 
                 # velocity gradient
@@ -120,7 +118,7 @@ function fmm.direct!(target_system, target_index, derivatives_switch::FastMultip
                     vzx = (-3 * dz * (Γy * dz - Γz * dy) + Γy * r2) * denom
                     vzy = (-3 * dz * (Γz * dx - Γx * dz) - Γx * r2) * denom
                     vzz = -3 * dz * (Γx * dy - Γy * dx) * denom
-                    FastMultipole.set_velocity_gradient!(target_system, i_target, SMatrix{3,3}(vxx, vxy, vxz, vyx, vyy, vyz, vzx, vzy, vzz))
+                    FastMultipole.set_velocity_gradient!(target_system, i_target, SMatrix{3,3,TF,9}(vxx, vxy, vxz, vyx, vyy, vyz, vzx, vzy, vzz))
                 end
 
             end
