@@ -330,6 +330,16 @@ end
     # return fraction > nextfloat(1.0)
 end
 
+# @inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size)
+#     n_bodies = 0
+#     for i_element in 1:size(cumulative_octant_census, 1)
+#         n = cumulative_octant_census[i_element,end]
+#         n_bodies += n
+#     end
+#
+#     return n_bodies > maximum(leaf_size)
+# end
+
 @inline function get_child_center(parent_center, parent_target_box::SVector, i_octant)
     delta = parent_target_box[1] * 0.5
     i_octant -= 1

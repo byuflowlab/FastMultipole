@@ -3,17 +3,17 @@
 function get_max_expansion_order(ε_abs, multipole_threshold, max_expansion_order, target_systems, source_systems;
         target_buffers, source_buffers, target_small_buffers, source_small_buffers,
         shrink_recenter, lamb_helmholtz,
+        leaf_size_source, Pstart,
         scalar_potential, velocity, velocity_gradient,
     )
 
-    leaf_size_source = default_leaf_size(source_systems)
     reached_max_expansion_order = false
 
-    for expansion_order in 4:3:max_expansion_order
+    for expansion_order in Pstart:3:max_expansion_order
 
         t_fmm = @elapsed optargs, _, _, _, _, _, error_success = fmm!(target_systems, source_systems;
                                                      target_buffers, source_buffers, target_small_buffers, source_small_buffers,
-                                                     expansion_order, ε_abs, multipole_threshold,
+                                                     expansion_order, ε_abs, multipole_threshold, leaf_size_source,
                                                      shrink_recenter, lamb_helmholtz,
                                                      scalar_potential, velocity, velocity_gradient,
                                                      update_target_systems=false, tune=true
@@ -69,21 +69,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
     if verbose
         println("\n#======= Begin FastMultipole.autotune!() =======#")
-        # println("\n\tpredicting max velocity...")
     end
-
-    # reset!(target_systems)
-    # fmm!(target_systems, source_systems;
-    #      expansion_order=1, leaf_size_source=SVector{length(source_systems)}()
-    #      lamb_helmholtz, ε_abs, tune=true,
-    #      scalar_potential, velocity, velocity_gradient)
-
-    # max_velocity = zero(eltype(target_systems[1]))
-    # for system in target_systems
-    #     for i in 1:get_n_bodies(system)
-    #         max_velocity = max(max_velocity, norm(system[i, Velocity()]))
-    #     end
-    # end
 
     #--- preallocate buffers ---#
 
@@ -104,6 +90,9 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
     expansion_orders = Vector{Int}(undef, length(multipole_thresholds))
     ts_fmm = @MVector zeros(length(multipole_thresholds))
 
+    #--- other variables ---#
+    leaf_size_source = default_leaf_size(source_systems)
+
     for (i_mt, multipole_threshold) in enumerate(multipole_thresholds)
         if verbose
             println("\n\ttuning multipole_threshold = $multipole_threshold...")
@@ -117,6 +106,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                 get_max_expansion_order(ε_abs, multipole_threshold, max_expansion_order, target_systems, source_systems;
                                          target_buffers, source_buffers, target_small_buffers, source_small_buffers,
                                          shrink_recenter, lamb_helmholtz,
+                                         Pstart=4, leaf_size_source,
                                          scalar_potential, velocity, velocity_gradient,
                                         )
 
@@ -139,9 +129,10 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
         #--- tune expansion order and leaf size ---#
 
-        if error_success
-            # get expansion order now that leaf_size has been chosen
-            _ = @elapsed optargs, _ =
+        # double check expansion order now that leaf_size has been chosen
+        error_success = false
+        while !error_success && expansion_order < max_expansion_order
+            _ = @elapsed optargs, _, _, _, _, _, error_success =
                 fmm!(target_systems, source_systems;
                     source_buffers, target_buffers,
                     source_small_buffers, target_small_buffers,
@@ -150,11 +141,28 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                     scalar_potential, velocity, velocity_gradient,
                     tune=true, update_target_systems=false
                 )
-                expansion_order = optargs.expansion_order
+            expansion_order = optargs.expansion_order
+            leaf_size_source= optargs.leaf_size_source
+        end
+
+        # one more run just in case
+        _ = @elapsed optargs, _, _, _, _, _, error_success =
+            fmm!(target_systems, source_systems;
+                source_buffers, target_buffers,
+                source_small_buffers, target_small_buffers,
+                multipole_threshold, leaf_size_source,
+                expansion_order, ε_abs, lamb_helmholtz,
+                scalar_potential, velocity, velocity_gradient,
+                tune=true, update_target_systems=false
+            )
+        expansion_order = optargs.expansion_order
+        leaf_size_source= optargs.leaf_size_source
+
+        if error_success
 
             #--- benchmark with tuned parameters ---#
 
-            t_fmm = @elapsed _, _, _, m2l_list, direct_list, _, error_success = fmm!(target_systems, source_systems;
+            t_fmm = @elapsed optargs, _, _, m2l_list, direct_list, _, error_success = fmm!(target_systems, source_systems;
                     source_buffers, target_buffers,
                     source_small_buffers, target_small_buffers,
                     multipole_threshold, leaf_size_source,
@@ -165,13 +173,13 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
             leaf_size_sources[i_mt] = leaf_size_source
             expansion_orders[i_mt] = expansion_order
-            ts_fmm[i_mt] = t_fmm
+            ts_fmm[i_mt] = error_success ? t_fmm : Inf
 
         else
 
-            leaf_size_sources[i_mt] = default_leaf_size(source_systems)
+            leaf_size_sources[i_mt] = leaf_size_source
             expansion_orders[i_mt] = max_expansion_order
-            ts_fmm[i_mt] = maxintfloat()
+            ts_fmm[i_mt] = Inf
             if verbose
                 println("\n\terror tolerance not reached for max_expansion_order=$max_expansion_order;")
                 println("\tskipping this multipole_threshold\n")
@@ -195,7 +203,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
 
     #--- compile tuned parameters ---#
 
-    _, i = findmin(ts_fmm)
+    t_opt, i = findmin(ts_fmm)
     leaf_size_source = leaf_size_sources[i]
     expansion_order = expansion_orders[i]
     multipole_threshold = multipole_thresholds[i]
@@ -222,6 +230,6 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
     end
 
 
-    return tuned_params
+    return tuned_params, t_opt
 end
 
