@@ -95,7 +95,7 @@ masses = Gravitational(bodies)
 expansion_order = 24
 multipole_threshold = 0.5
 
-fmm!(masses; expansion_order, multipole_threshold, lamb_helmholtz=false)
+fmm!(masses; expansion_order, multipole_threshold, lamb_helmholtz=false, scalar_potential=true)
 u_fmm = masses.potential[1,:]
 
 masses.potential .= 0.0
@@ -351,7 +351,7 @@ vortex_particles.velocity_stretching .*= 0
 
 # run fmm
 multipole_threshold = 0.7
-tree, m2l_list, direct_list, derivatives_switches = fmm!((vortex_particles,); expansion_order, leaf_size_source, multipole_threshold, shrink_recenter=true, lamb_helmholtz=true, scalar_potential=false)
+tree, m2l_list, direct_list, derivatives_switches = fmm!((vortex_particles,); expansion_order, leaf_size_source, multipole_threshold, shrink_recenter=true, lamb_helmholtz=true, scalar_potential=false, velocity_gradient=true)
 update_velocity_stretching!(vortex_particles)
 
 # test velocity
@@ -435,7 +435,7 @@ leaf_size = SVector{1}(1)
 source_tree = FastMultipole.Tree((vortex_particles,), false; expansion_order, leaf_size, shrink_recenter=false)
 target_tree = FastMultipole.Tree((vortex_particles,), true; expansion_order, leaf_size, shrink_recenter=false)
 
-m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!((vortex_particles,), target_tree, (vortex_particles,), source_tree; expansion_order, multipole_threshold=0.8, lamb_helmholtz=true, scalar_potential=false)
+m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!((vortex_particles,), target_tree, (vortex_particles,), source_tree; expansion_order, multipole_threshold=0.8, lamb_helmholtz=true, scalar_potential=false, velocity_gradient=true)
 
 update_velocity_stretching!(vortex_particles)
 
@@ -466,27 +466,27 @@ FastMultipole.direct!(system)
 validation_potential = system.potential[1,:]
 
 system.potential .= zero(eltype(system.potential))
-optargs, _ = FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshold, shrink_recenter, lamb_helmholtz=false)
+optargs, _ = FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshold, shrink_recenter, lamb_helmholtz=false, scalar_potential=true)
 potential3 = system.potential[1,:]
 @test isapprox(maximum(abs.(potential3 - validation_potential)), 0.0; atol=1e-10)
 
 system.potential .= zero(eltype(system.potential))
-FastMultipole.fmm!((system,); expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, lamb_helmholtz=false)
+FastMultipole.fmm!((system,); expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, lamb_helmholtz=false, scalar_potential=true)
 potential4 = system.potential[1,:]
 @test isapprox(maximum(abs.(potential4 - validation_potential)), 0.0; atol=1e-10)
 
 system.potential .= zero(eltype(system.potential))
-FastMultipole.fmm!(system, system; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, lamb_helmholtz=false)
+FastMultipole.fmm!(system, system; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, lamb_helmholtz=false, scalar_potential=true)
 potential5 = system.potential[1,:]
 @test isapprox(maximum(abs.(potential5 - validation_potential)), 0.0; atol=1e-10)
 
 system.potential .= zero(eltype(system.potential))
-FastMultipole.fmm!((system,), system; expansion_order, leaf_size_source, multipole_threshold, shrink_recenter, lamb_helmholtz=false)
+FastMultipole.fmm!((system,), system; expansion_order, leaf_size_source, multipole_threshold, shrink_recenter, lamb_helmholtz=false, scalar_potential=true)
 potential6 = system.potential[1,:]
 @test isapprox(maximum(abs.(potential6 - validation_potential)), 0.0; atol=1e-10)
 
 system.potential .= zero(eltype(system.potential))
-FastMultipole.fmm!((system,), (system,); expansion_order, leaf_size_source, multipole_threshold, shrink_recenter, lamb_helmholtz=false)
+FastMultipole.fmm!((system,), (system,); expansion_order, leaf_size_source, multipole_threshold, shrink_recenter, lamb_helmholtz=false, scalar_potential=true)
 potential7 = system.potential[1,:]
 @test isapprox(maximum(abs.(potential7 - validation_potential)), 0.0; atol=1e-10)
 

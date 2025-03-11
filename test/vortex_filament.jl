@@ -7,6 +7,11 @@ struct VortexFilaments{TF}
     gradient::Vector{SMatrix{3,3,TF,9}}
 end
 
+function VortexFilaments(filaments::VortexFilaments)
+    core_size = fill(1e-3, length(filaments.potential))
+    return VortexFilaments(filaments.x, filaments.strength, core_size, filaments.potential, filaments.force, filaments.gradient)
+end
+
 function viz(fname, vortex_filaments::VortexFilaments)
     # create points
     pts = zeros(3, length(vortex_filaments.strength)+1)

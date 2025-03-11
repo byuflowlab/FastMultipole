@@ -218,7 +218,8 @@ function get_radius(source_buffer::Matrix, i_body)
 end
 
 function get_strength(source_buffer, source_system, i_body::Int)
-    strength = SVector{strength_dims(source_system)}(view(source_buffer, 5:4+strength_dims(source_system), i_body))
+    dim = strength_dims(source_system)
+    strength = SVector{dim, eltype(source_buffer)}(source_buffer[4+i, i_body] for i in 1:dim)
     return strength
 end
 
