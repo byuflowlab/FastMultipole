@@ -374,11 +374,12 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
     # preallocate here for debugging only
     ε_mp, ε_l = zero(r), zero(r)
-    ϕn1_real, ϕn1_imag, ϕn0_real = zero(r), zero(r), zero(r)
+    # ϕn1_real, ϕn1_imag, ϕn0_real = zero(r), zero(r), zero(r)
 
     # perform computation
     n = 1
 
+    #=
     # rotate about z axis
     eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
 
@@ -402,9 +403,10 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         n += 1
         np1! *= n+1
     end
+    =#
 
-    # n>1
-    for _ in 2:expansion_order+1
+    # n>0
+    for _ in 1:expansion_order
 
         # rotate about z axis
         eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
@@ -447,14 +449,14 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
             # check total error
             if ε_mp + ε_l <= ε_abs
-                return n-1, true
+                return n, true
             end
         end
 
         # recurse
-        if n < expansion_order + 1 # if statement ensures that n == 1 + desired P
+        if n < expansion_order # if statement ensures that n == desired P
                                    # when tolerance is reached (breaks the loop early)
-                                   # or that n == 1 + Pmax when tolerance is not reached
+                                   # or that n == Pmax when tolerance is not reached
             n!_t_np1 *= (n+1) * rinv
             r_l_nm1 *= r_l
             r_mp_inv_np2 *= r_mp_inv
@@ -467,11 +469,11 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
     end
 
     if WARNING_FLAG_ERROR[]
-        @warn "Error tolerance $(ε_abs * ONE_OVER_4π) not reached! Using max expansion order P=$(n-1).\n\tε_mp = $ε_mp, \n\tε_l = $ε_l"
+        @warn "Error tolerance $(ε_abs * ONE_OVER_4π) not reached! Using max expansion order P=$(n).\n\tε_mp = $ε_mp, \n\tε_l = $ε_l"
         WARNING_FLAG_ERROR[] = false
     end
 
-    return n-1, false
+    return n, false
 end
 
 """
