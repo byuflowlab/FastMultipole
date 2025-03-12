@@ -377,9 +377,9 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
     # ϕn1_real, ϕn1_imag, ϕn0_real = zero(r), zero(r), zero(r)
 
     # perform computation
-    n = 1
 
     #=
+    n = 0
     # rotate about z axis
     eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
 
@@ -404,6 +404,8 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         np1! *= n+1
     end
     =#
+
+    n = 1
 
     # n>0
     for _ in 1:expansion_order
