@@ -96,8 +96,8 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     n_sources = sum(source_branch.n_bodies)
 
     # too close for M2L, and source is a leaf OR target is not a leaf and is bigger or the same size, so subdivide targets
-    # if source_branch.n_branches == 0 || (n_targets >= n_sources && target_branch.n_branches != 0)
-    if source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0)
+    if source_branch.n_branches == 0 || (n_targets >= n_sources && target_branch.n_branches != 0)
+    # if source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0)
 
         for i_child in target_branch.branch_index
             build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
