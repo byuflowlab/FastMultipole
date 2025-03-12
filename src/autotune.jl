@@ -8,17 +8,17 @@ function leaf_size_converged(optargs, leaf_size_source)
     return converged
 end
 
-tune_fmm!(system; kwargs...) = tune_fmm!(system, system; kwargs...)
+tune_fmm(system; kwargs...) = tune_fmm(system, system; kwargs...)
 
-function tune_fmm!(target_systems, source_systems; kwargs...)
+function tune_fmm(target_systems, source_systems; kwargs...)
     # promote arguments to Tuples
     target_systems = to_tuple(target_systems)
     source_systems = to_tuple(source_systems)
 
-    return tune_fmm!(target_systems, source_systems; kwargs...)
+    return tune_fmm(target_systems, source_systems; kwargs...)
 end
 
-function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
+function tune_fmm(target_systems::Tuple, source_systems::Tuple;
     ε_abs=nothing,
     expansion_order=4, leaf_size_source=default_leaf_size(source_systems),
     max_expansion_order=20, max_iter=10,
