@@ -97,7 +97,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                                                                                         expansion_order,
                                                                                         leaf_size_source, multipole_threshold,
                                                                                         ε_abs, kwargs..., cache...,
-                                                                                        tune=true
+                                                                                        tune=true, update_target_systems=false
                                                                                        )
 
             # save leaf size
@@ -108,7 +108,7 @@ function tune_fmm!(target_systems::Tuple, source_systems::Tuple;
                                                                                         expansion_order,
                                                                                         leaf_size_source, multipole_threshold,
                                                                                         ε_abs, kwargs..., cache...,
-                                                                                        tune=true
+                                                                                        tune=true, update_target_systems=false
                                                                                        )
             if error_success # (loosely) converged
 
