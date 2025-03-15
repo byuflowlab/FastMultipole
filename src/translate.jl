@@ -297,20 +297,19 @@ function translate_multipole_to_local_z_m01_n(source_weights, t, one_over_t, ::V
     return ϕn0_real, ϕn1_real, ϕn1_imag, χn1_real, χn1_imag
 end
 
-function multipole_to_local!(target_weights, target_branch::Branch{TF}, source_weights, source_branch, expansion_order, lamb_helmholtz, ε) where TF
-    error_check = !isnothing(ε)
-    weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
-    weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
-    Ts = zeros(TF, length_Ts(expansion_order + error_check))
-    eimϕs = zeros(TF, 2, expansion_order+1+error_check)
+function multipole_to_local!(target_weights, target_branch::Branch{TF}, source_weights, source_branch, expansion_order, lamb_helmholtz, ε; bonus_expansion::Bool=true) where TF
+    weights_tmp_1 = initialize_expansion(expansion_order, TF)
+    weights_tmp_2 = initialize_expansion(expansion_order, TF)
+    Ts = zeros(TF, length_Ts(expansion_order))
+    eimϕs = zeros(TF, 2, expansion_order+1)
 
-    return multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε)
+    return multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε; bonus_expansion)
 end
 
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε::Nothing) where LH
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε::Nothing; bonus_expansion::Bool=true) where LH
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
@@ -343,7 +342,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, true
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs) where LH
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs; bonus_expansion::Bool=true) where LH
 
     #--- initialize recursive values ---#
 
@@ -451,7 +450,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
             # check total error
             if ε_mp + ε_l <= ε_abs
-                return n, true
+                return n-1+bonus_expansion, true
             end
         end
 
@@ -481,7 +480,7 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε_abs) where LH
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ε_abs; bonus_expansion::Bool=true) where LH
     # temporary error variables
     ε_abs *= 4π # multiply from the RHS of the inequality to reduce computational cost
 
@@ -498,7 +497,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs)
+    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs; bonus_expansion)
 
     #------- translate multipole to local expansion -------#
 
@@ -522,8 +521,8 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
 end
 
 "defaults to no error prediction"
-multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz) =
-    multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, nothing)
+multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz; bonus_expansion::Bool=true) =
+    multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, nothing; bonus_expansion)
 
 #------- LOCAL TO LOCAL -------#
 

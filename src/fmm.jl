@@ -595,7 +595,7 @@ end
 #     return εs_obs, εs_pred
 # end
 
-function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=false) where {TF1,TF2}
+function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs; bonus_expansion::Bool=true, verbose=false) where {TF1,TF2}
 
     TF = promote_type(TF1, TF2)
 
@@ -613,7 +613,7 @@ function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree
         target_expansion = view(target_tree.expansions, :, :, :, i_target)
         source_branch = source_tree.branches[j_source]
         source_expansion = view(source_tree.expansions, :, :, :, j_source)
-        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
+        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs; bonus_expansion)
         Pmax = max(P, Pmax)
         # Ps[i] = P
         error_success = error_success && this_error_success
@@ -1009,7 +1009,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
     tune=false, update_target_systems=true, multipole_threshold=0.5,
-    t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0
+    t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
+    bonus_expansion::Bool=true
 )
 
     # check if systems are empty
@@ -1084,6 +1085,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                         end
                         t_direct[i_source_system] /= n_interactions
                     end
+                    @show n_interactions
                 end
 
                 # farfield computations
@@ -1096,7 +1098,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 Pmax = 0
                 error_success = true
                 if horizontal_pass
-                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=horizontal_pass_verbose)
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=horizontal_pass_verbose, bonus_expansion)
                 end
                 if !error_success
                     Pmax += 1

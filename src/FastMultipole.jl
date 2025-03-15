@@ -106,7 +106,7 @@ export SortWrapper
 
 include("interaction_list.jl")
 
-export EqualSpheres, UnequalSpheres, UnequalBoxes, UniformUnequalSpheres, UniformUnequalBoxes, UniformCubes, UniformCubesVelocity, Dynamic, build_interaction_lists
+export build_interaction_lists
 
 include("fmm.jl")
 
@@ -114,7 +114,7 @@ export InteractionList, fmm!
 
 include("autotune.jl")
 
-export tune_fmm!
+export tune_fmm
 
 include("visualize.jl")
 

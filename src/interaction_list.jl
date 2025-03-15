@@ -37,7 +37,7 @@ function build_interaction_lists_barba!(m2l_list, direct_list, i_target, j_sourc
 
     # both are leaves, so direct!
     if source_branch.n_branches == target_branch.n_branches == 0
-        nf && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
+        (nf || (i_target==j_source && si)) && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
         return nothing
     end
 
