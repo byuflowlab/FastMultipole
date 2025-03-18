@@ -14,7 +14,7 @@ end
 
 mean(x) = sum(x) / length(x)
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+function build_interaction_lists_barba!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
@@ -57,7 +57,7 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
 
 end
 
-function build_interaction_lists_ryan!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
