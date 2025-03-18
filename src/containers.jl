@@ -136,6 +136,10 @@ struct RotatedCoefficients <: ErrorMethod end
 
 struct TraditionalDynamicP{ε_abs} end
 
+import Base.*
+
+*(a::TraditionalDynamicP{ε_abs}, b::Real) where ε_abs = TraditionalDynamicP{ε_abs * b}()
+
 #------- octree creation -------#
 
 """
