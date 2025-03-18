@@ -481,9 +481,9 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
     #--- use Pringle's method for choosing the expansion order ---#
 
-    A = source_weights[1,1,1]
+    A = abs(source_weights[1,1,1])
     c = r_mp / a
-    P = Int(ceil(log(A / ((c-1) * c * a * ε_abs)))) - 1
+    P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1)
 
     #--- initialize recursive values ---#
 
