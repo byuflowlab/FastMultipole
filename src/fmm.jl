@@ -1085,7 +1085,6 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                         end
                         t_direct[i_source_system] /= n_interactions
                     end
-                    @show n_interactions
                 end
 
                 # farfield computations

@@ -342,7 +342,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, true
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs; bonus_expansion::Bool=true) where LH
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs, a; bonus_expansion::Bool=true) where LH
 
     #--- initialize recursive values ---#
 
@@ -477,6 +477,84 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
     return n, false
 end
 
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ::TraditionalDynamicP{ε_abs}, a; bonus_expansion::Bool=true) where {LH, ε_abs}
+
+    #--- use Pringle's method for choosing the expansion order ---#
+
+    A = source_weights[1,1,1]
+    c = r_mp / a
+    P = Int(ceil(log(A / ((c-1) * c * a * ε_abs)))) - 1
+
+    #--- initialize recursive values ---#
+
+    rinv = one(r) / r
+    r_mp_inv = one(r_mp) / r_mp
+    r_mp_inv_np2 = r_mp_inv * r_mp_inv * r_mp_inv
+    r_l_inv = one(r_l) / r_l
+    r_l_nm1 = one(r_l)
+
+    #--- n = 0 coefficients ---#
+
+    # rotate about z axis
+    eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag = rotate_z_0!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
+
+    # get y-axis Wigner rotation matrix
+    sβ, cβ, _1_n = update_Ts_0!(Ts, Hs_π2, θ, expansion_order)
+
+    # perform rotation
+    i_ζ, i_T = _rotate_multipole_y_n!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, lamb_helmholtz, 0, 0, 0)
+
+    # (can't predict error yet, as we need degree n+1 coefficients)
+    # preallocate recursive values
+    n!_t_np1 = rinv * rinv
+    nm1!_inv = 1.0
+    np1! = 2.0
+
+    #--- n > 0 and error predictions ---#
+
+    n = 1
+
+    # n>0
+    for _ in 1:P
+
+        # rotate about z axis
+        eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
+
+        # get y-axis Wigner rotation matrix
+        _1_n = update_Ts_n!(Ts, Hs_π2, sβ, cβ, _1_n, n)
+
+        # perform rotation about the y axis
+        # NOTE: the method used here results in an additional rotatation of π about the new z axis
+        i_ζ, i_T = _rotate_multipole_y_n!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, lamb_helmholtz, i_ζ, i_T, n)
+
+        # check multipole error
+        in0 = (n*(n+1))>>1 + 1
+        ϕn0 = weights_tmp_2[1,1,in0]
+        ϕn1_real = weights_tmp_2[1,1,in0+1]
+        ϕn1_imag = weights_tmp_2[2,1,in0+1]
+        if LH
+            χn1_real = weights_tmp_2[1,2,in0+1]
+            χn1_imag = weights_tmp_2[2,2,in0+1]
+        end
+
+        # recurse
+        if n < expansion_order # if statement ensures that n == desired P
+                                   # when tolerance is reached (breaks the loop early)
+                                   # or that n == Pmax when tolerance is not reached
+            n!_t_np1 *= (n+1) * rinv
+            r_l_nm1 *= r_l
+            r_mp_inv_np2 *= r_mp_inv
+            nm1!_inv /= n
+
+            # increment n
+            n += 1
+            np1! *= n+1
+        end
+    end
+
+    return P, true
+end
+
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
@@ -497,7 +575,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs; bonus_expansion)
+    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs, source_branch.source_radius; bonus_expansion)
 
     #------- translate multipole to local expansion -------#
 

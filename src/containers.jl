@@ -132,6 +132,10 @@ struct UniformUnequalBoxes <: ErrorMethod end
 
 struct RotatedCoefficients <: ErrorMethod end
 
+#------- dynamic expansion order -------#
+
+struct TraditionalDynamicP{ε_abs} end
+
 #------- octree creation -------#
 
 """
