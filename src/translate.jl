@@ -483,7 +483,9 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
     A = abs(source_weights[1,1,1])
     c = r_mp / a
-    P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1)
+    P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1), expansion_order
+    error_success = P <= expansion_order
+    P = min(P, expansion_order)
 
     #--- initialize recursive values ---#
 
@@ -552,7 +554,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
         end
     end
 
-    return P, true
+    return P, error_success
 end
 
 """
