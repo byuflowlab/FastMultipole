@@ -119,23 +119,9 @@ function execute_assignment!(target_systems, target_branches, derivatives_switch
     end
 end
 
-function nearfield_multithread!(systems, branches, derivatives_switch, direct_list, n_threads)
-    if n_threads == 1 # single thread
-
-        nearfield_singlethread!(systems, branches, derivatives_switch, direct_list)
-
-    else # multithread
-
-        _nearfield_multithread!(target_system, target_branches, derivatives_switch, source_system, source_branches, direct_list, n_threads)
-
-    end
-
-    return nothing
-end
-
-function _nearfield_multithread!(target_system, target_branches, derivatives_switch, source_systems::Tuple, source_branches, direct_list, n_threads)
+function nearfield_multithread!(target_system, target_branches, derivatives_switch, source_systems::Tuple, source_branches, direct_list, n_threads)
     for (i_source_system, source_system) in enumerate(source_systems)
-        _nearfield_multithread!(target_system, target_branches, derivatives_switch, source_system, i_source_system, source_branches, direct_list, n_threads)
+        nearfield_multithread!(target_system, target_branches, derivatives_switch, source_system, i_source_system, source_branches, direct_list, n_threads)
     end
 end
 
@@ -1069,6 +1055,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
         else # use CPU
 
+            # single threaded
             if n_threads == 1
 
                 # perform nearfield calculations
@@ -1133,9 +1120,25 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                     expansion_order = Pmax
                 end
 
+            # multithreaded
             else
 
-                nearfield && nearfield_multithread!(systems, tree.branches, derivatives_switches, direct_list, n_threads)
+                # perform nearfield calculations
+                t_direct = nearfield_multithread!(target_tree.buffers, target_tree.branches, source_systems, source_tree.buffers, source_tree.branches, derivatives_switches, direct_list)
+
+                # check number of interactions
+                if tune
+                    n_interactions = 0
+                    for i_source_system in eachindex(source_systems)
+                        for (i_target, i_source) in direct_list
+                            source_branch = source_tree.branches[i_source]
+                            target_branch = target_tree.branches[i_target]
+                            n_interactions += source_branch.n_bodies[i_source_system] * sum(target_branch.n_bodies)
+                        end
+                        t_direct[i_source_system] /= n_interactions
+                    end
+                end
+
                 upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads_2)
                 horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads)
                 downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads)
