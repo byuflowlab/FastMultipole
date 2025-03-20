@@ -483,7 +483,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
 
     A = abs(source_weights[1,1,1])
     c = min(r_mp / a, r / a - 1.0) # choose multipole or local error
-    P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1), expansion_order
+    P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1)
     error_success = P <= expansion_order
     P = min(P, expansion_order)
 
