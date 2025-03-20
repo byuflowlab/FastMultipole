@@ -1,20 +1,20 @@
 #--- create interaction lists ---#
 
-function build_interaction_lists(target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+function build_interaction_lists(target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method::InteractionListMethod=SelfTuning())
 
     # prepare containers
     m2l_list = Vector{SVector{2,Int32}}(undef,0)
     direct_list = Vector{SVector{2,Int32}}(undef,0)
 
     # populate lists
-    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_size, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced))
+    build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_size, multipole_threshold, Val(farfield), Val(nearfield), Val(self_induced), method)
 
     return m2l_list, direct_list
 end
 
 mean(x) = sum(x) / length(x)
 
-function build_interaction_lists_barba!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, method::Barba) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
@@ -45,19 +45,19 @@ function build_interaction_lists_barba!(m2l_list, direct_list, i_target, j_sourc
     if source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0)
 
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method)
         end
 
     # source is not a leaf AND target is a leaf or is smaller, so subdivide source branch
     else
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method)
         end
     end
 
 end
 
-function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}) where {ff,nf,si}
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, method::SelfTuning) where {ff,nf,si}
     # unpack
     source_branch = source_branches[j_source]
     target_branch = target_branches[i_target]
@@ -100,14 +100,14 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     # if source_branch.n_branches == 0 || (target_branch.target_radius >= source_branch.source_radius && target_branch.n_branches != 0)
 
         for i_child in target_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method)
         end
 
     # source is not a leaf AND target is a leaf or is smaller, so subdivide source
     else
 
         for j_child in source_branch.branch_index
-            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced)
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method)
         end
 
     end

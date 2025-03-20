@@ -477,15 +477,20 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
     return n, false
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ::TraditionalDynamicP{ε_abs}, a; bonus_expansion::Bool=true) where {LH, ε_abs}
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ::Pringle{ε_abs}, a; bonus_expansion::Bool=true) where {LH, ε_abs}
 
-    #--- use Pringle's method for choosing the expansion order ---#
+    #--- use Pringle's method for choosing the expansion order, adapted to be an absolute error tolerance ---#
 
     A = abs(source_weights[1,1,1])
-    c = r_mp / a
+    c = min(r_mp / a, r / a - 1.0) # choose multipole or local error
     P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1), expansion_order
     error_success = P <= expansion_order
     P = min(P, expansion_order)
+
+    if !error_success && WARNING_FLAG_ERROR[]
+        @warn "Error tolerance $(ε_abs * ONE_OVER_4π) not reached! Using max expansion order P=$(n)."
+        WARNING_FLAG_ERROR[] = false
+    end
 
     #--- initialize recursive values ---#
 

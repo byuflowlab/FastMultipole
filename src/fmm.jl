@@ -930,7 +930,9 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     leaf_size_source=default_leaf_size(source_systems), multipole_threshold=0.4,
     scalar_potential=false, velocity=true, velocity_gradient=false,
     farfield=true, nearfield=true, self_induced=true,
+    interaction_list_method::InteractionListMethod=SelfTuning(),
     t_source_tree=0.0, t_target_tree=0.0,
+
     optargs...
 )
 
@@ -943,7 +945,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
-    t_lists = @elapsed m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced)
+    t_lists = @elapsed m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced, interaction_list_method)
 
     # run fmm
     return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches; multipole_threshold, t_source_tree, t_target_tree, t_lists, optargs...)

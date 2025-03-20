@@ -134,11 +134,19 @@ struct RotatedCoefficients <: ErrorMethod end
 
 #------- dynamic expansion order -------#
 
-struct TraditionalDynamicP{ε_abs} end
+struct Pringle{ε_abs} end
 
 import Base.*
 
-*(a::TraditionalDynamicP{ε_abs}, b::Real) where ε_abs = TraditionalDynamicP{ε_abs * b}()
+*(a::Pringle{ε_abs}, b::Real) where ε_abs = Pringle{ε_abs * b}()
+
+#------- interaction list -------#
+
+abstract type InteractionListMethod end
+
+struct Barba <: InteractionListMethod end
+
+struct SelfTuning <: InteractionListMethod end
 
 #------- octree creation -------#
 
