@@ -134,7 +134,7 @@ struct RotatedCoefficients <: ErrorMethod end
 
 #------- dynamic expansion order -------#
 
-struct Pringle{ε_abs} end
+struct UpperBound{ε_abs} end
 
 import Base.*
 
