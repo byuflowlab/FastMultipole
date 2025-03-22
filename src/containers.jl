@@ -138,7 +138,7 @@ struct UpperBound{ε_abs} end
 
 import Base.*
 
-*(a::Pringle{ε_abs}, b::Real) where ε_abs = Pringle{ε_abs * b}()
+*(a::UpperBound{ε_abs}, b::Real) where ε_abs = UpperBound{ε_abs * b}()
 
 #------- interaction list -------#
 
