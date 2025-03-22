@@ -342,7 +342,16 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, true
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ε_abs, a; bonus_expansion::Bool=true) where LH
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, ε_abs, source_center, source_box, source_radius, target_center, target_box, target_radius; bonus_expansion::Bool=true) where LH
+
+    #--- distance information ---#
+
+    # multipole error location
+    Δx, Δy, Δz = minimum_distance(source_center, target_center, target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+
+    # local error location
+    r_l = target_radius
 
     #--- initialize recursive values ---#
 
@@ -477,18 +486,71 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
     return n, false
 end
 
-function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, r_mp, r_l, ::Pringle{ε_abs}, a; bonus_expansion::Bool=true) where {LH, ε_abs}
+function multipole_upper_bound(A, r, ρ, expansion_order, ε_tol)
+    inv_r = 1 / r
+    rho_by_r = ρ * inv_r
+    base_factor = A * inv_r / ((r - ρ) * (r - ρ))
 
-    #--- use Pringle's method for choosing the expansion order, adapted to be an absolute error tolerance ---#
+    power_term = rho_by_r * rho_by_r # Start with the first power of (ρ / r)^(p+1)
+    for P in 1:expansion_order
+        linear_term = (P + 1) * ρ - (P + 2) * r
+        err_ub = base_factor * power_term * linear_term
+
+        if abs(err_ub) < ε_tol
+            return P, true
+        end
+
+        # Update power_term for the next iteration (recursive multiplication)
+        power_term *= rho_by_r
+    end
+    return expansion_order, false
+end
+
+function local_upper_bound(A, r, ρ, expansion_order, ε_tol)
+    inv_ρ = 1 / ρ
+    inv_diff = 1 / (ρ - r)
+    r_by_ρ = r * inv_ρ
+    base_factor = A * inv_diff
+    power_term = r_by_ρ  # Start with the first power of (r / ρ)
+
+    for P in 1:expansion_order
+        linear_term = (P + 1) * inv_ρ + inv_diff * r_by_ρ
+        err_ub = base_factor * power_term * linear_term
+
+        if err_ub < ε_tol
+            return P, true
+        end
+
+        # Update power_term for the next iteration
+        power_term *= r_by_ρ
+    end
+    return expansion_order, false
+end
+
+function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, ::UpperBound{ε_abs}, source_center, source_box, source_radius, target_center, target_box, target_radius; bonus_expansion::Bool=true) where {LH, ε_abs}
+
+    #--- distance information ---#
+
+    # multipole error location
+    Δx, Δy, Δz = minimum_distance(source_center, target_center, target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+    ρ_max = source_radius
+
+    # local error location
+    r_l = target_radius
+    Δx, Δy, Δz = minimum_distance(target_center, source_center, source_box)
+    ρ_min = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+
+    #--- differentiate Pringle's method to predict the norm velocity error ---#
 
     A = abs(source_weights[1,1,1])
-    c = min(r_mp / a, r / a - 1.0) # choose multipole or local error
-    P = max(Int(ceil(log(c, A / ((c-1) * a * ε_abs)))) - 1, 1)
-    error_success = P <= expansion_order
-    P = min(P, expansion_order)
+    P_mp, error_success_mp = multipole_upper_bound(A, r_mp, ρ_max, expansion_order, ε_abs)
+    P_l, error_success_l = local_upper_bound(A, r_l, ρ_min, expansion_order, ε_abs)
+    P = max(P_mp, P_l)
+    error_success = error_success_mp && error_success_l
 
-    if !error_success && WARNING_FLAG_ERROR[]
-        @warn "Error tolerance $(ε_abs * ONE_OVER_4π) not reached! Using max expansion order P=$(n)."
+    if !(error_success) && WARNING_FLAG_ERROR[]
+        @warn "Error tolerance $(ε_abs * ONE_OVER_4π) not reached! Using max expansion order P=$(expansion_order)."
         WARNING_FLAG_ERROR[] = false
     end
 
@@ -574,15 +636,22 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
     # multipole error location
-    Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
-    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+    # Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
+    # r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
 
-    # local error location
-    r_l = sum(target_branch.target_box) * 0.33333333333333333333 * sqrt(3)
+    # # local error location
+    # r_l = sum(target_branch.target_box) * 0.33333333333333333333 * sqrt(3)
+
+    source_center = source_branch.source_center
+    source_box = source_branch.source_box
+    source_radius = source_branch.source_radius
+    target_center = target_branch.target_center
+    target_box = target_branch.target_box
+    target_radius = target_branch.target_radius
 
     #------- rotate multipole coefficients (and determine P) -------#
 
-    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, r_mp, r_l, ε_abs, source_branch.source_radius; bonus_expansion)
+    expansion_order, error_success = dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz, r, θ, ϕ, ε_abs, source_center, source_box, source_radius, target_center, target_box, target_radius; bonus_expansion)
 
     #------- translate multipole to local expansion -------#
 
