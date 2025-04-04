@@ -5,6 +5,7 @@ this file is used to generate Figure 4 in the paper (examples_verify_combined.pd
 using FastMultipole
 using Statistics
 using Random
+using BSON
 
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
@@ -118,7 +119,7 @@ v_source_mean = mean(v_source_mag)
 
 #--- FMM for combined systems ---#
 
-expansion_orders = collect(1:3)
+expansion_orders = collect(1:15)
 max_errs_source_combined, max_errs_vortex_combined, ts_combined,
     max_errs_source_individual, max_errs_vortex_individual, ts_source, ts_vortex = benchmark_system(source, vortex, expansion_orders)
 println("max_errs_source_combined: ", max_errs_source_combined)
@@ -128,3 +129,7 @@ println("max_errs_source_individual: ", max_errs_source_individual)
 println("max_errs_vortex_individual: ", max_errs_vortex_individual)
 println("ts_source: ", ts_source)
 println("ts_vortex: ", ts_vortex)
+
+#--- save results ---#
+
+BSON.@save "results/20250404_combined_source_vortex.bson" max_errs_source_combined max_errs_vortex_combined ts_combined max_errs_source_individual max_errs_vortex_individual ts_source ts_vortex expansion_orders
