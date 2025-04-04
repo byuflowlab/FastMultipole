@@ -32,7 +32,7 @@ function Gravitational(bodies::Matrix)
 end
 
 function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_scale=1/n_bodies, distribution=Distributions.Uniform{Float64}(0,1), bodies_fun=(x)->x)
-    Random.seed!(123)
+    Random.seed!(seed)
     bodies = rand(distribution,8,n_bodies)
     bodies[4,:] ./= (n_bodies^(1/3)*2)
     bodies[4,:] .*= radius_factor
