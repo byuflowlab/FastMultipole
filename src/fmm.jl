@@ -1110,7 +1110,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                         #--- compute optimal leaf_size_source ---#
 
                         # t per m2l transformation
-                        t_m2l += t_up + t_dp + t_target_tree + t_source_tree + t_lists
+                        # t_m2l += t_up + t_dp + t_target_tree + t_source_tree + t_lists
                         t_m2l /= length(m2l_list)
 
                         # t_per_interaction * LS^2 = t_per_m2l

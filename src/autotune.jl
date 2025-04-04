@@ -36,6 +36,7 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
     expansion_order_best = max_expansion_order
     leaf_size_source_best = leaf_size_source
     multipole_threshold_best = multipole_thresholds[1]
+    original_max_expansion_order = max_expansion_order
 
     #--- preallocate cache ---#
 
@@ -53,7 +54,7 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
             println("\nmultipole_threshold = $multipole_threshold...")
         end
 
-        # initial fmm! call with max_expansion_order to get expansion order
+        # initial fmm! call with max_expansion_order to get leaf_size
         t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems;
                                                                                 expansion_order=isnothing(ε_abs) ? expansion_order : max_expansion_order,
                                                                                 leaf_size_source, multipole_threshold,
@@ -68,14 +69,51 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
             continue
         end
 
-        # track the best parameters for this multipole_threshold
-        this_t_fmm_best = Inf
-        this_expansion_order_best = max_expansion_order
-        this_leaf_size_source_best = leaf_size_source
+        leaf_size_source = optargs.leaf_size_source
+        this_max_expansion_order = optargs.expansion_order + 2
 
+        # second fmm! call with optimal leaf_size to get expansion order
+        t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems;
+                                                                                 expansion_order=isnothing(ε_abs) ? expansion_order : this_max_expansion_order,
+                                                                                 leaf_size_source, multipole_threshold,
+                                                                                 ε_abs, kwargs..., cache...,
+                                                                                 tune=true, update_target_systems=false,
+                                                                                )
+
+        if !error_success # better run at the actual max_expansion_order
+            max_expansion_order = original_max_expansion_order
+            t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems;
+                                                                                     expansion_order=isnothing(ε_abs) ? expansion_order : max_expansion_order,
+                                                                                     leaf_size_source, multipole_threshold,
+                                                                                     ε_abs, kwargs..., cache...,
+                                                                                     tune=true, update_target_systems=false,
+                                                                                    )
+
+        end
+
+        expansion_order = optargs.expansion_order
+
+        # final benchmark
+        t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems;
+                                                                                 expansion_order,
+                                                                                 leaf_size_source, multipole_threshold,
+                                                                                 ε_abs, kwargs..., cache...,
+                                                                                 tune=true, update_target_systems=false,
+                                                                                )
+
+        # track the best parameters for this multipole_threshold
+        if t_fmm < t_fmm_best
+            t_fmm_best = t_fmm
+            expansion_order_best = expansion_order
+            leaf_size_source_best = leaf_size_source
+            multipole_threshold_best = multipole_threshold
+        end
+
+        #=
         # iterate to (loose) convergence
         i = 1
         for _ in 1:max_iter
+            println("\t~~~ iteration $i ~~~")
 
             # in case m2l list is empty (direct calculation is probably best)
             if length(m2l_list) == 0 # likely won't get much better
@@ -112,9 +150,14 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
                                                                                        )
             if error_success # (loosely) converged
 
-                # check if this is our best yet
+                # check if this is our best yet for this MAC
+                if t_fmm < this_t_fmm_best
+                    this_t_fmm_best = t_fmm
+                end
+
+                # check if this is our best yet for all MAC's
                 if t_fmm < t_fmm_best
-                    this_t_fmm_best = t_fmm_best = t_fmm
+                    t_fmm_best = t_fmm
                     this_leaf_size_source_best = leaf_size_source_best = leaf_size_source
                     this_expansion_order_best = expansion_order_best = expansion_order
                     multipole_threshold_best = multipole_threshold
@@ -125,15 +168,14 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
 
             i += 1
         end
+        =#
 
         if verbose
             println("\n\tBest Parameters: ")
-            println("\t\tleaf_size_source:    ", this_leaf_size_source_best)
-            println("\t\texpansion_order:     ", this_expansion_order_best)
+            println("\t\tleaf_size_source:    ", leaf_size_source)
+            println("\t\texpansion_order:     ", expansion_order)
             println("\t\tmultipole_threshold: ", multipole_threshold)
-            println("\t\tcost:                $this_t_fmm_best seconds")
-            println("\t\titerations:          ", i)
-            println("\t\toptargs:             ", optargs)
+            println("\t\tcost:                $t_fmm seconds")
         end
 
     end
