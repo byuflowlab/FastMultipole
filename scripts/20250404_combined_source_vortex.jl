@@ -68,8 +68,9 @@ function benchmark_system(source, vortex, expansion_orders)
         t_source_2 = @elapsed fmm!((source, vortex), source; lamb_helmholtz=false, expansion_order, leaf_size_source=optargs.leaf_size_source, source_cache...)
         push!(ts_source, min(t_source_1, t_source_2))
         
-        # save leaf size
-        source_leaf_size_source = optargs.leaf_size_source
+        # save velocity
+        v_source_fmm_source = get_velocity(source)
+        v_vortex_fmm_source = get_velocity(vortex)
 
         # benchmark FMM vortex
         println("\n\tbegin vortex")
@@ -79,13 +80,10 @@ function benchmark_system(source, vortex, expansion_orders)
         reset!(vortex)
         t_vortex_2 = @elapsed fmm!((source, vortex), vortex; lamb_helmholtz=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache...)
         push!(ts_vortex, min(t_vortex_1, t_vortex_2))
-        
-        # add source contribution
-        fmm!((source, vortex), source; lamb_helmholtz=false, expansion_order, leaf_size_source=source_leaf_size_source, source_cache...)
 
         # calculate errors
-        v_source_fmm = get_velocity(source)
-        v_vortex_fmm = get_velocity(vortex)
+        v_source_fmm = get_velocity(source) .+ v_source_fmm_source
+        v_vortex_fmm = get_velocity(vortex) .+ v_vortex_fmm_source
         err_source = maximum(sqrt.(sum((v_source_fmm - v_source_direct) .^2; dims=1)))
         err_vortex = maximum(sqrt.(sum((v_vortex_fmm - v_vortex_direct) .^2; dims=1)))
         push!(max_errs_source_individual, err_source)
@@ -120,7 +118,7 @@ v_source_mean = mean(v_source_mag)
 
 #--- FMM for combined systems ---#
 
-expansion_orders = collect(1:15)
+expansion_orders = collect(1:3)
 max_errs_source_combined, max_errs_vortex_combined, ts_combined,
     max_errs_source_individual, max_errs_vortex_individual, ts_source, ts_vortex = benchmark_system(source, vortex, expansion_orders)
 println("max_errs_source_combined: ", max_errs_source_combined)
@@ -130,15 +128,3 @@ println("max_errs_source_individual: ", max_errs_source_individual)
 println("max_errs_vortex_individual: ", max_errs_vortex_individual)
 println("ts_source: ", ts_source)
 println("ts_vortex: ", ts_vortex)
-
-#--- save results ---#
-
-open("20250404_combined_source_vortex.csv", "w") do io
-    write(io, "max_errs_source_combined: ", max_errs_source_combined, "\n")
-    write(io, "max_errs_vortex_combined: ", max_errs_vortex_combined, "\n")
-    write(io, "ts_combined: ", ts_combined, "\n")
-    write(io, "max_errs_source_individual: ", max_errs_source_individual, "\n")
-    write(io, "max_errs_vortex_individual: ", max_errs_vortex_individual, "\n")
-    write(io, "ts_source: ", ts_source, "\n")
-    write(io, "ts_vortex: ", ts_vortex, "\n")
-end
