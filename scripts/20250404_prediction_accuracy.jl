@@ -66,7 +66,8 @@ function test_accuracy(target_systems::Tuple, source_systems::Tuple, expansion_o
         # get leaf size
         optargs, cache, _ = fmm!(target_systems, source_systems; lamb_helmholtz=lamb_helmholtz_bool, expansion_order, multipole_threshold, nearfield=false, farfield=false, self_induced=false)
         # leaf_size_source = optargs.leaf_size_source
-        leaf_size_source = SVector{length(source_systems)}(leaf_size for _ in eachindex(source_systems))
+        # leaf_size_source = SVector{length(source_systems)}(leaf_size for _ in eachindex(source_systems))
+        leaf_size_source = leaf_size
         leaf_size_target = FastMultipole.to_vector(minimum(leaf_size_source), length(target_systems))
 
         # build trees
@@ -184,9 +185,15 @@ vortex = generate_vortex(123, n_bodies; strength_scale=1.0/10566.33461495282)
 
 #--- check error prediction ---#
 
-expansion_orders = 5:5
+expansion_orders = 1:15
 multipole_threshold = 0.5
-lamb_helmholtz = false
 shrink_recenter = true
-leaf_size = 50
+leaf_size = SVector{1}(50)
+
+lamb_helmholtz = false
 max_errs_list, ε_mp_hat_list, ε_l_hat_list, ε_hat_list = test_accuracy((source,), (source,), expansion_orders, multipole_threshold, lamb_helmholtz, shrink_recenter, leaf_size)
+BSON.@save "20250404_prediction_accuracy_source.bson" max_errs_list, ε_mp_hat_list, ε_l_hat_list, ε_hat_list, expansion_orders, multipole_threshold, leaf_size
+
+lamb_helmholtz = true
+max_errs_list, ε_mp_hat_list, ε_l_hat_list, ε_hat_list = test_accuracy((vortex,), (vortex,), expansion_orders, multipole_threshold, lamb_helmholtz, shrink_recenter, leaf_size)
+BSON.@save "20250404_prediction_accuracy_vortex.bson" max_errs_list, ε_mp_hat_list, ε_l_hat_list, ε_hat_list, expansion_orders, multipole_threshold, leaf_size
