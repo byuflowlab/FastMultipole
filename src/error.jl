@@ -353,3 +353,67 @@ function total_error(local_branch, multipole_branch, i_source_branch, expansions
     return ε_multipole + ε_local
 end
 
+#------- try more efficient error predictors -------#
+
+"""
+performs a partial M2L for expansion_order+1, and predicts the error along the way;
+
+expects that the upward pass has been performed up to expansion_order+1
+"""
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
+    # translation vector
+    Δx = target_branch.target_center - source_branch.source_center
+    r, θ, ϕ = cartesian_to_spherical(Δx)
+
+    #--- rotate coordinate system ---#
+
+    # rotate about z axis
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order+1, lamb_helmholtz)
+
+    # rotate about y axis
+    # NOTE: the method used here results in an additional rotatation of π about the new z axis
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order+1, lamb_helmholtz)
+
+    #--- multipole error prediction ---#
+
+    i = (expansion_order+1)*(expansion_order+2) >> 1 + 1
+    ϕn0 = weights_tmp_2[1,1,i]
+    ϕn1_real = weights_tmp_2[1,1,i+1]
+    ϕn1_imag = weights_tmp_2[2,1,i+1]
+    fact = factorial(expansion_order+2)
+    Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+    rpow = r_mp^(expansion_order+2)
+    ε_mp = (sqrt(ϕn1_real * ϕn1_real + ϕn1_imag * ϕn1_imag) + abs(ϕn0)) * fact / (rpow * r_mp)
+    if LH
+        χn1_real = weights_tmp_2[1,2,i+1]
+        χn1_imag = weights_tmp_2[2,2,i+1]
+        ε_mp += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * fact / rpow
+    end
+    ε_mp *= ONE_OVER_4π
+
+    #--- translate along new z axis ---#
+
+    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order+1, lamb_helmholtz)
+
+    #--- transform Lamb-Helmholtz decomposition for the new center ---#
+
+    LH && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order+1)
+
+    #--- local error prediction ---#
+
+    ϕn0_real = weights_tmp_1[1,1,i]
+    ϕn1_real = weights_tmp_1[1,1,i+1]
+    ϕn1_imag = weights_tmp_1[2,1,i+1]
+    χn1_real = weights_tmp_1[1,2,i+1]
+    χn1_imag = weights_tmp_1[2,2,i+1]
+    fact = factorial(expansion_order)
+    r_l = target_branch.target_radius
+    r_l_pow = r_l^expansion_order
+    ε_l = (abs(ϕn1_real) + abs(ϕn1_imag) + abs(ϕn0_real)) * r_l_pow / fact
+    if LH
+        ε_l += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * r_l_pow * r_l / fact
+    end
+
+    return ε_mp, ε_l
+end
