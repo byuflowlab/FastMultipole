@@ -109,7 +109,7 @@ export build_interaction_lists
 
 include("fmm.jl")
 
-export InteractionList, fmm!
+export InteractionList, fmm!, SelfTuning, Barba
 
 include("autotune.jl")
 
