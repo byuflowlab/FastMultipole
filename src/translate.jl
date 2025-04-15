@@ -458,7 +458,7 @@ function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_
             end
 
             # check total error
-            if ε_mp + ε_l <= ε_abs
+            if ε_mp + ε_l * LOCAL_ERROR_SAFETY <= ε_abs
                 return n-1+bonus_expansion, true
             end
         end
