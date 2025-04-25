@@ -379,6 +379,12 @@ function reset!(systems::Tuple)
     end
 end
 
+function reset!(small_buffers::Vector{<:Matrix})
+    for buffer in small_buffers
+        buffer .= 0.0
+    end
+end
+
 function reset!(system::Matrix)
     system[4:16, :] .= zero(eltype(system))
 end

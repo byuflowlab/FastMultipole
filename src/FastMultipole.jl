@@ -71,6 +71,9 @@ WARNING_FLAG_B2M[] = true
 const WARNING_FLAG_DIRECT = Array{Bool,0}(undef)
 WARNING_FLAG_DIRECT[] = true
 
+const WARNING_FLAG_LH_POTENTIAL = Array{Bool,0}(undef)
+WARNING_FLAG_LH_POTENTIAL[] = true
+
 #------- HEADERS AND EXPORTS -------#
 
 include("containers.jl")

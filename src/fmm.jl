@@ -833,7 +833,7 @@ function warn_scalar_potential_with_lh(derivatives_switches::Tuple, lamb_helmhol
     for switch in derivatives_switches
         success = success && warn_scalar_potential_with_lh(switch, lamb_helmholtz)
     end
-    if !success
+    if WARNING_FLAG_LH_POTENTIAL[] && !success
         @warn "\nScalar potential was requested with lamb_helmholtz=$lamb_helmholtz; this may result in nonsensical potential predictions.\n"
     end
 end
@@ -999,7 +999,36 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     nearfield_device::Bool=false,
     tune=false, update_target_systems=true, multipole_threshold=0.5,
     t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
+    silence_warnings=false,
 )
+
+    #--- silence warnings ---#
+
+    if silence_warnings
+        WARNING_FLAG_LEAF_SIZE[] = false
+        WARNING_FLAG_PMAX[] = false
+        WARNING_FLAG_ERROR[] = false
+        WARNING_FLAG_SCALAR_POTENTIAL[] = false
+        WARNING_FLAG_VECTOR_POTENTIAL[] = false
+        WARNING_FLAG_VELOCITY[] = false
+        WARNING_FLAG_VELOCITY_GRADIENT[] = false
+        WARNING_FLAG_STRENGTH[] = false
+        WARNING_FLAG_B2M[] = false
+        WARNING_FLAG_DIRECT[] = false
+        WARNING_FLAG_LH_POTENTIAL[] = false
+    else
+        WARNING_FLAG_LEAF_SIZE[] = true
+        WARNING_FLAG_PMAX[] = true
+        WARNING_FLAG_ERROR[] = true
+        WARNING_FLAG_SCALAR_POTENTIAL[] = true
+        WARNING_FLAG_VECTOR_POTENTIAL[] = true
+        WARNING_FLAG_VELOCITY[] = true
+        WARNING_FLAG_VELOCITY_GRADIENT[] = true
+        WARNING_FLAG_STRENGTH[] = true
+        WARNING_FLAG_B2M[] = true
+        WARNING_FLAG_DIRECT[] = true
+        WARNING_FLAG_LH_POTENTIAL[] = true
+    end
 
     #--- estimate influence for relative error tolerance ---#
 
@@ -1010,9 +1039,6 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     n_source_bodies = get_n_bodies(source_systems)
 
     if n_target_bodies > 0 && n_source_bodies > 0
-
-        # reset flags
-        WARNING_FLAG_ERROR[] = true
 
         # check that lamb_helmholtz and ScalarPotential are not both true
         warn_scalar_potential_with_lh(derivatives_switches, lamb_helmholtz)
@@ -1177,24 +1203,101 @@ end
 
 #--- estimate influence for relative error tolerance ---#
 
+@inline function get_influence(system::Matrix, j, ::Union{PowerRelativeVelocity, RotatedCoefficientsRelativeVelocity})
+    vx, vy, vz = get_velocity(system, j)
+    return sqrt(vx*vx + vy*vy + vz*vz)
+end
+
+@inline function get_influence(system::Matrix, j, ::PowerRelativePotential)
+    return get_scalar_potential(system, j)
+end
+
 function estimate_influence!(target_systems, target_tree, source_systems, source_tree, ε_tol::Union{Nothing, AbsoluteError}; optargs...)
     return nothing
 end
 
 function estimate_influence!(target_systems, target_tree, source_systems, source_tree, ε_tol::RelativeError; nearfield_device=false, shrink_recenter=true)
 
-    # run FMM with very fast parameters for a low-order estimate of the influence
-    fmm!(target_systems, source_systems; 
-        target_buffers = target_tree.buffers, target_small_buffers = target_tree.small_buffers,
-        source_buffers = source_tree.buffers, source_small_buffers = source_tree.small_buffers,
+    #--- low-order estimate for relative error tolerance ---#
+
+    _, _, estimate_tree, _ = fmm!(target_systems, source_systems; 
         scalar_potential = true, velocity = true, velocity_gradient = false,
         leaf_size_source = to_vector(5, length(source_systems)),
-        expansion_order = 1, multipole_threshold = 0.8,
+        expansion_order = 3, multipole_threshold = 0.6,
         ε_tol = nothing, shrink_recenter, nearfield_device,
-        update_target_systems = false
+        update_target_systems = false,
+        silence_warnings = true
     )
 
-    # update target branches
-    # for 
+    #--- update target buffers ---#
 
+    for (i_system, (buffer, estimate)) in enumerate(zip(target_tree.buffers, estimate_tree.buffers))
+        
+        # loop over estimate bodies
+        for j_estimate in 1:get_n_bodies(buffer)
+
+            # get estimate body index
+            j_system = sorted_index_2_unsorted_index(j_estimate, i_system, estimate_tree)
+
+            # get buffer index
+            j_buffer = unsorted_index_2_sorted_index(j_system, i_system, target_tree)
+
+            # check that we have the right body
+            @assert get_position(buffer, j_buffer) == get_position(estimate, j_estimate)
+
+            # update influence
+            set_scalar_potential!(buffer, j_buffer, get_scalar_potential(estimate, j_estimate))
+            set_velocity!(buffer, j_buffer, get_velocity(estimate, j_estimate))
+
+        end        
+    end
+
+    #--- update target branches ---#
+
+    # loop over target buffers
+    for (i_system, system) in enumerate(target_tree.buffers)
+
+        # loop over target branches
+        for (i, branch) in enumerate(target_tree.branches)
+            
+            # extract branch info
+            n_bodies = branch.n_bodies
+            bodies_index = branch.bodies_index
+            n_branches = branch.n_branches
+            branch_index = branch.branch_index
+            i_parent = branch.i_parent
+            i_leaf = branch.i_leaf
+            source_center = branch.source_center
+            target_center = branch.target_center
+            source_radius = branch.source_radius
+            target_radius = branch.target_radius
+            source_box = branch.source_box
+            target_box = branch.target_box
+            lock = branch.lock
+            max_influence = branch.max_influence
+
+            # loop over bodies 
+            for j in branch.bodies_index[i_system]
+                influence = get_influence(system, j, ε_tol)
+                max_influence = max(max_influence, influence)
+            end
+
+            # replace branch
+            target_tree.branches[i] = typeof(branch)(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, 
+                source_center, target_center, source_radius, target_radius, source_box, target_box, lock, max_influence)
+        end
+    end
+
+    #--- reset buffers ---#
+
+    reset!(target_tree.buffers)
+    reset!(target_tree.small_buffers)
+
+    if DEBUG[]
+        maxinf = [target_tree.branches[j].max_influence * (j in target_tree.leaf_index) for j in 1:length(target_tree.branches)]
+        i_max = findfirst(x -> x == maximum(maxinf), maxinf)
+        @info "Max influence found at branch $(i_max): bodies index: $(target_tree.branches[i_max].bodies_index), max_influence: $(maximum(maxinf))"
+
+        @show mean(maxinf) maximum(maxinf) minimum(maxinf)
+    end
 end
