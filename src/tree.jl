@@ -276,7 +276,7 @@ function branch!(buffer, small_buffer, sort_index, octant_container, sort_index_
         i_leaf_index = -1
     end
 
-    return Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order), n_children, i_leaf
+    return Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box), n_children, i_leaf
 end
 
 function index_in(bodies_indices, checks)
@@ -284,14 +284,6 @@ function index_in(bodies_indices, checks)
         check && length(bodies_index) > 0 && (return true)
     end
     return false
-end
-
-function Branch(bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, expansion_order)
-
-    n_bodies = SVector{length(bodies_index), Int}(length(bodies_i) for bodies_i in bodies_index)
-
-    # return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), initialize_expansion(expansion_order, typeof(source_radius)), ReentrantLock())
-    return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, ReentrantLock())
 end
 
 # @inline get_body_positions(system, bodies_index::UnitRange) = (system[i,Position()] for i in bodies_index)
@@ -1090,7 +1082,8 @@ end
     # local_expansion = branch.local_expansion
     # harmonics = branch.harmonics
     lock = branch.lock
-    branches[i_branch] = TB(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, lock)
+    max_influence = branch.max_influence
+    branches[i_branch] = TB(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, lock, max_influence)
 end
 
 # @inline function replace_branch!(branches::Vector{TB}, i_branch, new_charge, new_dipole) where TB

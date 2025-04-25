@@ -153,12 +153,12 @@ leaf_size = SVector{1}(1)
 x_branch_1 = SVector{3}([0.0,0,0])
 bounding_box = SVector{3}(0.0,0,0)
 
-branch_1 = FastMultipole.Branch(SVector{1}(2), SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, ReentrantLock())
+branch_1 = FastMultipole.Branch(SVector{1}(2), SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box)
 x_branch_2 = FastMultipole.SVector{3}(xs[:,1] .+ [0.01, 0.02, -0.03])
-branch_2 = FastMultipole.Branch(SVector{1}(1), SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, ReentrantLock())
+branch_2 = FastMultipole.Branch(SVector{1}(1), SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box)
 multipole_coefficients_2 = FastMultipole.initialize_expansion(expansion_order)
 x_branch_3 = FastMultipole.SVector{3}(xs[:,2] .+ [0.02, -0.04, 0.01])
-branch_3 = FastMultipole.Branch(SVector{1}(1), SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, ReentrantLock())
+branch_3 = FastMultipole.Branch(SVector{1}(1), SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box)
 multipole_coefficients_3 = FastMultipole.initialize_expansion(expansion_order)
 
 # using FMM
@@ -186,6 +186,7 @@ Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
+weights_tmp_3 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
 ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
@@ -193,8 +194,8 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-FastMultipole.multipole_to_local!(local_coefficients_2, tree.branches[2], multipole_coefficients_3, tree.branches[3], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
-FastMultipole.multipole_to_local!(local_coefficients_3, tree.branches[3], multipole_coefficients_2, tree.branches[2], weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(local_coefficients_2, tree.branches[2], multipole_coefficients_3, tree.branches[3], weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(local_coefficients_3, tree.branches[3], multipole_coefficients_2, tree.branches[2], weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
 velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
 
@@ -279,13 +280,13 @@ leaf_size_source = SVector{1}(1)
 x_branch_1 = SVector{3}((bodies[1:3,1] + bodies[1:3,2])/2)
 bounding_box = SVector{3}(0.0,0,0)
 
-branch_1 = FastMultipole.Branch(SVector{1}(2), SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box, ReentrantLock())
+branch_1 = FastMultipole.Branch(SVector{1}(2), SVector{1}([1:2]), 2, 2:3, 0, -1, x_branch_1, x_branch_1, 1/8, 1/8, bounding_box, bounding_box)
 x_branch_2 = SVector{3}(bodies[1:3,1])# .+ [0.01, 0.02, -0.03])
 multipole_coefficients_2 = FastMultipole.initialize_expansion(expansion_order)
-branch_2 = FastMultipole.Branch(SVector{1}(1), SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box, ReentrantLock())
+branch_2 = FastMultipole.Branch(SVector{1}(1), SVector{1}([1:1]), 0, 3:2, 1, 1, x_branch_2, x_branch_2, 1/8, 1/8, bounding_box, bounding_box)
 x_branch_3 = SVector{3}(bodies[1:3,2])# .+ [0.02, -0.04, 0.01])
 multipole_coefficients_3 = FastMultipole.initialize_expansion(expansion_order)
-branch_3 = FastMultipole.Branch(SVector{1}(1), SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box, ReentrantLock())
+branch_3 = FastMultipole.Branch(SVector{1}(1), SVector{1}([2:2]), 0, 3:2, 1, 2, x_branch_3, x_branch_3, 1/8, 1/8, bounding_box, bounding_box)
 
 dummy_index = (zeros(Int,length(vortex_particles.bodies)),)
 dummy_leaf_index = collect(1:3)
@@ -307,6 +308,7 @@ Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+2)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
+weights_tmp_3 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
 ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
@@ -316,8 +318,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(true)
 
 # translate multipoles
-FastMultipole.multipole_to_local!(local_coefficients_2, branch_2, multipole_coefficients_3, branch_3, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
-FastMultipole.multipole_to_local!(local_coefficients_3, branch_3, multipole_coefficients_2, branch_2, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(local_coefficients_2, branch_2, multipole_coefficients_3, branch_3, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(local_coefficients_3, branch_3, multipole_coefficients_2, branch_2, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
 # evaluate multipoles
 velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)

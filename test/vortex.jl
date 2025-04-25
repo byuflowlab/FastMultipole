@@ -29,14 +29,15 @@ struct VortexParticles{TF}
     velocity_stretching::Matrix{TF}
 end
 
-function generate_vortex(seed, n_bodies; strength_scale=1/n_bodies)
+function generate_vortex(seed, n_bodies; strength_scale=1/n_bodies, radius_factor=0.0)
     Random.seed!(seed)
     position = rand(3, n_bodies)
+    radius = rand(n_bodies) .* radius_factor
     strength = 2 .* rand(3, n_bodies) .- 1.0
     strength .-= 0.5
     strength .*= 2
     strength .*= strength_scale
-    return VortexParticles(position, strength)
+    return VortexParticles(position, strength, radius)
 end
 
 function reset!(system::VortexParticles{TF}) where TF
@@ -168,14 +169,14 @@ function flatten_derivatives!(jacobian, hessian, derivatives_switch::Derivatives
 end
 
 
-function VortexParticles(position, strength;
+function VortexParticles(position, strength, radius=zeros(size(position,2));
     N = size(position)[2],
     potential = zeros(i_VELOCITY_GRADIENT_vortex[end],N),
     velocity_stretching = zeros(3+3,N),
 )
     @assert size(position)[1] == 3
     @assert size(strength)[1] == 3
-    bodies = [Vorton(SVector{3}(position[:,i]), SVector{3}(strength[:,i]), 0.0) for i in 1:size(position)[2]]
+    bodies = [Vorton(SVector{3}(position[:,i]), SVector{3}(strength[:,i]), radius[i]) for i in 1:size(position)[2]]
     return VortexParticles(bodies, potential, velocity_stretching)
 end
 

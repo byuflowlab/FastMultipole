@@ -360,10 +360,39 @@ performs a partial M2L for expansion_order+1, and predicts the error along the w
 
 expects that the upward pass has been performed up to expansion_order+1
 """
-function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}) where LH
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsolutePotential) where LH
+    
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
+
+    #--- multipole error prediction ---#
+    
+    # distance to closest point
+    Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+    
+    # check multipole magnitude
+    mp_power = 0.0
+    n=expansion_order+1
+    
+    # multipole power
+    i = (n*(n+1)) >> 1 + 1
+    for m in 0:n
+        # get Ñ 
+        Ñ = sqrt(4*pi*Float64(factorial(big(n+abs(m)))) * Float64(factorial(big(n-abs(m)))) / (2*n+1) )
+
+        # conservative multipole power
+        ϕnm_real = source_weights[1,1,i+m]
+        ϕnm_imag = source_weights[2,1,i+m]
+        mp_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * Ñ * Ñ
+    end
+    mp_power = sqrt(abs(mp_power))
+
+    # multipole power error prediction
+    nfact = Float64(factorial(big(n)))
+    Ñ0 = sqrt(4*pi*nfact * nfact / (2*n+1))
+    ε_mp_power = mp_power / Ñ0 * nfact / r_mp^(n+1)
 
     #--- rotate coordinate system ---#
 
@@ -373,24 +402,6 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
     # rotate about y axis
     # NOTE: the method used here results in an additional rotatation of π about the new z axis
     rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order+1, lamb_helmholtz)
-
-    #--- multipole error prediction ---#
-
-    i = (expansion_order+1)*(expansion_order+2) >> 1 + 1
-    ϕn0 = weights_tmp_2[1,1,i]
-    ϕn1_real = weights_tmp_2[1,1,i+1]
-    ϕn1_imag = weights_tmp_2[2,1,i+1]
-    fact = factorial(expansion_order+2)
-    Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
-    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
-    rpow = r_mp^(expansion_order+2)
-    ε_mp = (sqrt(ϕn1_real * ϕn1_real + ϕn1_imag * ϕn1_imag) + abs(ϕn0)) * fact / (rpow * r_mp)
-    if LH
-        χn1_real = weights_tmp_2[1,2,i+1]
-        χn1_imag = weights_tmp_2[2,2,i+1]
-        ε_mp += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * fact / rpow
-    end
-    ε_mp *= ONE_OVER_4π
 
     #--- translate along new z axis ---#
 
@@ -402,18 +413,147 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
 
     #--- local error prediction ---#
 
-    ϕn0_real = weights_tmp_1[1,1,i]
-    ϕn1_real = weights_tmp_1[1,1,i+1]
-    ϕn1_imag = weights_tmp_1[2,1,i+1]
-    χn1_real = weights_tmp_1[1,2,i+1]
-    χn1_imag = weights_tmp_1[2,2,i+1]
-    fact = factorial(expansion_order)
+    l_power = 0.0
+    n=expansion_order+1
+    
+    # multipole power
+    i = (n*(n+1)) >> 1 + 1
+    for m in 0:n
+        # get Ñ 
+        L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+        # conservative multipole power
+        ϕnm_real = weights_tmp_1[1,1,i+m]
+        ϕnm_imag = weights_tmp_1[2,1,i+m]
+        l_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * L̃ * L̃ * (2-(m==0))
+    end
+    l_power = sqrt(abs(l_power))
+
+    # local power error prediction
+    nfact = Float64(factorial(big(n)))
+    L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
     r_l = target_branch.target_radius
-    r_l_pow = r_l^expansion_order
-    ε_l = (abs(ϕn1_real) + abs(ϕn1_imag) + abs(ϕn0_real)) * r_l_pow / fact
+    ε_l_power = l_power / L̃0 / nfact * r_l^n
+
+    return ε_mp_power * ONE_OVER_4π, ε_l_power * ONE_OVER_4π
+end
+
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteVelocity) where LH
+    
+    # translation vector
+    Δx = target_branch.target_center - source_branch.source_center
+    r, θ, ϕ = cartesian_to_spherical(Δx)
+
+    #--- multipole error prediction ---#
+    
+    # distance to closest point
+    Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+    
+    # check multipole magnitude
+    mp_power = 0.0
+    n=expansion_order
+    
+    # multipole power
+    i = (n*(n+1)) >> 1 + 1
+    for m in 0:n
+        # get Ñ 
+        Ñ = sqrt(4*pi*Float64(factorial(big(n+abs(m)))) * Float64(factorial(big(n-abs(m)))) / (2*n+1) )
+
+        # conservative multipole power
+        ϕnm_real = source_weights[1,1,i+m]
+        ϕnm_imag = source_weights[2,1,i+m]
+        mp_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * Ñ * Ñ
+    end
+    mp_power = sqrt(abs(mp_power))
+
+    # multipole power error prediction
+    nfact = Float64(factorial(big(n)))
+    Ñ0 = sqrt(4*pi*nfact * nfact / (2*n+1))
+    ε_mp_power = mp_power / Ñ0 * nfact * (n+1) / r_mp^(n+2) * sqrt(3)
+
     if LH
-        ε_l += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * r_l_pow * r_l / fact
+        i = ((n+1)*(n+2)) >> 1 + 1
+        for m in 0:n
+            # get Ñ 
+            Ñ = sqrt(4*pi*Float64(factorial(big(n+abs(m)))) * Float64(factorial(big(n-abs(m)))) / (2*n+1) )
+    
+            # conservative multipole power
+            χnm_real = source_weights[1,2,i+m]
+            χnm_imag = source_weights[2,2,i+m]
+            mp_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * Ñ * Ñ
+        end
+        mp_power = sqrt(abs(mp_power))
+    
+        # multipole power error prediction
+        Ñ0 = sqrt(4*pi*nfact * nfact * (n+1) * (n+1) / (2*(n+1)+1))
+        ε_mp_power += mp_power / Ñ0 * nfact * (n+1) / r_mp^(n+2) * sqrt(3)
     end
 
-    return ε_mp, ε_l
+    #--- rotate coordinate system ---#
+
+    # rotate about z axis
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order+1, lamb_helmholtz)
+
+    # rotate about y axis
+    # NOTE: the method used here results in an additional rotatation of π about the new z axis
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order+1, lamb_helmholtz)
+
+    #--- translate along new z axis ---#
+
+    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order+1, lamb_helmholtz)
+
+    #--- transform Lamb-Helmholtz decomposition for the new center ---#
+
+    LH && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order+1)
+    
+    #--- local error prediction ---#
+    
+    l_power = 0.0
+    n=expansion_order + 1
+    
+    # local power
+    i = (n*(n+1)) >> 1 + 1
+    for m in 0:n
+        # de-normalization
+        L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+        # conservative local power
+        ϕnm_real = weights_tmp_1[1,1,i+m]
+        ϕnm_imag = weights_tmp_1[2,1,i+m]
+        l_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * L̃ * L̃ * (2-(m==0))
+    end
+    l_power = sqrt(abs(l_power))
+
+    # local power error prediction
+    nfact = Float64(factorial(big(n)))
+    L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
+    r_l = target_branch.target_radius
+    ε_l_power = l_power / L̃0 * r_l^(n-1) / nfact * n * sqrt(3)
+
+    if LH
+        
+        # local power
+        l_power = 0.0
+        i = (n*(n+1)) >> 1 + 1
+        for m in 0:n
+            # de-normalization
+            L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+            # conservative local power
+            χnm_real = weights_tmp_1[1,2,i+m]
+            χnm_imag = weights_tmp_1[2,2,i+m]
+            l_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * L̃ * L̃ * (1+(m>0))
+        end
+        l_power = sqrt(abs(l_power))
+
+        # local power error prediction
+        nfact = Float64(factorial(big(n)))
+        L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
+        r_l = target_branch.target_radius
+        ε_l_power += l_power / L̃0 * r_l^(n) / nfact * sqrt(3)
+
+    end
+
+    return ε_mp_power * ONE_OVER_4π, ε_l_power * ONE_OVER_4π
 end

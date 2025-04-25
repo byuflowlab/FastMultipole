@@ -122,6 +122,10 @@ struct ExpansionSwitch{SP,VP} end
 
 abstract type ErrorMethod end
 
+abstract type RelativeError <: ErrorMethod end
+
+abstract type AbsoluteError <: ErrorMethod end
+
 struct UnequalSpheres <: ErrorMethod end
 
 struct UnequalBoxes <: ErrorMethod end
@@ -134,11 +138,29 @@ struct RotatedCoefficients <: ErrorMethod end
 
 #------- dynamic expansion order -------#
 
-struct UpperBound{ε_abs} end
+struct AbsoluteUpperBound{ε} <: AbsoluteError end
+AbsoluteUpperBound(ε) = AbsoluteUpperBound{ε}()
 
-import Base.*
+struct PowerAbsolutePotential{ε,BE} <: AbsoluteError end
+PowerAbsolutePotential(ε, BE::Bool=true) = PowerAbsolutePotential{ε,BE}()
 
-*(a::UpperBound{ε_abs}, b::Real) where ε_abs = UpperBound{ε_abs * b}()
+struct PowerAbsoluteVelocity{ε,BE} <: AbsoluteError end
+PowerAbsoluteVelocity(ε, BE::Bool=true) = PowerAbsoluteVelocity{ε,BE}()
+
+struct RotatedCoefficientsAbsoluteVelocity{ε,BE} <: AbsoluteError end
+RotatedCoefficientsAbsoluteVelocity(ε, BE::Bool=true) = RotatedCoefficientsAbsoluteVelocity{ε,BE}()
+
+struct RelativeUpperBound{ε} <: RelativeError end
+RelativeUpperBound(ε) = RelativeUpperBound{ε}()
+
+struct PowerRelativePotential{ε,BE} <: RelativeError end
+PowerRelativePotential(ε, BE::Bool=true) = PowerRelativePotential{ε,BE}()
+
+struct PowerRelativeVelocity{ε,BE} <: RelativeError end
+PowerRelativeVelocity(ε, BE::Bool=true) = PowerRelativeVelocity{ε,BE}()
+
+struct RotatedCoefficientsRelativeVelocity{ε,BE} <: RelativeError end
+RotatedCoefficientsRelativeVelocity(ε, BE::Bool=true) = RotatedCoefficientsRelativeVelocity{ε,BE}()
 
 #------- interaction list -------#
 
@@ -193,11 +215,22 @@ struct Branch{TF,N}
     # local_expansion::Array{TF,3}     # local expansion coefficients
     # harmonics::Array{TF,3}
     lock::ReentrantLock
+    max_influence::TF
 end
 
-function Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, multipole_expansion, local_expansion, harmonics, lock) where TF
-    Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, multipole_expansion, local_expansion, harmonics, lock)
+# function Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, lock, max_influence=zero(TF)) where TF
+#     Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, lock, max_influence)
+# end
+
+function Branch(n_bodies::SVector{<:Any,Int64}, bodies_index, n_branches, branch_index, i_parent::Int, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box)
+    return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, ReentrantLock(), zero(target_radius))
 end
+
+function Branch(bodies_index::SVector{<:Any,UnitRange{Int64}}, args...)
+    n_bodies = SVector{length(bodies_index), Int}(length(bodies_i) for bodies_i in bodies_index)
+    return Branch(n_bodies, bodies_index, args...)
+end
+
 
 Base.eltype(::Branch{TF,<:Any}) where TF = TF
 

@@ -903,7 +903,7 @@ function local_check(x_target, dx_local, source_system::VortexParticles; seed=12
     weights_tmp_1 = initialize_expansion(expansion_order+10, Float64)
     weights_tmp_2 = initialize_expansion(expansion_order+10, Float64)
     velocity_n_m = zeros(2,3,size(target_branch.local_expansion,3))
-    FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, expansion_order+10, Val(true))
+    FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order+10, Val(true))
     _, v_l_check, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, velocity_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
 
     local_expansion_check = deepcopy(target_branch.local_expansion)

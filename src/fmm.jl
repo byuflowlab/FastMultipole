@@ -433,12 +433,12 @@ end
 
 #------- horizontal pass -------#
 
-# function horizontal_pass_debug!(target_system, target_branches::Vector{<:Branch{TF}}, source_system, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs; store="local", printstuff=74121) where TF
+# function horizontal_pass_debug!(target_system, target_branches::Vector{<:Branch{TF}}, source_system, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol; store="local", printstuff=74121) where TF
 #
-#     @assert isnothing(ε_abs) "ε_abs must be turned off for this function"
+#     @assert isnothing(ε_tol) "ε must be turned off for this function"
 #
-#     # increment the expansion order if ε_abs !== nothing
-#     error_check = !(isnothing(ε_abs))
+#     # increment the expansion order if ε !== nothing
+#     error_check = !(isnothing(ε))
 #
 #     # preallocate containers to be reused
 #     weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
@@ -465,7 +465,7 @@ end
 #         target_branch = deepcopy(target_branches[i_target])
 #         target_branch.local_expansion .= zero(TF)
 #         source_branch = source_branches[j_source]
-#         multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
+#         multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε)
 #
 #         # store previous potential/velocity
 #         old_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
@@ -581,13 +581,14 @@ end
 #     return εs_obs, εs_pred
 # end
 
-function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs; bonus_expansion::Bool=true, verbose=false) where {TF1,TF2}
+function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_tol; verbose=false) where {TF1,TF2}
 
     TF = promote_type(TF1, TF2)
 
     # preallocate containers to be reused
     weights_tmp_1 = initialize_expansion(expansion_order, TF)
     weights_tmp_2 = initialize_expansion(expansion_order, TF)
+    weights_tmp_3 = initialize_expansion(expansion_order, TF)
     Ts = zeros(TF, length_Ts(expansion_order))
     eimϕs = zeros(TF, 2, expansion_order + 1)
 
@@ -599,7 +600,7 @@ function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree
         target_expansion = view(target_tree.expansions, :, :, :, i_target)
         source_branch = source_tree.branches[j_source]
         source_expansion = view(source_tree.expansions, :, :, :, j_source)
-        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs; bonus_expansion)
+        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol)
         Pmax = max(P, Pmax)
         # Ps[i] = P
         error_success = error_success && this_error_success
@@ -617,13 +618,13 @@ function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree
     return Pmax, error_success
 end
 
-function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads) where {TF1, TF2}
+function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads) where {TF1, TF2}
 
     TF = promote_type(TF1, TF2)
 
     if n_threads == 1 # single thread
 
-        horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs)
+        horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol)
 
     else # multithread
 
@@ -632,14 +633,15 @@ function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree:
         rem > 0 && (n_per_thread += 1)
         assignments = 1:n_per_thread:length(m2l_list)
 
-        # increment the expansion order if ε_abs !== nothing
-        # error_check = !(isnothing(ε_abs))
+        # increment the expansion order if ε !== nothing
+        # error_check = !(isnothing(ε))
 
         # try preallocating one set of containers to be reused
         Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
         eimϕs = [zeros(TF, 2, expansion_order + 1) for _ in 1:n_threads]
         weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
         weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+        weights_tmp_3 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
 
         # execute tasks
         Threads.@threads for i_thread in 1:length(assignments)
@@ -647,7 +649,7 @@ function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree:
             i_stop = min(i_start+n_per_thread-1, length(m2l_list))
             for (i_target, j_source) in m2l_list[i_start:i_stop]
                 Threads.lock(target_tree.branches[i_target].lock) do
-                    multipole_to_local!(target_tree.branches[i_target], source_tree.branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_abs)
+                    multipole_to_local!(target_tree.branches[i_target], source_tree.branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], weights_tmp_3[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol)
                 end
             end
         end
@@ -910,7 +912,7 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     leaf_size_target=nothing,
     leaf_size_source=default_leaf_size(source_systems),
     expansion_order=5,
-    ε_abs=nothing,
+    ε_tol=nothing,
     shrink_recenter=true,
     optargs...
 )
@@ -923,7 +925,7 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     t_target_tree = @elapsed target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order, leaf_size=leaf_size_target, shrink_recenter)
     t_source_tree = @elapsed source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order, leaf_size=leaf_size_source, shrink_recenter)
 
-    return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_abs, t_source_tree, t_target_tree, optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_tol, t_source_tree, t_target_tree, optargs...)
 end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree;
@@ -932,7 +934,6 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     farfield=true, nearfield=true, self_induced=true,
     interaction_list_method::InteractionListMethod=SelfTuning(),
     t_source_tree=0.0, t_target_tree=0.0,
-
     optargs...
 )
 
@@ -990,16 +991,19 @@ Dispatches `fmm!` using existing `::Tree` objects. Note that systems should be u
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
 
 """
-function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree,  leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple;
-    expansion_order=5, ε_abs=nothing, lamb_helmholtz::Bool=true,
+function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree, leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple;
+    expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
     tune=false, update_target_systems=true, multipole_threshold=0.5,
     t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
-    bonus_expansion::Bool=true
 )
+
+    #--- estimate influence for relative error tolerance ---#
+
+    estimate_influence!(target_systems, target_tree, source_systems, source_tree, ε_tol; nearfield_device)
 
     # check if systems are empty
     n_target_bodies = get_n_bodies(target_systems)
@@ -1016,8 +1020,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         # wrap lamb_helmholtz in Val
         lamb_helmholtz = Val(lamb_helmholtz)
 
-        # increment the expansion order if ε_abs !== nothing
-        # error_check = !(isnothing(ε_abs))
+        # increment the expansion order if ε_tol !== nothing
+        # error_check = !(isnothing(ε_tol))
 
         # precompute y-axis rotation by π/2 matrices (if not already done)
         update_Hs_π2!(Hs_π2, expansion_order)
@@ -1045,7 +1049,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
             n_threads_multipole = n_threads == 1 ? n_threads : n_threads - 1
             t2 = Threads.@spawn begin
                     upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
-                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads_multipole)
+                    horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads_multipole)
 	                downward_pass && translate_locals_multithread!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
                 end
 
@@ -1086,7 +1090,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 Pmax = 0
                 error_success = true
                 if horizontal_pass
-                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_abs; verbose=horizontal_pass_verbose, bonus_expansion)
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_tol; verbose=horizontal_pass_verbose)
                 end
                 if !error_success
                     Pmax += 1
@@ -1142,7 +1146,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 end
 
                 upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads_2)
-                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_abs, n_threads)
+                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
                 downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads)
             end
 
@@ -1169,4 +1173,28 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
             )
 
     return optimized_args, cache, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success
+end
+
+#--- estimate influence for relative error tolerance ---#
+
+function estimate_influence!(target_systems, target_tree, source_systems, source_tree, ε_tol::Union{Nothing, AbsoluteError}; optargs...)
+    return nothing
+end
+
+function estimate_influence!(target_systems, target_tree, source_systems, source_tree, ε_tol::RelativeError; nearfield_device=false, shrink_recenter=true)
+
+    # run FMM with very fast parameters for a low-order estimate of the influence
+    fmm!(target_systems, source_systems; 
+        target_buffers = target_tree.buffers, target_small_buffers = target_tree.small_buffers,
+        source_buffers = source_tree.buffers, source_small_buffers = source_tree.small_buffers,
+        scalar_potential = true, velocity = true, velocity_gradient = false,
+        leaf_size_source = to_vector(5, length(source_systems)),
+        expansion_order = 1, multipole_threshold = 0.8,
+        ε_tol = nothing, shrink_recenter, nearfield_device,
+        update_target_systems = false
+    )
+
+    # update target branches
+    # for 
+
 end

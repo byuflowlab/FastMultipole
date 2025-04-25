@@ -528,6 +528,57 @@ function rotate_z_n!(rotated_weights, source_weights, eimϕs, eiϕ_real, eiϕ_im
 end
 
 """
+Performs a z-axis rotation of the supplied solid harmonic coefficients. Computes e^{imϕ} and the multipole power at n as well.
+"""
+function rotate_z_n_power!(rotated_weights, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, M̃L̃, ::Val{LH}, n) where LH
+
+    eimϕ_real, eimϕ_imag = update_eimϕs_n!(eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, n)
+
+    i_weight = (n * (n+1)) >> 1 + 1
+
+    # get M̃n0
+    M̃L̃n0 = M̃L̃[i_weight]
+
+    # initialize multipole power
+    power_ϕ = zero(eltype(source_weights))
+    power_χ = zero(eltype(source_weights))
+
+    @inbounds for m in 0:n
+        # get e^{imΔϕ}
+        eimϕ_real, eimϕ_imag = eimϕs[1,m+1], eimϕs[2,m+1]
+
+        # extract unrotated coefficients
+        Xnm_real, Xnm_imag = source_weights[1,1,i_weight], source_weights[2,1,i_weight]
+        
+        # calculate the multipole power
+        Ñ = M̃L̃[i_weight]
+        power_ϕ += (Xnm_real * Xnm_real + Xnm_imag * Xnm_imag) * Ñ * Ñ * (1 + m>0)
+        
+        # rotate coefficients
+        rotated_weights[1,1,i_weight] = Xnm_real * eimϕ_real - Xnm_imag * eimϕ_imag
+        rotated_weights[2,1,i_weight] = Xnm_real * eimϕ_imag + Xnm_imag * eimϕ_real
+        if LH
+            Xnm_real, Xnm_imag = source_weights[1,2,i_weight], source_weights[2,2,i_weight]
+            
+            # calculate the multipole power
+            power_χ += (Xnm_real * Xnm_real + Xnm_imag * Xnm_imag) * Ñ * Ñ * (1 + m>0)
+
+            # rotate coefficients
+            rotated_weights[1,2,i_weight] = Xnm_real * eimϕ_real - Xnm_imag * eimϕ_imag
+            rotated_weights[2,2,i_weight] = Xnm_real * eimϕ_imag + Xnm_imag * eimϕ_real
+        end
+
+        # increment index
+        i_weight += 1
+    end
+
+    power_ϕ = sqrt(power_ϕ)
+    power_χ = sqrt(power_χ)
+
+    return eimϕ_real, eimϕ_imag, power_ϕ, power_χ, M̃L̃n0
+end
+
+"""
 Assumes eimϕs have already been computed. DOES NOT overwrite rotated weights (unlike other rotate functions); rather, accumulates on top of it.
 """
 function back_rotate_z!(rotated_weights, source_weights, eimϕs, P, ::Val{LH}) where LH

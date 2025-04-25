@@ -9,7 +9,7 @@ local_weights_test = -ComplexF64[0.13461314440045802 + 3.3705354655561485e-19im,
 
 box = SVector{3}(0.0,0.0,0.0)
 
-branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.4, -4.199999999999999, 0.5]), SVector{3}([2.4, -4.199999999999999, 0.5]), 0.0, 0.0, box, box, expansion_order)
+branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.4, -4.199999999999999, 0.5]), SVector{3}([2.4, -4.199999999999999, 0.5]), 0.0, 0.0, box, box)
 local_expansion = FastMultipole.initialize_expansion(expansion_order)
 i_compressed, i = 1, 1
 for n in 0:expansion_order

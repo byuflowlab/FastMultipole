@@ -49,9 +49,9 @@ local_expansion_test = ComplexF64[0.12778297701518376 + 4.529876741832122e-19im,
 expansion_order = 10
 box = SVector{3}(0.0,0.0,0.0)
 
-source_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([0.2, 0.4, -0.15999999999999998]), SVector{3}([0.2, 0.4, -0.15999999999999998]), 0.0, 0.0, box, box, expansion_order)
+source_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([0.2, 0.4, -0.15999999999999998]), SVector{3}([0.2, 0.4, -0.15999999999999998]), 0.0, 0.0, box, box)
 multipole_expansion = FastMultipole.initialize_expansion(expansion_order)
-target_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.5, -4.3999999999999995, 0.8]), SVector{3}([2.5, -4.3999999999999995, 0.8]), 0.0, 0.0, box, box, expansion_order)
+target_branch = Branch(2:2, 0, 1:0, 0, 1, SVector{3}([2.5, -4.3999999999999995, 0.8]), SVector{3}([2.5, -4.3999999999999995, 0.8]), 0.0, 0.0, box, box)
 local_expansion = FastMultipole.initialize_expansion(expansion_order)
 
 i, i_compressed = 1, 1
@@ -73,6 +73,7 @@ Ts = zeros(FastMultipole.length_Ts(expansion_order))
 eimϕs = zeros(2, expansion_order+1)
 weights_tmp_1 = initialize_expansion(expansion_order, eltype(Ts))
 weights_tmp_2 = initialize_expansion(expansion_order, eltype(Ts))
+weights_tmp_3 = initialize_expansion(expansion_order, eltype(Ts))
 
 # normalization
 ζs_mag = zeros(FastMultipole.length_ζs(expansion_order))
@@ -82,7 +83,7 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
 # perform transformation
 lamb_helmholtz = Val(false)
-FastMultipole.multipole_to_local!(local_expansion, target_branch, multipole_expansion, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+FastMultipole.multipole_to_local!(local_expansion, target_branch, multipole_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
 i = 1
 i_compressed = 1

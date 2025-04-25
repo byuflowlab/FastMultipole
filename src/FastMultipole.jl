@@ -13,7 +13,8 @@ const ONE_OVER_4π = 1/(4*π)
 const ONE_THIRD = 1/3
 const π_over_2 = π/2
 const π2 = 2*π
-const LOCAL_ERROR_SAFETY = 8.0 # guess how many cells will contribute to the local error
+const SQRT3 = sqrt(3.0)
+const LOCAL_ERROR_SAFETY = 1.0 # guess how many cells will contribute to the local error
                                # NOTE: this doesn't apply to multipole error as that error is 
                                # highly localized and doesn't accumulate
 const DEBUG = Array{Bool,0}(undef)
@@ -33,6 +34,10 @@ const Hs_π2 = Float64[1.0]
 # preallocate y-axis rotation Wigner matrix normalization
 const ζs_mag = Float64[1.0]
 const ηs_mag = Float64[1.0]
+
+# preallocate multipole/local power normalization constants
+const M̃ = Float64[1.0]
+const L̃ = Float64[1.0]
 
 #------- WARNING FLAGS -------#
 
@@ -130,5 +135,9 @@ update_Hs_π2!(Hs_π2, 21)
 # precompute y-axis Wigner matrix normalization up to 20th order
 update_ζs_mag!(ζs_mag, 21)
 update_ηs_mag!(ηs_mag, 21)
+
+# precompute multipole/local power normalization constansts up to 20th order
+update_M̃!(M̃, 21)
+update_L̃!(L̃, 21)
 
 end # module

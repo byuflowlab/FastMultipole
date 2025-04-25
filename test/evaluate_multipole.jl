@@ -11,26 +11,11 @@ end
 
 function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     for i_body in bodies_index
-        scalar_potential, velocity, gradient = evaluate_multipole(system[i_body,Position()] - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
-        PS && (system[i_body, ScalarPotential()] += scalar_potential)
-        if VS
-            vpx, vpy, vpz = system[i_body, Velocity()]
-            system[i_body, Velocity()] = SVector{3}(velocity[1]+vpx, velocity[2]+vpy, velocity[3]+vpz)
-        end
-        if GS
-            v1, v2, v3, v4, v5, v6, v7, v8, v9 = system[i_body,VelocityGradient()]
-            system[i_body,VelocityGradient()] = SMatrix{3,3}(
-                gradient[1] + v1,
-                gradient[2] + v2,
-                gradient[3] + v3,
-                gradient[4] + v4,
-                gradient[5] + v5,
-                gradient[6] + v6,
-                gradient[7] + v7,
-                gradient[8] + v8,
-                gradient[9] + v9
-            )
-        end
+        scalar_potential, velocity, gradient = evaluate_multipole(FastMultipole.get_position(system, i_body) - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+        
+        PS && FastMultipole.set_scalar_potential!(system, i_body, scalar_potential)
+        VS && FastMultipole.set_velocity!(system, i_body, velocity)
+        GS && FastMultipole.set_velocity_gradient!(system, i_body, gradient)
     end
 end
 
@@ -106,10 +91,16 @@ function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order
             if VS
 
                 # due to ϕ
-                S_np1_mp1_real, S_np1_mp1_imag = harmonics[1,1,i_n_m+n+2], harmonics[2,1,i_n_m+n+2]
-                S_np1_m_real, S_np1_m_imag = harmonics[1,1,i_n_m+n+1], harmonics[2,1,i_n_m+n+1]
-                S_np1_mm1_real, S_np1_mm1_imag = harmonics[1,1,i_n_m+n], harmonics[2,1,i_n_m+n]
-                if m == 0; S_np1_mm1_real, S_np1_mm1_imag = -S_np1_mp1_real, S_np1_mp1_imag; end
+                if n < expansion_order
+                    S_np1_mp1_real, S_np1_mp1_imag = harmonics[1,1,i_n_m+n+2], harmonics[2,1,i_n_m+n+2]
+                    S_np1_m_real, S_np1_m_imag = harmonics[1,1,i_n_m+n+1], harmonics[2,1,i_n_m+n+1]
+                    S_np1_mm1_real, S_np1_mm1_imag = harmonics[1,1,i_n_m+n], harmonics[2,1,i_n_m+n]
+                    if m == 0; S_np1_mm1_real, S_np1_mm1_imag = -S_np1_mp1_real, S_np1_mp1_imag; end
+                else
+                    S_np1_mp1_real, S_np1_mp1_imag = zero(eltype(harmonics)), zero(eltype(harmonics))
+                    S_np1_m_real, S_np1_m_imag = zero(eltype(harmonics)), zero(eltype(harmonics))
+                    S_np1_mm1_real, S_np1_mm1_imag = zero(eltype(harmonics)), zero(eltype(harmonics))
+                end
 
                 vx += scalar * -0.5 * (ϕ_n_m_real * (S_np1_mp1_imag + S_np1_mm1_imag) + ϕ_n_m_imag * (S_np1_mp1_real + S_np1_mm1_real))
                 vy += scalar * 0.5 * (ϕ_n_m_real * (S_np1_mp1_real - S_np1_mm1_real) - ϕ_n_m_imag * (S_np1_mp1_imag - S_np1_mm1_imag))
