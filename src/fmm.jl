@@ -854,48 +854,6 @@ end
     return SVector{n}(input for _ in 1:n)
 end
 
-# # combine into tuple of unique systems
-# function unique_tuple(target_systems, source_systems, leaf_size_target::AbstractVector, leaf_size_source::AbstractVector)
-#
-#     # unique tuple containing all systems
-#     systems = (target_systems..., (source_system for source_system in source_systems if !(source_system in target_systems))...)
-#
-#     # tag telling which systems are targets
-#     is_target = SVector{length(systems),Bool}((true for _ in eachindex(target_systems))..., (false for _ in length(target_systems)+1:length(systems))...)
-#
-#     # tag telling which systems are sources
-#     is_source = SVector{length(systems),Bool}(system in source_systems for system in systems)
-#
-#     return systems, is_target, is_source
-# end
-#
-# function match_unique(v_target::AbstractVector, v_source::AbstractVector, systems, target_systems, source_systems)
-#     # convert vector to match unique systems tuple
-#     v_unique = SVector{length(systems),eltype(v_target)}((val for val in v_target)..., (v_source[i] for i in eachindex(v_source) if !(source_systems[i] in target_systems))...)
-#
-#     return v_unique
-# end
-#
-# function system_to_target!(target, system)
-#     for i in 1:get_n_bodies(system)
-#         target[i,Position()] = system[i,Position()]
-#     end
-# end
-#
-# function target_to_system!(system, target, ::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
-#     for i in 1:get_n_bodies(system)
-#         if PS
-#             system[i,ScalarPotential()] += target[i,ScalarPotential()]
-#         end
-#         if VS
-#             system[i,Velocity()] += target[i,Velocity()]
-#         end
-#         if GS
-#             system[i,VelocityGradient()] += target[i,VelocityGradient()]
-#         end
-#     end
-# end
-
 fmm!(system; optargs...) = fmm!(system, system; optargs...)
 
 function fmm!(target_systems, source_systems; optargs...)
