@@ -900,7 +900,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
         # calculate multipole error
         ε_mp = SQRT3 * mp_power_ϕ_next * r_mp_inv_np2 * r_mp * np1! / (M̃n0 * (n+1))
         if LH
-            ε_mp += SQRT3 * mp_power_χ_next * r_mp_inv_np2 * r_mp * np1! / (M̃n0_next * (n+1))
+            ε_mp += SQRT3 * n * mp_power_χ_next * r_mp_inv_np2 * r_mp * np1! / (M̃n0_next * (n+1))
         end
 
         if ε_mp <= ε * 4 * π
@@ -916,7 +916,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
             l_power_ϕ, l_power_χ, L̃n0 = local_power(weights_tmp_3, r, n, L̃, lamb_helmholtz)
             ε_l = SQRT3 * l_power_ϕ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
             if LH
-                ε_l += SQRT3 * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
+                ε_l += SQRT3 * n * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
             end
 
             if ε_mp + ε_l * LOCAL_ERROR_SAFETY <= ε * 4 * π
@@ -1047,7 +1047,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
         # calculate multipole error
         ε_mp = SQRT3 * mp_power_ϕ_next * r_mp_inv_np2 * r_mp * np1! / (M̃n0 * (n+1))
         if LH
-            ε_mp += SQRT3 * mp_power_χ_next * r_mp_inv_np2 * r_mp * np1! / (M̃n0_next * (n+1))
+            ε_mp += SQRT3 * n * mp_power_χ_next * r_mp_inv_np2 * r_mp * np1! / (M̃n0_next * (n+1))
         end
 
         if ε_mp <= ε * 4 * π
@@ -1063,7 +1063,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
             l_power_ϕ, l_power_χ, L̃n0 = local_power(weights_tmp_3, r, n, L̃, lamb_helmholtz)
             ε_l = SQRT3 * l_power_ϕ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
             if LH
-                ε_l += SQRT3 * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
+                ε_l += SQRT3 * n * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
             end
 
             if ε_mp + ε_l * LOCAL_ERROR_SAFETY <= ε * 4 * π
@@ -1191,7 +1191,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
         # calculate multipole error
         ε_mp = SQRT3 * mp_power_ϕ * r_mp_inv_np2 * np1! / M̃n0
         if LH
-            ε_mp += SQRT3 * mp_power_χ_next * r_mp_inv_np2 * np1! / M̃n0_next
+            ε_mp += SQRT3 * n * mp_power_χ_next * r_mp_inv_np2 * np1! / M̃n0_next
         end
 
         #--- check multipole error ---#
@@ -1209,7 +1209,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
             l_power_ϕ, l_power_χ, L̃n0 = local_power(weights_tmp_3, r, n, L̃, lamb_helmholtz)
             ε_l = SQRT3 * l_power_ϕ * r_l_nm1 * nm1!_inv / L̃n0
             if LH
-                ε_l += SQRT3 * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
+                ε_l += SQRT3 * n * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
             end
 
             if ε_mp + ε_l * LOCAL_ERROR_SAFETY <= ε * 4 * π
@@ -1338,7 +1338,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
         # calculate multipole error
         ε_mp = SQRT3 * mp_power_ϕ * r_mp_inv_np2 * np1! / M̃n0
         if LH
-            ε_mp += SQRT3 * mp_power_χ_next * r_mp_inv_np2 * np1! / M̃n0_next
+            ε_mp += SQRT3 * n * mp_power_χ_next * r_mp_inv_np2 * np1! / M̃n0_next
         end
 
         #--- check multipole error ---#
@@ -1356,7 +1356,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
             l_power_ϕ, l_power_χ, L̃n0 = local_power(weights_tmp_3, r, n, L̃, lamb_helmholtz)
             ε_l = SQRT3 * l_power_ϕ * r_l_nm1 * nm1!_inv / L̃n0
             if LH
-                ε_l += SQRT3 * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
+                ε_l += SQRT3 * n * l_power_χ * r_l_nm1 * r_l * nm1!_inv / (L̃n0 * n)
             end
 
             if ε_mp + ε_l * LOCAL_ERROR_SAFETY <= ε * 4 * π

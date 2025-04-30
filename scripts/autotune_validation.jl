@@ -3,6 +3,7 @@
 
 using FastMultipole
 using DelimitedFiles
+using Random
 include("../test/gravitational.jl")
 
 function validate_tuning!(systems::Tuple, leaf_size_range, mac_range, name::String; expansion_order=10, fmm_args...)
@@ -45,11 +46,8 @@ end
 #------- point masses -------#
 
 vmean = 1.0
-systems = (generate_gravitational(123, n_bodies; strength_factor = vmean / n_bodies), )
-direct!(systems)
-vs = [
-
-
-validate_tuning!
+n_bodies = 10000
+systems = (generate_gravitational(123, n_bodies; strength_scale = vmean / n_bodies), )
+tuned_params, cache = tune_fmm(systems; lamb_helmholtz=false,ε_abs=1e-5)
 
 #------- point masses -------#

@@ -355,12 +355,120 @@ end
 
 #------- try more efficient error predictors -------#
 
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsAbsoluteVelocity) where LH
+    
+    # translation vector
+    Δx = target_branch.target_center - source_branch.source_center
+    r, θ, ϕ = cartesian_to_spherical(Δx)
+
+    #--- distance information ---#
+
+    # multipole error location
+    Δx, Δy, Δz = minimum_distance(source_branch.source_center, target_branch.target_center, target_branch.target_box)
+    r_mp = sqrt(Δx * Δx + Δy * Δy + Δz * Δz)
+
+    # local error location
+    r_l = target_branch.target_radius
+
+    #--- initialize recursive values ---#
+
+    rinv = one(r) / r
+    r_mp_inv = one(r_mp) / r_mp
+    r_mp_inv_np2 = r_mp_inv * r_mp_inv * r_mp_inv
+    r_l_nm1 = one(r_l)
+
+    #--- n = 0 coefficients ---#
+
+    # rotate about z axis
+    eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag = rotate_z_0!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order, lamb_helmholtz)
+
+    # get y-axis Wigner rotation matrix
+    sβ, cβ, _1_n = update_Ts_0!(Ts, Hs_π2, θ, expansion_order)
+
+    # perform rotation
+    i_ζ, i_T = _rotate_multipole_y_n!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, lamb_helmholtz, 0, 0, 0)
+
+    # (can't predict error yet, as we need degree n+1 coefficients)
+    # preallocate recursive values
+    n!_t_np1 = rinv * rinv
+    nm1!_inv = 1.0
+    np1! = 2.0
+
+    #--- n > 0 and error predictions ---#
+
+    # preallocate values to be available for recursion and debugging
+    ε_mp, ε_l = zero(r), zero(r)
+    # n = 1
+    error_success = false
+
+    # n>0
+    for n in 1:expansion_order+1
+
+        # rotate about z axis
+        eimϕ_real, eimϕ_imag = rotate_z_n!(weights_tmp_1, source_weights, eimϕs, eiϕ_real, eiϕ_imag, eimϕ_real, eimϕ_imag, lamb_helmholtz, n)
+
+        # get y-axis Wigner rotation matrix
+        _1_n = update_Ts_n!(Ts, Hs_π2, sβ, cβ, _1_n, n)
+
+        # perform rotation about the y axis
+        # NOTE: the method used here results in an additional rotatation of π about the new z axis
+        i_ζ, i_T = _rotate_multipole_y_n!(weights_tmp_2, weights_tmp_1, Ts, ζs_mag, expansion_order, lamb_helmholtz, i_ζ, i_T, n)
+
+        # check multipole error
+        in0 = (n*(n+1))>>1 + 1
+        ϕn0 = weights_tmp_2[1,1,in0]
+        ϕn1_real = weights_tmp_2[1,1,in0+1]
+        ϕn1_imag = weights_tmp_2[2,1,in0+1]
+        if LH
+            χn1_real = weights_tmp_2[1,2,in0+1]
+            χn1_imag = weights_tmp_2[2,2,in0+1]
+        end
+
+        # calculate multipole error
+        ε_mp = (sqrt(ϕn1_real * ϕn1_real + ϕn1_imag * ϕn1_imag) + abs(ϕn0)) * np1! * r_mp_inv_np2
+        if LH
+            ε_mp += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * np1! * r_mp_inv_np2 * r_mp
+        end
+
+        # check local error if multipole error passes
+        if n == expansion_order + 1
+
+            # extract degree n, order 0-1 coefficients for error prediction
+            # this function also performs the lamb-helmholtz transformation
+            ϕn0_real, ϕn1_real, ϕn1_imag, χn1_real, χn1_imag = translate_multipole_to_local_z_m01_n(weights_tmp_2, r, rinv, lamb_helmholtz, n!_t_np1, n)
+
+            # calculate local error
+            ε_l = (abs(ϕn1_real) + abs(ϕn1_imag) + abs(ϕn0_real)) * r_l_nm1 * nm1!_inv
+            if LH
+                ε_l += sqrt(χn1_real * χn1_real + χn1_imag * χn1_imag) * r_l_nm1 * r_l * nm1!_inv
+            end
+
+        end
+
+        # recurse
+        if n < expansion_order # if statement ensures that n == desired P
+                                   # when tolerance is reached (breaks the loop early)
+                                   # or that n == Pmax when tolerance is not reached
+            n!_t_np1 *= (n+1) * rinv
+            r_l_nm1 *= r_l
+            r_mp_inv_np2 *= r_mp_inv
+            nm1!_inv /= n
+
+            # increment n
+            # n += 1
+            np1! *= n+1
+        end
+    end
+
+    return ε_mp * ONE_OVER_4π, ε_l * ONE_OVER_4π
+end
+
 """
 performs a partial M2L for expansion_order+1, and predicts the error along the way;
 
 expects that the upward pass has been performed up to expansion_order+1
 """
-function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsolutePotential) where LH
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsolutePotential) where LH
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -438,7 +546,7 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
     return ε_mp_power * ONE_OVER_4π, ε_l_power * ONE_OVER_4π
 end
 
-function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteVelocity) where LH
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteVelocity) where LH
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -455,7 +563,7 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
     n=expansion_order
     
     # multipole power
-    i = (n*(n+1)) >> 1 + 1
+    i = (n*(n+1)) >> 1 + 1 # index of ϕn0
     for m in 0:n
         # get Ñ 
         Ñ = sqrt(4*pi*Float64(factorial(big(n+abs(m)))) * Float64(factorial(big(n-abs(m)))) / (2*n+1) )
@@ -471,9 +579,16 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
     nfact = Float64(factorial(big(n)))
     Ñ0 = sqrt(4*pi*nfact * nfact / (2*n+1))
     ε_mp_power = mp_power / Ñ0 * nfact * (n+1) / r_mp^(n+2) * sqrt(3)
+    
+    # stuff = zero(r_mp)
+    # for np in n+1:n+100
+    #     stuff += Float64(factorial(big(np))) / r_mp^(np+1)
+    # end
+    # ε_mp_power = mp_power / Ñ0 * stuff
 
     if LH
         i = ((n+1)*(n+2)) >> 1 + 1
+        mp_power = 0.0
         for m in 0:n
             # get Ñ 
             Ñ = sqrt(4*pi*Float64(factorial(big(n+abs(m)))) * Float64(factorial(big(n-abs(m)))) / (2*n+1) )
@@ -487,32 +602,42 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
     
         # multipole power error prediction
         Ñ0 = sqrt(4*pi*nfact * nfact * (n+1) * (n+1) / (2*(n+1)+1))
-        ε_mp_power += mp_power / Ñ0 * nfact * (n+1) / r_mp^(n+2) * sqrt(3)
+        ε_mp_power += n * mp_power / Ñ0 * nfact * (n+1) / r_mp^(n+2) * sqrt(3)
+
+        # stuff = zero(r_mp)
+        # for np in n+1:n+100
+        #     stuff += Float64(factorial(big(np))) / r_mp^(np+1)
+        # end
+        # ε_mp_power += mp_power / Ñ0 * stuff
     end
 
     #--- rotate coordinate system ---#
 
     # rotate about z axis
-    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order+1, lamb_helmholtz)
+    nplus = 1
+    rotate_z!(weights_tmp_1, source_weights, eimϕs, ϕ, expansion_order+nplus, lamb_helmholtz)
 
     # rotate about y axis
     # NOTE: the method used here results in an additional rotatation of π about the new z axis
-    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order+1, lamb_helmholtz)
+    rotate_multipole_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ζs_mag, θ, expansion_order+nplus, lamb_helmholtz)
 
     #--- translate along new z axis ---#
 
-    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order+1, lamb_helmholtz)
+    translate_multipole_to_local_z!(weights_tmp_1, weights_tmp_2, r, expansion_order+nplus, lamb_helmholtz)
 
     #--- transform Lamb-Helmholtz decomposition for the new center ---#
 
-    LH && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order+1)
+    LH && transform_lamb_helmholtz_local!(weights_tmp_1, r, expansion_order+nplus)
     
     #--- local error prediction ---#
     
-    l_power = 0.0
-    n=expansion_order + 1
-    
+    ε_l_power = 0.0
+    # n=expansion_order # try reducing n to get a more conservative prediction
+    for n=expansion_order+1:expansion_order+nplus
+        
     # local power
+    # n -= 1 # temporarily decrement n to get a more conservative local power
+    l_power = 0.0
     i = (n*(n+1)) >> 1 + 1
     for m in 0:n
         # de-normalization
@@ -524,17 +649,32 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
         l_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * L̃ * L̃ * (2-(m==0))
     end
     l_power = sqrt(abs(l_power))
+    l_power_phi_unrotated = l_power
+    # n += 1 # return n back to its original value
 
     # local power error prediction
     nfact = Float64(factorial(big(n)))
     L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
     r_l = target_branch.target_radius
-    ε_l_power = l_power / L̃0 * r_l^(n-1) / nfact * n * sqrt(3)
+    ε_l_power += l_power / L̃0 * r_l^(n-1) / nfact * n * sqrt(3)
+
+    # stuff = zero(r_l)
+    # for np in 0:n-1
+    #     stuff += r_l^(np) / Float64(factorial(big(np)))
+    # end
+    # ε_l_power = l_power / L̃0 * sqrt(3) * (exp(r) - stuff)
+    
+    # stuff = zero(r_l)
+    # for np in n-1:n+100
+    #     stuff += r_l^(np) / Float64(factorial(big(np)))
+    # end
+    # ε_l_power = l_power / L̃0 * sqrt(3) * stuff
 
     if LH
         
         # local power
         l_power = 0.0
+        # n -= 1 # temporarily decrement n to get a more conservative local power
         i = (n*(n+1)) >> 1 + 1
         for m in 0:n
             # de-normalization
@@ -546,14 +686,182 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
             l_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * L̃ * L̃ * (1+(m>0))
         end
         l_power = sqrt(abs(l_power))
-
+        l_power_chi_unrotated = l_power
+        
         # local power error prediction
-        nfact = Float64(factorial(big(n)))
         L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
+        # println("checking:")
+        # @show l_power / L̃0
+        # n += 1 # return n back to its original value
+        # nfact = Float64(factorial(big(n)))
         r_l = target_branch.target_radius
-        ε_l_power += l_power / L̃0 * r_l^(n) / nfact * sqrt(3)
+        ε_l_power += n * l_power / L̃0 * r_l^(n) / nfact * sqrt(3)
 
+        
+        # l_power = 0.0
+        # i = (n*(n+1)) >> 1 + 1
+        # for m in 0:n
+        #     # de-normalization
+        #     L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+        #     # conservative local power
+        #     χnm_real = weights_tmp_1[1,2,i+m]
+        #     χnm_imag = weights_tmp_1[2,2,i+m]
+        #     l_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * L̃ * L̃ * (1+(m>0))
+        # end
+        # l_power = sqrt(abs(l_power))
+        # l_power_chi_unrotated = l_power
+        
+        # # local power error prediction
+        # L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
+        # @show l_power / L̃0
+
+        
+        # check that l_power / L0 is greater than all coefficients
+        stuff = l_power / L̃0
+        for m in 0:n
+            χnm_real, χnm_imag = weights_tmp_1[1,2,i+m], weights_tmp_1[2,2,i+m]
+            χnm = sqrt(χnm_real * χnm_real + χnm_imag * χnm_imag)
+            @assert χnm < stuff "l_power / L0 is not greater than all coefficients"
+            # @show χnm / stuff
+        end
+            
+        # stuff = zero(r_l)
+        # for np in 0:n
+        #     stuff += r_l^(np) / Float64(factorial(big(np)))
+        # end
+        # ε_l_power += l_power / L̃0 * sqrt(3) * (exp(r) - stuff)
+        # @show exp(r), stuff, exp(r) - stuff, r_l, nfact, r_l^(n) / nfact
+        
+        # stuff = zero(r_l)
+        # for np in n:n+100
+        #     stuff += r_l^(np) / Float64(factorial(big(np)))
+        # end
+        # ε_l_power += l_power / L̃0 * sqrt(3) * stuff
+        # @show l_power / L̃0, stuff
+        
     end
+    
+
+end
+    #--- brute force check ---#
+
+
+
+
+    # # ------- rotate back to original coordinate system -------#
+    
+    # # back rotate about y axis
+    # back_rotate_local_y!(weights_tmp_2, weights_tmp_1, Ts, Hs_π2, ηs_mag, expansion_order+2, lamb_helmholtz)
+
+    # l_power = 0.0
+    # for m in 0:n
+    #     # de-normalization
+    #     L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+    #     # conservative local power
+    #     ϕnm_real = weights_tmp_2[1,1,i+m]
+    #     ϕnm_imag = weights_tmp_2[2,1,i+m]
+    #     l_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * L̃ * L̃ * (2-(m==0))
+    # end
+    # l_power = sqrt(abs(l_power))
+    # l_power_phi_rotated_y = l_power
+
+    # l_power = 0.0
+    # for m in 0:n
+    #     # de-normalization
+    #     L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+    #     # conservative local power
+    #     χnm_real = weights_tmp_2[1,2,i+m]
+    #     χnm_imag = weights_tmp_2[2,2,i+m]
+    #     l_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * L̃ * L̃ * (1+(m>0))
+    # end
+    # l_power = sqrt(abs(l_power))
+    # l_power_chi_rotated_y = l_power
+    
+    # # back rotate about z axis and accumulate on target branch
+    # back_rotate_z!(weights_tmp_3, weights_tmp_2, eimϕs, expansion_order+2, lamb_helmholtz)
+
+    # l_power = 0.0
+    # for m in 0:n
+    #     # de-normalization
+    #     L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+    #     # conservative local power
+    #     ϕnm_real = weights_tmp_3[1,1,i+m]
+    #     ϕnm_imag = weights_tmp_3[2,1,i+m]
+    #     l_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * L̃ * L̃ * (2-(m==0))
+    # end
+    # l_power = sqrt(abs(l_power))
+    # l_power_phi_rotated_z = l_power
+
+    # l_power = 0.0
+    # for m in 0:n
+    #     # de-normalization
+    #     L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+    #     # conservative local power
+    #     χnm_real = weights_tmp_3[1,2,i+m]
+    #     χnm_imag = weights_tmp_3[2,2,i+m]
+    #     l_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * L̃ * L̃ * (1+(m>0))
+    # end
+    # l_power = sqrt(abs(l_power))
+    # l_power_chi_rotated_z = l_power
+
+    # @show l_power_phi_unrotated, l_power_phi_rotated_y, l_power_phi_rotated_z
+    # @show l_power_chi_unrotated, l_power_chi_rotated_y, l_power_chi_rotated_z
+    
+    # #--- local error prediction: another term in the series ---#
+    
+    # l_power = 0.0
+    # n=expansion_order + 2
+    
+    # # local power
+    # i = (n*(n+1)) >> 1 + 1
+    # for m in 0:n
+    #     # de-normalization
+    #     L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+    #     # conservative local power
+    #     ϕnm_real = weights_tmp_1[1,1,i+m]
+    #     ϕnm_imag = weights_tmp_1[2,1,i+m]
+    #     l_power += (ϕnm_real * ϕnm_real + ϕnm_imag * ϕnm_imag) * L̃ * L̃ * (2-(m==0))
+    # end
+    # l_power = sqrt(abs(l_power))
+
+    # # local power error prediction
+    # nfact = Float64(factorial(big(n)))
+    # L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
+    # r_l = target_branch.target_radius
+    # println("\nSherlock!")
+    # @show ε_l_power
+    # ε_l_power += l_power / L̃0 * r_l^(n-1) / nfact * n * sqrt(3)
+    # @show ε_l_power
+
+    # if LH
+        
+    #     # local power
+    #     l_power = 0.0
+    #     i = (n*(n+1)) >> 1 + 1
+    #     for m in 0:n
+    #         # de-normalization
+    #         L̃ = sqrt(4*pi / (Float64(factorial(big(n-abs(m)))) * Float64(factorial(big(n+abs(m)))) * (2*n+1)) )
+
+    #         # conservative local power
+    #         χnm_real = weights_tmp_1[1,2,i+m]
+    #         χnm_imag = weights_tmp_1[2,2,i+m]
+    #         l_power += (χnm_real * χnm_real + χnm_imag * χnm_imag) * L̃ * L̃ * (1+(m>0))
+    #     end
+    #     l_power = sqrt(abs(l_power))
+
+    #     # local power error prediction
+    #     nfact = Float64(factorial(big(n)))
+    #     L̃0 = sqrt(4*pi/((2*n+1) * nfact * nfact))
+    #     r_l = target_branch.target_radius
+    #     ε_l_power += l_power / L̃0 * r_l^(n) / nfact * sqrt(3)
+    #     @show ε_l_power
+    # end
 
     return ε_mp_power * ONE_OVER_4π, ε_l_power * ONE_OVER_4π
 end
