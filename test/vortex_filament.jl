@@ -246,7 +246,7 @@ function vortex_filament_gauss_compressed(x1,x2,xt,q,core_size)
 
     # regularize
     d = minimum_distance(x1, x2, xt)
-    Vhat *= (1 - exp(d*d*d / (core_size*core_size*core_size)))
+    Vhat *= (1 - exp(-d*d*d / (core_size*core_size*core_size)))
 
     return Vhat * q
 end
