@@ -363,8 +363,8 @@ function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::Vortex
     # get regularization radius
     Γ = system.strength[i_body]
     Γmag = norm(Γ)
+    core_size = system.core_size[i_body]
     if !iszero(Γmag)
-        core_size = system.core_size[i_body]
         ε = system.ε_tol[i_body]
         ρ = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
         d_upper = sqrt(Γmag / (4 * π * ε))
