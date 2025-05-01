@@ -844,7 +844,7 @@ x = zeros(SVector{3,Float64},2,1)
 q = SVector{3}(0,1.0,0)
 x[1,1] = x1
 x[2,1] = x2
-system = VortexFilaments(x, [q])
+system = VortexFilaments(x, [q]; core_size=fill(1e-12, size(x,2)),)
 buffer = FastMultipole.system_to_buffer(system)
 
 xt = SVector{3}(4.0, 0.3, 0.0)
