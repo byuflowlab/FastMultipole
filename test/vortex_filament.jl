@@ -233,9 +233,15 @@ function vortex_filament_gauss_compressed(x1,x2,xt,q,core_size)
 
     # (mostly) singular case
     denom = nr1 * nr2 + rdot
-    denom += eps(max(nr1, nr2)) * iszero(denom)
-    nr1 += eps(max(nr1, nr2)) * iszero(nr1)
-    nr2 += eps(max(nr1, nr2)) * iszero(nr2)
+
+    # check if we're at the midpoint
+    if abs(denom) < eps(max(nr1, nr2)) # at the midpoint, so return zero
+        return zero(SVector{3,eltype(x1)})
+    end
+
+    # denom += eps(max(nr1, nr2)) * (abs(denom) > eps(max(nr1, nr2)))
+    nr1 += eps(max(nr1, nr2)) * (abs(nr1) > eps(max(nr1, nr2)))
+    nr2 += eps(max(nr1, nr2)) * (abs(nr2) > eps(max(nr1, nr2)))
     Vhat = rcross / denom * (1/nr1 + 1/nr2)
 
     # regularize
