@@ -1014,6 +1014,10 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         update_ζs_mag!(ζs_mag, expansion_order)
         update_ηs_mag!(ηs_mag, expansion_order)
 
+        # precompute error prediction normalization (if not already done)
+        update_M̃!(M̃, expansion_order)
+        update_L̃!(L̃, expansion_order)
+
         # available threads
         n_threads = Threads.nthreads()
 
