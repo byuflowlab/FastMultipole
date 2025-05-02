@@ -121,8 +121,8 @@ function refine_filaments(filaments::VortexFilaments, max_length)
     @assert i_filament == n_filaments + 1
 
     # create filaments
-    core_size = fill(1e-2, size(x,2))
-    ε_tol = fill(1e-4, size(x,2))
+    core_size = fill(1e-2, size(refined_filaments,2))
+    ε_tol = fill(1e-4, size(refined_filaments,2))
     potential = zeros(length(strength_vec))
     force = zeros(SVector{3,Float64}, length(strength_vec))
     gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
@@ -239,15 +239,24 @@ function vortex_filament_gauss_compressed(x1,x2,xt,q,core_size)
         return zero(SVector{3,eltype(x1)})
     end
 
-    # denom += eps(max(nr1, nr2)) * (abs(denom) > eps(max(nr1, nr2)))
-    nr1 += eps(max(nr1, nr2)) * (abs(nr1) > eps(max(nr1, nr2)))
-    nr2 += eps(max(nr1, nr2)) * (abs(nr2) > eps(max(nr1, nr2)))
+    denom += 10*eps(max(nr1, nr2)) * (abs(denom) < 5 * eps(max(nr1, nr2)))
+    nr1 += 10*eps(max(nr1, nr2)) * (abs(nr1) < 5 * eps(max(nr1, nr2)))
+    nr2 += 10*eps(max(nr1, nr2)) * (abs(nr2) < 5 * eps(max(nr1, nr2)))
     Vhat = rcross / denom * (1/nr1 + 1/nr2)
 
     # regularize
     d = minimum_distance(x1, x2, xt)
     Vhat *= (1 - exp(-d*d*d / (core_size*core_size*core_size)))
+    # @show (1 - exp(-d*d*d / (core_size*core_size*core_size)))
 
+    if true in isnan.(Vhat)
+        @show Vhat
+        @show d
+        @show core_size
+        @show denom
+        @show nr1
+        @show nr2
+    end
     return Vhat * q
 end
 
@@ -362,17 +371,18 @@ function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::Vortex
     
     # get regularization radius
     Γ = system.strength[i_body]
-    Γmag = norm(Γ)
+    # Γmag = norm(Γ)
     core_size = system.core_size[i_body]
-    if !iszero(Γmag)
-        ε = system.ε_tol[i_body]
-        ρ = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
-        d_upper = sqrt(Γmag / (4 * π * ε))
-        d = Roots.find_zero(d -> exp(-d*d*d / (core_size * core_size * core_size)) - 4 * π * d * d / Γmag * ε, (zero(d_upper), d_upper), Roots.Brent())
-        buffer[4,i_buffer] = ρ + d
-    else
-        buffer[4,i_buffer] = 0.0
-    end
+    # if !iszero(Γmag)
+    #     ε = system.ε_tol[i_body]
+    #     ρ = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
+    #     d_upper = sqrt(Γmag / (4 * π * ε))
+    #     d = Roots.find_zero(d -> exp(-d*d*d / (core_size * core_size * core_size)) - 4 * π * d * d / Γmag * ε, (zero(d_upper), d_upper), Roots.Brent())
+    #     buffer[4,i_buffer] = ρ + d
+    # else
+    #     buffer[4,i_buffer] = 0.0
+    # end
+    buffer[4,i_buffer] = system.core_size[i_body] + 0.5 * norm(system.x[2,i_body] - system.x[1,i_body])
 
     # remainding quantities
     buffer[5:7,i_buffer] .= Γ
@@ -415,8 +425,8 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch::
 
                 # calculate velocity
                 # v = vortex_filament(x1,x2,xt,q_mag)
-                # v = vortex_filament_finite_core_2(x1,x2,xt,q_mag,core_size)
-                v = vortex_filament_gauss_compressed(x1,x2,xt,q_mag,core_size)
+                v = vortex_filament_finite_core_2(x1,x2,xt,q_mag,core_size)
+                # v = vortex_filament_gauss_compressed(x1,x2,xt,q_mag,core_size)
                 FastMultipole.set_velocity!(target_system, i_target, v)
             end
         end
