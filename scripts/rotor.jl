@@ -249,11 +249,12 @@ function generate_rotor()
 
     # create filaments
     core_size = fill(1e-2, length(strength_vec))
+    ε_tol = fill(1e-4, length(strength_vec))
     potential = zeros(length(strength_vec))
     force = zeros(SVector{3,Float64}, length(strength_vec))
     gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, force, gradient)
 end
 
 function generate_rotor_blade_filament(; i_blade=1, i_filament=1)
@@ -273,12 +274,13 @@ function generate_rotor_blade_filament(; i_blade=1, i_filament=1)
     strength_vec[i_filament+i_offset] = Γ
 
     # create filaments
-    core_size = fill(1e-2, size(x,2))
+    core_size = fill(1e-2, size(pts,2))
+    ε_tol = fill(1e-4, size(pts,2))
     potential = zeros(length(strength_vec))
     force = zeros(SVector{3,Float64}, length(strength_vec))
     gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, force, gradient)
 end
 
 function generate_rotor_blade(i_blade=1)
@@ -299,11 +301,12 @@ function generate_rotor_blade(i_blade=1)
     end
 
     # create filaments
-    core_size = fill(1e-2, size(x,2))
+    core_size = fill(1e-2, size(pts,2))
+    ε_tol = fill(1e-4, size(pts,2))
     potential = zeros(length(strength_vec))
     force = zeros(SVector{3,Float64}, length(strength_vec))
     gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, potential, force, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, force, gradient)
 end
 
