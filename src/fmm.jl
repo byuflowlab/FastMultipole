@@ -39,7 +39,7 @@ function nearfield_loop!(target_buffers, target_branches, source_system, source_
     end
 end
 
-function get_n_interactions(target_systems, target_branches, source_system, i_source_system, source_branches::Vector{<:Branch}, direct_list)
+function get_n_interactions(target_branches, i_source_system, source_branches::Vector{<:Branch}, direct_list)
     n_interactions = 0
     for (i_target, i_source) in direct_list
         n_interactions += get_n_bodies(target_branches[i_target]) * length(source_branches[i_source].bodies_index[i_source_system])
@@ -73,64 +73,30 @@ function make_assignments!(assignments, target_branches, i_source_system, source
     i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
 end
 
-function make_assignments!(assignments, target_branches, source_branches, direct_list, n_threads, n_per_thread)
-    i_start = 1
-    i_end = 1
-    i_thread = 1
-    n_interactions = 0
-
-    # loop over interaction list
-    for (i_target, i_source) in direct_list
-
-        # update number of interactions in the current assignment
-        n_interactions += get_n_bodies(target_branches[i_target]) * length(source_branches[i_source].bodies_index)
-
-        # if we exceed n_per_thread, finish this assignment and reset counters
-        if n_interactions >= n_per_thread
-            assignments[i_thread] = i_start:i_end
-            i_start = i_end + 1
-            i_thread += 1
-            n_interactions = 0
-        end
-
-        i_end += 1
-    end
-
-    i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
-end
-
-function execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, i_source_system, source_branches, direct_list, assignment)
+function execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment)
     for i_interaction in assignment
-        i_target, i_source = direct_list[i_interaction]
+        dl = direct_list[i_interaction]
+        i_target, _ = dl
         target_branch = target_branches[i_target]
         Threads.lock(target_branch.lock) do
-            nearfield_singlethread!(target_systems, target_branch.bodies_index, derivatives_switches, source_system, source_branches[i_source].bodies_index[i_source_system])
+            nearfield_loop!(target_systems, target_branches, source_system, source_buffer, i_source_system, source_branches, (dl,), derivatives_switches)
         end
     end
 end
 
-function execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, assignment)
-    for i_interaction in assignment
-        i_target, i_source = direct_list[i_interaction]
-        target_branch = target_branches[i_target]
-        Threads.lock(target_branch.lock) do
-            nearfield_singlethread!(target_systems, target_branch.bodies_index, derivatives_switches, source_system, source_branches[i_source].bodies_index)
-        end
-    end
-end
-
-function nearfield_multithread!(target_system, target_branches, derivatives_switch, source_systems::Tuple, source_branches, direct_list, n_threads)
+function nearfield_multithread!(target_system, target_branches, source_systems::Tuple, source_buffers, source_branches, derivatives_switch, direct_list, n_threads)
     for (i_source_system, source_system) in enumerate(source_systems)
-        nearfield_multithread!(target_system, target_branches, derivatives_switch, source_system, i_source_system, source_branches, direct_list, n_threads)
+        source_buffer = source_buffers[i_source_system]
+        nearfield_multithread!(target_system, target_branches, source_system, source_buffer, i_source_system, source_branches, derivatives_switch, direct_list, n_threads)
     end
 end
 
-function _nearfield_multithread!(target_systems, target_branches, derivatives_switches, source_system, i_source_system, source_branches, direct_list, n_threads)
+function nearfield_multithread!(target_systems, target_branches, source_system, source_buffer, i_source_system, source_branches, derivatives_switches, direct_list, n_threads)
 
     #--- load balance ---#
 
     # total number of interactions
-    n_interactions = get_n_interactions(target_systems, target_branches, source_system, i_source_system, source_branches, direct_list)
+    n_interactions = get_n_interactions(target_branches, i_source_system, source_branches, direct_list)
 
     # interactions per thread
     n_per_thread, rem = divrem(n_interactions, n_threads)
@@ -148,41 +114,41 @@ function _nearfield_multithread!(target_systems, target_branches, derivatives_sw
 
     # execute tasks
     Threads.@threads for assignment in assignments
-        execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, i_source_system, source_branches, direct_list, assignment)
+        execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment)
     end
 
 end
 
-function _nearfield_multithread!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, n_threads)
+# function _nearfield_multithread!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, n_threads)
 
-    #--- load balance ---#
+#     #--- load balance ---#
 
-    # total number of interactions
-    n_interactions = get_n_interactions(target_systems, target_branches, source_system, source_branches, direct_list)
+#     # total number of interactions
+#     n_interactions = get_n_interactions(target_systems, target_branches, source_system, source_branches, direct_list)
 
-    # interactions per thread
-    n_per_thread, rem = divrem(n_interactions, n_threads)
-    rem > 0 && (n_per_thread += 1)
+#     # interactions per thread
+#     n_per_thread, rem = divrem(n_interactions, n_threads)
+#     rem > 0 && (n_per_thread += 1)
 
-    # if there are too many threads, we'll actually hurt performance
-    n_per_thread < MIN_NPT_NF && (n_per_thread = MIN_NPT_NF)
+#     # if there are too many threads, we'll actually hurt performance
+#     n_per_thread < MIN_NPT_NF && (n_per_thread = MIN_NPT_NF)
 
-    # create assignments
-    assignments = Vector{UnitRange{Int64}}(undef,n_threads)
-    for i in eachindex(assignments)
-        assignments[i] = 1:0
-    end
-    make_assignments!(assignments, target_branches, source_branches, direct_list, n_threads, n_per_thread)
+#     # create assignments
+#     assignments = Vector{UnitRange{Int64}}(undef,n_threads)
+#     for i in eachindex(assignments)
+#         assignments[i] = 1:0
+#     end
+#     make_assignments!(assignments, target_branches, source_branches, direct_list, n_threads, n_per_thread)
 
-    # execute tasks
-    if DEBUG[]
-        @show assignments
-    end
-    Threads.@threads for assignment in assignments
-        execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, assignment)
-    end
+#     # execute tasks
+#     if DEBUG[]
+#         @show assignments
+#     end
+#     Threads.@threads for assignment in assignments
+#         execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, assignment)
+#     end
 
-end
+# end
 
 """
     nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
@@ -1133,9 +1099,51 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                     end
                 end
 
-                upward_pass && upward_pass_multithread!(tree.branches, systems, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads_2)
-                horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(tree.branches, tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads)
-                downward_pass && downward_pass_multithread!(tree.branches, systems, derivatives_switches, expansion_order, lamb_helmholtz, tree.levels_index, tree.leaf_index, n_threads)
+                # farfield computations
+                t_up = 0.0
+                if upward_pass
+                    t_up = @elapsed upward_pass_multithread!(source_tree, source_systems, expansion_order, lamb_helmholtz)
+                end
+
+                t_m2l = 0.0
+                Pmax = 0
+                error_success = true
+                if horizontal_pass
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_multithread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_tol; verbose=horizontal_pass_verbose)
+                end
+                if !error_success
+                    Pmax += 1
+                end
+
+                # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches)
+                t_dp = 0.0
+                if downward_pass
+                    t_dp = @elapsed downward_pass_multithread_1!(target_tree, expansion_order, lamb_helmholtz)
+                    t_dp += @elapsed velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
+                    t_dp += @elapsed downward_pass_multithread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+                end
+
+                # copy results to target systems
+                update_target_systems && buffer_to_target!(target_systems, target_tree, derivatives_switches)
+
+                # finish autotuning
+                if tune
+
+                    if length(m2l_list) > 0
+                        #--- compute optimal leaf_size_source ---#
+
+                        # t per m2l transformation
+                        # t_m2l += t_up + t_dp + t_target_tree + t_source_tree + t_lists
+                        t_m2l /= length(m2l_list)
+
+                        # t_per_interaction * LS^2 = t_per_m2l
+                        leaf_size_source = SVector{length(source_systems),Int}(Int(ceil(sqrt(t_m2l / t_direct[i]))) for i in eachindex(source_systems))
+                    else
+                        # make leaf size smaller so that some m2l operations exist
+                        leaf_size_source = max.(leaf_size_source .>> 1, Ref(1))
+                    end
+                    expansion_order = Pmax
+                end
             end
 
         end

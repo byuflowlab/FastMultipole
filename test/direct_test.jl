@@ -53,3 +53,40 @@
     end
 end
 
+@testset "big direct" begin
+    
+n_bodies = 1000
+mass = generate_gravitational(123, n_bodies)
+source_tree = Tree((mass,), false; leaf_size=SVector{1}(1))
+target_tree = Tree((mass,), true; leaf_size=SVector{1}(1))
+n_leaves_target = length(target_tree.leaf_index)
+n_leaves_source = length(source_tree.leaf_index)
+direct_list = Vector{SVector{2,Int}}(undef, n_leaves_target*n_leaves_source)
+k = 1
+for n in target_tree.leaf_index
+    for m in source_tree.leaf_index
+        direct_list[k] = SVector{2,Int}(n,m)
+        k += 1
+    end
+end
+
+derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (mass,))
+FastMultipole.nearfield_multithread!(target_tree.buffers, target_tree.branches, (mass,), source_tree.buffers, source_tree.branches, derivatives_switches, direct_list, Threads.nthreads())
+# copy results to target systems
+FastMultipole.buffer_to_target!((mass,), target_tree, derivatives_switches)
+
+potential_multithread = mass.potential[1,:]
+
+# single-threaded approach
+FastMultipole.reset!(target_tree.buffers)
+
+FastMultipole.nearfield_singlethread!(target_tree.buffers, target_tree.branches, (mass,), source_tree.buffers, source_tree.branches, derivatives_switches, direct_list)
+# copy results to target systems
+FastMultipole.buffer_to_target!((mass,), target_tree, derivatives_switches)
+
+potential_singlethread = mass.potential[1,:]
+
+@test isapprox(potential_multithread, potential_singlethread; atol=1e-12)
+
+end
+
