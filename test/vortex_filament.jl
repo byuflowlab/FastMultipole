@@ -16,22 +16,22 @@ end
 #     return VortexFilaments(filaments.x, filaments.strength, core_size, ε_tol, filaments.potential, filaments.force, filaments.gradient)
 # end
 
-function viz(fname, vortex_filaments::VortexFilaments)
-    # create points
-    pts = zeros(3, length(vortex_filaments.strength)+1)
-    for i in 1:length(vortex_filaments.strength)
-        pts[:,i] .= vortex_filaments.x[1,i]
-    end
-    pts[:,end] .= vortex_filaments.x[2,end]
+# function viz(fname, vortex_filaments::VortexFilaments)
+#     # create points
+#     pts = zeros(3, length(vortex_filaments.strength)+1)
+#     for i in 1:length(vortex_filaments.strength)
+#         pts[:,i] .= vortex_filaments.x[1,i]
+#     end
+#     pts[:,end] .= vortex_filaments.x[2,end]
 
-    # create lines
-    lines = [MeshCell(PolyData.Lines(), (i, i + 1)) for i in 1:length(vortex_filaments.strength)]
+#     # create lines
+#     lines = [MeshCell(PolyData.Lines(), (i, i + 1)) for i in 1:length(vortex_filaments.strength)]
 
-    vtk_grid(fname, pts, lines) do vtk
-        vtk["strength"] = vortex_filaments.strength
-        vtk["velocity"] = vortex_filaments.force
-    end
-end
+#     vtk_grid(fname, pts, lines) do vtk
+#         vtk["strength"] = vortex_filaments.strength
+#         vtk["velocity"] = vortex_filaments.force
+#     end
+# end
 
 function VortexFilaments(x, strength::Vector{SVector{3,TF}};
         core_size = fill(1e-2, size(x,2)),
@@ -443,6 +443,27 @@ function FastMultipole.buffer_to_target_system!(target_system::VortexFilaments, 
     # load into system
     target_system.force[i_target] += velocity
 
+end
+
+function viz_filament(fname, vortex_filaments::VortexFilaments)
+    # create points
+    pts = zeros(SVector{3,eltype(vortex_filaments)}, length(vortex_filaments.strength) * 2)
+    ic = 1
+    for i in 1:length(vortex_filaments.strength)
+        pts[ic] = vortex_filaments.x[1,i]
+        ic += 1
+        pts[ic] = vortex_filaments.x[2,i]
+        ic += 1
+    end
+
+    # create lines
+    lines = [MeshCell(PolyData.Lines(), (2*i-1, 2*i)) for i in 1:length(vortex_filaments.strength)]
+
+    # save as VTK
+    vtk_grid(fname, pts, lines) do vtk
+        vtk["strength"] = vortex_filaments.strength
+        vtk["velocity"] = vortex_filaments.force
+    end
 end
 
 #------- test -------#
