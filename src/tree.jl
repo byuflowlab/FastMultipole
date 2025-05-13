@@ -1,6 +1,6 @@
 #------- tree constructor -------#
 
-function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, target), small_buffers = allocate_small_buffers(systems), expansion_order=7, leaf_size=default_leaf_size(systems), n_divisions=20, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false)
+function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, target), small_buffers = allocate_small_buffers(systems), expansion_order=7, leaf_size=default_leaf_size(systems), n_divisions=20, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false, interaction_list_method=SelfTuning())
 
     # ensure `systems` isn't empty; otherwise return an empty tree
     if get_n_bodies(systems) > 0
@@ -49,7 +49,7 @@ function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, ta
         target_to_buffer!(buffers, systems)
 
         # grow root branch
-        root_branch, n_children, i_leaf = branch!(buffers, small_buffers, sort_index, octant_container, sort_index_buffer, i_first_branch, bodies_index, center, center, radius, radius, box, box, 0, 1, leaf_size, expansion_order) # even though no sorting needed for creating this branch, it will be needed later on; so `branch!` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
+        root_branch, n_children, i_leaf = branch!(buffers, small_buffers, sort_index, octant_container, sort_index_buffer, i_first_branch, bodies_index, center, center, radius, radius, box, box, 0, 1, leaf_size, interaction_list_method) # even though no sorting needed for creating this branch, it will be needed later on; so `branch!` not ony_min creates the root_branch, but also sorts itself into octants and returns the number of children it will have so we can plan array size
         branches = [root_branch] # this first branch will already have its child branches encoded
         # estimated_n_branches = estimate_n_branches(systems, leaf_size, allocation_safety_factor)
         # sizehint!(branches, estimated_n_branches)
@@ -59,7 +59,7 @@ function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, ta
         levels_index = [parents_index] # store branches at each level
         for i_divide in 1:n_divisions
             if n_children > 0
-                parents_index, n_children, i_leaf = child_branches!(branches, buffers, sort_index, small_buffers, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children, i_leaf = child_branches!(branches, buffers, sort_index, small_buffers, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order, interaction_list_method)
                 push!(levels_index, parents_index)
             end
         end
@@ -68,7 +68,7 @@ function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, ta
         if n_children > 0
             n_children_prewhile = n_children
             while n_children > 0
-                parents_index, n_children, i_leaf = child_branches!(branches, buffers, sort_index, small_buffers, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+                parents_index, n_children, i_leaf = child_branches!(branches, buffers, sort_index, small_buffers, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order, interaction_list_method)
                 push!(levels_index, parents_index)
             end
             if WARNING_FLAG_LEAF_SIZE[]
@@ -121,8 +121,8 @@ function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, ta
     return tree
 end
 
-function Tree(system; optargs...)
-    return Tree((system,); optargs...)
+function Tree(system, target::Bool; optargs...)
+    return Tree((system,), target; optargs...)
 end
 
 """
@@ -215,7 +215,7 @@ end
 #     return Int(ceil(estimated_n_branches * allocation_safety_factor))
 # end
 
-function child_branches!(branches, buffers, sort_index, small_buffers, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order)
+function child_branches!(branches, buffers, sort_index, small_buffers, sort_index_buffer, i_leaf, leaf_size, parents_index, cumulative_octant_census, octant_container, n_children, expansion_order, interaction_list_method)
     i_first_branch = parents_index[end] + n_children + 1
     for i_parent in parents_index
         parent_branch = branches[i_parent]
@@ -229,12 +229,12 @@ function child_branches!(branches, buffers, sort_index, small_buffers, sort_inde
             update_octant_accumulator!(cumulative_octant_census)
 
             # number of child branches
-            if exceeds(cumulative_octant_census, leaf_size)
+            if exceeds(cumulative_octant_census, leaf_size, interaction_list_method)
                 for i_octant in 1:8
                     if get_population(cumulative_octant_census, i_octant) > 0
                         bodies_index = get_bodies_index(cumulative_octant_census, parent_branch.bodies_index, i_octant)
                         child_center = get_child_center(parent_branch.target_center, parent_branch.target_box, i_octant)
-                        child_branch, n_grandchildren, i_leaf = branch!(buffers, small_buffers, sort_index, octant_container, sort_index_buffer, i_first_branch, bodies_index, child_center, child_center, child_radius, child_radius, child_box, child_box, i_parent, i_leaf, leaf_size, expansion_order)
+                        child_branch, n_grandchildren, i_leaf = branch!(buffers, small_buffers, sort_index, octant_container, sort_index_buffer, i_first_branch, bodies_index, child_center, child_center, child_radius, child_radius, child_box, child_box, i_parent, i_leaf, leaf_size, interaction_list_method)
                         i_first_branch += n_grandchildren
                         push!(branches, child_branch)
                     end
@@ -247,7 +247,7 @@ function child_branches!(branches, buffers, sort_index, small_buffers, sort_inde
     return parents_index, n_children, i_leaf
 end
 
-function branch!(buffer, small_buffer, sort_index, octant_container, sort_index_buffer, i_first_branch, bodies_index, source_center, target_center, source_radius, target_radius, source_box, target_box, i_parent, i_leaf, leaf_size, expansion_order)
+function branch!(buffer, small_buffer, sort_index, octant_container, sort_index_buffer, i_first_branch, bodies_index, source_center, target_center, source_radius, target_radius, source_box, target_box, i_parent, i_leaf, leaf_size, interaction_list_method)
     # count bodies in each octant
     census!(octant_container, buffer, bodies_index, target_center)
 
@@ -255,7 +255,7 @@ function branch!(buffer, small_buffer, sort_index, octant_container, sort_index_
     update_octant_accumulator!(octant_container)
 
     # number of child branches
-    n_children = get_n_children(octant_container, leaf_size)
+    n_children = get_n_children(octant_container, leaf_size, interaction_list_method)
 
     if n_children > 0
         # get beginning index of sorted bodies
@@ -306,7 +306,7 @@ end
 
 # @inline exceeds(cumulative_octant_census::AbstractVector, leaf_size) = cumulative_octant_census[end] > leaf_size
 
-@inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size)
+@inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size, ::SelfTuning)
     fraction = 0.0
     n_bodies = 0
     for i_element in 1:size(cumulative_octant_census, 1)
@@ -320,6 +320,16 @@ end
 
     return fraction > 0.5 && n_bodies > 1
     # return fraction > nextfloat(1.0)
+end
+
+@inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size, ::Barba)
+    not_over = true
+    for i_element in 1:size(cumulative_octant_census, 1)
+        n = cumulative_octant_census[i_element,end]
+        not_over = not_over && n <= leaf_size[i_element]
+    end
+
+    return !not_over
 end
 
 # @inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size)
@@ -438,10 +448,10 @@ end
 
 #--- determine the number of descendants ---#
 
-@inline function get_n_children(cumulative_octant_census, leaf_size)
+@inline function get_n_children(cumulative_octant_census, leaf_size, interaction_list_method)
     n_children = 0
 
-    if exceeds(cumulative_octant_census, leaf_size)
+    if exceeds(cumulative_octant_census, leaf_size, interaction_list_method)
         for i_octant in 1:8
             get_population(cumulative_octant_census,i_octant) > 0 && (n_children += 1)
         end

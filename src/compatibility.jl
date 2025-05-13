@@ -235,14 +235,14 @@ function buffer_to_target!(target_systems::Tuple, target_tree::Tree, derivatives
     buffer_to_target!(target_systems, target_tree.buffers, derivatives_switches, target_tree.sort_index_list)
 end
 
-function buffer_to_target!(target_systems::Tuple, target_buffers, derivatives_switches, sort_index_list=Tuple(1:get_n_bodies(system) for system in target_systems))
-    for (target_system, target_buffer, derivatives_switch, sort_index) in zip(target_systems, target_buffers, derivatives_switches, sort_index_list)
-        buffer_to_target!(target_system, target_buffer, derivatives_switch, sort_index)
+function buffer_to_target!(target_systems::Tuple, target_buffers, derivatives_switches, sort_index_list=Tuple(1:get_n_bodies(system) for system in target_systems), buffer_index_list=Tuple(1:get_n_bodies(system) for system in target_systems))
+    for (target_system, target_buffer, derivatives_switch, sort_index, buffer_index) in zip(target_systems, target_buffers, derivatives_switches, sort_index_list, buffer_index_list)
+        buffer_to_target!(target_system, target_buffer, derivatives_switch, sort_index, buffer_index)
     end
 end
 
-function buffer_to_target!(target_system, target_buffer, derivatives_switch, sort_index=1:get_n_bodies(target_system))
-    for i_body in 1:get_n_bodies(target_system)
+function buffer_to_target!(target_system, target_buffer, derivatives_switch, sort_index=1:get_n_bodies(target_system), buffer_index=1:get_n_bodies(target_system))
+    for i_body in buffer_index
         buffer_to_target_system!(target_system, sort_index[i_body], derivatives_switch, target_buffer, i_body) # TODO: check this
     end
 end
