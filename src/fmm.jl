@@ -39,28 +39,39 @@ function nearfield_loop!(target_buffers, target_branches, source_system, source_
     end
 end
 
-function get_n_interactions(target_branches, i_source_system, source_branches::Vector{<:Branch}, direct_list)
+function get_n_interactions(i_target_system, target_branches, i_source_system, source_branches::Vector{<:Branch}, direct_list)
     n_interactions = 0
     for (i_target, i_source) in direct_list
-        n_interactions += get_n_bodies(target_branches[i_target]) * length(source_branches[i_source].bodies_index[i_source_system])
+        n_interactions += target_branches[i_target].n_bodies[i_target_system] * source_branches[i_source].n_bodies[i_source_system]
     end
 
     return n_interactions
 end
 
-function make_assignments!(assignments, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread)
+function check_completion(i_target, list, i, ::InteractionListMethod{SortByTarget()})
+    return i == length(list) || list[i+1][1] != i_target
+end
+
+function check_completion(i_target, list, i, interaction_list_method)
+    return true
+end
+
+function make_direct_assignments!(assignments, i_target_system, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread, interaction_list_method)
     i_start = 1
     i_end = 1
     i_thread = 1
     n_interactions = 0
 
     # loop over interaction list
-    for (i_target, i_source) in direct_list
+    for (i,(i_target, i_source)) in enumerate(direct_list)
         # update number of interactions in the current assignment
-        n_interactions += get_n_bodies(target_branches[i_target]) * length(source_branches[i_source].bodies_index[i_source_system])
+        n_interactions += target_branches[i_target].n_bodies[i_target_system] * source_branches[i_source].n_bodies[i_source_system]
+
+        # if sorting by target, make sure we finish off the current target
+        ready = check_completion(i_target, direct_list, i, interaction_list_method)
 
         # if we exceed n_per_thread, finish this assignment and reset counters
-        if n_interactions >= n_per_thread
+        if n_interactions >= n_per_thread && ready
             assignments[i_thread] = i_start:i_end
             i_start = i_end + 1
             i_thread += 1
@@ -73,30 +84,44 @@ function make_assignments!(assignments, target_branches, i_source_system, source
     i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
 end
 
-function execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment)
+function execute_assignment!(target_buffer, i_target_buffer, target_branches, derivatives_switch, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment, interaction_list_method)
     for i_interaction in assignment
-        dl = direct_list[i_interaction]
-        i_target, _ = dl
+        i_target, i_source = direct_list[i_interaction]
+        
+        # identify sources
+        source_branch = source_branches[i_source]
+        source_index = source_branch.bodies_index[i_source_system]
+        
+        # identify targets
         target_branch = target_branches[i_target]
-        Threads.lock(target_branch.lock) do
-            nearfield_loop!(target_systems, target_branches, source_system, source_buffer, i_source_system, source_branches, (dl,), derivatives_switches)
-        end
+        target_index = target_branch.bodies_index[i_target_buffer]
+
+        # compute interaction
+        @lock target_branch.lock direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
     end
 end
 
-function nearfield_multithread!(target_system, target_branches, source_systems::Tuple, source_buffers, source_branches, derivatives_switch, direct_list, n_threads)
+function nearfield_multithread!(target_systems, target_branches, source_systems::Tuple, source_buffers, source_branches, derivatives_switches, direct_list, interaction_list_method, n_threads)
+    # benchmark for auto-tuning
+    t_nf = @MVector zeros(length(source_systems))
+
     for (i_source_system, source_system) in enumerate(source_systems)
         source_buffer = source_buffers[i_source_system]
-        nearfield_multithread!(target_system, target_branches, source_system, source_buffer, i_source_system, source_branches, derivatives_switch, direct_list, n_threads)
+        for (i_target_buffer, target_buffer) in enumerate(target_systems)
+            t = @elapsed nearfield_multithread!(target_buffer, i_target_buffer, target_branches, source_system, source_buffer, i_source_system, source_branches, derivatives_switches[i_target_buffer], direct_list, interaction_list_method, n_threads)
+            t_nf[i_source_system] += t
+        end
     end
+
+    return t_nf
 end
 
-function nearfield_multithread!(target_systems, target_branches, source_system, source_buffer, i_source_system, source_branches, derivatives_switches, direct_list, n_threads)
+function nearfield_multithread!(target_buffer, i_target_buffer, target_branches, source_system, source_buffer, i_source_system, source_branches, derivatives_switch, direct_list, interaction_list_method, n_threads)
 
     #--- load balance ---#
 
     # total number of interactions
-    n_interactions = get_n_interactions(target_branches, i_source_system, source_branches, direct_list)
+    n_interactions = get_n_interactions(i_target_buffer, target_branches, i_source_system, source_branches, direct_list)
 
     # interactions per thread
     n_per_thread, rem = divrem(n_interactions, n_threads)
@@ -110,45 +135,27 @@ function nearfield_multithread!(target_systems, target_branches, source_system, 
     for i in eachindex(assignments)
         assignments[i] = 1:0
     end
-    make_assignments!(assignments, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread)
+    make_direct_assignments!(assignments, i_target_buffer, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread, interaction_list_method)
 
-    # execute tasks
-    Threads.@threads for assignment in assignments
-        execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment)
+    # rule out datarace conditions
+    copies = Tuple(zeros(size(target_buffer)) for _ in 1:n_threads)
+    pos = view(target_buffer, 1:3, :)
+    for i_copy in 1:n_threads
+        copies[i_copy][1:3,:] .= pos
     end
 
+    # execute tasks
+    Threads.@threads for i_task in eachindex(assignments)
+        assignment = assignments[i_task]
+        this_buffer = copies[i_task]
+        execute_assignment!(this_buffer, i_target_buffer, target_branches, derivatives_switch, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment, interaction_list_method)
+    end
+
+    # consolidate buffers
+    for b in copies
+        target_buffer[4:end,:] .+= b[4:end,:]
+    end
 end
-
-# function _nearfield_multithread!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, n_threads)
-
-#     #--- load balance ---#
-
-#     # total number of interactions
-#     n_interactions = get_n_interactions(target_systems, target_branches, source_system, source_branches, direct_list)
-
-#     # interactions per thread
-#     n_per_thread, rem = divrem(n_interactions, n_threads)
-#     rem > 0 && (n_per_thread += 1)
-
-#     # if there are too many threads, we'll actually hurt performance
-#     n_per_thread < MIN_NPT_NF && (n_per_thread = MIN_NPT_NF)
-
-#     # create assignments
-#     assignments = Vector{UnitRange{Int64}}(undef,n_threads)
-#     for i in eachindex(assignments)
-#         assignments[i] = 1:0
-#     end
-#     make_assignments!(assignments, target_branches, source_branches, direct_list, n_threads, n_per_thread)
-
-#     # execute tasks
-#     if DEBUG[]
-#         @show assignments
-#     end
-#     Threads.@threads for assignment in assignments
-#         execute_assignment!(target_systems, target_branches, derivatives_switches, source_system, source_branches, direct_list, assignment)
-#     end
-
-# end
 
 """
     nearfield_device!(target_systems, target_tree, derivatives_switches, source_systems, source_tree, direct_list)
@@ -258,45 +265,19 @@ function upward_pass_singlethread!(tree::Tree, systems, expansion_order, lamb_he
     upward_pass_singlethread_2!(tree, expansion_order, lamb_helmholtz)
 end
 
+function upward_pass_multithread_1!(source_tree::Tree, systems::Tuple, expansion_order, n_threads)
+    
+    #--- load balance ---#
 
-# function upward_pass_singlethread!(branches::Vector{Branch{TF,N}}, systems, expansion_order, lamb_helmholtz, leaf_index) where {TF,N}
-#
-#     # try preallocating one container to be reused
-#     Ts = zeros(TF, length_Ts(expansion_order))
-#     eimϕs = zeros(TF, 2, expansion_order+1)
-#     weights_tmp_1 = initialize_expansion(expansion_order, TF)
-#     weights_tmp_2 = initialize_expansion(expansion_order, TF)
-#
-#     # multipole expansions
-#     for i_branch in leaf_index
-#         branch = branches[i_branch]
-#         branch.source && body_to_multipole!(branch, systems, branch.harmonics, expansion_order)
-#     end
-#
-#     # loop over branches
-#     for i_branch in length(branches):-1:1 # no need to create a multipole expansion at the very top level
-#         branch = branches[i_branch]
-#
-#         if branch.source && branch.n_branches !== 0 # branch is a source and is not a leaf
-#             # iterate over children
-#             for i_child in branch.branch_index
-#                 child_branch = branches[i_child]
-#                 multipole_to_multipole!(branch, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
-#             end
-#         end
-#     end
-# end
+    # extract containers
+    leaf_index = source_tree.leaf_index
+    branches = source_tree.branches
 
-function body_to_multipole_multithread!(branches::Vector{<:Branch}, systems::Tuple, expansion_order, leaf_index, n_threads)
-    ## load balance
     leaf_assignments = fill(1:0, length(systems), n_threads)
-    for (i_system,system) in enumerate(systems)
+    for (i_system, system) in enumerate(systems)
 
         # total number of bodies
-        n_bodies = 0
-        for i_leaf in leaf_index
-            n_bodies += length(branches[i_leaf].bodies_index[i_system])
-        end
+        n_bodies = get_n_bodies(system)
 
         # number of bodies per thread
         n_per_thread, rem = divrem(n_bodies, n_threads)
@@ -321,76 +302,125 @@ function body_to_multipole_multithread!(branches::Vector{<:Branch}, systems::Tup
         i_thread <= n_threads && (leaf_assignments[i_system,i_thread] = i_start:length(leaf_index))
     end
 
-    ## compute multipole expansion coefficients
-    Threads.@threads for i_thread in 1:n_threads
-        for (i_system,system) in enumerate(systems)
+    #--- preallocate memory ---#
+
+    harmonics = [initialize_harmonics(expansion_order) for _ in 1:n_threads]
+
+    #--- compute multipole expansion coefficients ---#
+
+    for (i_system, system) in enumerate(systems)
+        buffer = source_tree.buffers[i_system]
+        Threads.@threads for i_thread in 1:n_threads
             leaf_assignment = leaf_assignments[i_system,i_thread]
             for i_task in leaf_assignment
-                branch = branches[leaf_index[i_task]]
-                Threads.lock(branch.lock) do
-                    body_to_multipole!(system, branch, branch.bodies_index[i_system], branch.harmonics, expansion_order)
-                end
+                i_branch = leaf_index[i_task]
+                branch = branches[i_branch]
+                multipole_coefficients = view(source_tree.expansions, :, :, :, i_branch)
+                body_to_multipole!(system, multipole_coefficients, buffer, branch.source_center, branch.bodies_index[i_system], harmonics[i_thread], expansion_order)
             end
         end
     end
 end
 
-function translate_multipoles_multithread!(branches::Vector{Branch{TF,N}}, expansion_order, lamb_helmholtz, levels_index, n_threads) where {TF,N}
+function assign_m2m!(assignments, branches, level_index, n_per_thread, n_threads)
+    i_start = level_index[1]
+    i_end = i_start
+    i_thread = 1
+    n_interactions = 0
+
+    # reset assignments
+    for i in eachindex(assignments)
+        assignments[i] = 1:0
+    end
+
+    # loop over interaction list
+    for i_branch in level_index
+
+        # extract branch
+        branch = branches[i_branch]
+
+        # update number of interactions in the current assignment
+        n_interactions += branch.n_branches
+
+        # if we exceed n_per_thread, finish this assignment and reset counters
+        if n_interactions >= n_per_thread
+            assignments[i_thread] = i_start:i_end
+            i_start = i_end + 1
+            i_thread += 1
+            n_interactions = 0
+        end
+
+        i_end += 1
+    end
+
+    i_thread <= n_threads && (assignments[i_thread] = i_start:level_index[end])
+end
+
+function execute_m2m!(expansions, branches, assignment, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+    for i_branch in assignment
+        # extract branch
+        parent_branch = branches[i_branch]
+        parent_expansion = view(expansions, :, :, :, i_branch)
+
+        # loop over children
+        for i_child in parent_branch.branch_index
+            child_branch = branches[i_child]
+            child_expansion = view(expansions, :, :, :, i_child)
+            multipole_to_multipole!(parent_expansion, parent_branch, child_expansion, child_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+        end
+    end
+end
+
+function upward_pass_multithread_2!(tree::Tree{TF,N}, expansion_order, lamb_helmholtz, n_threads) where {TF,N}
+
+    # extract containers
+    branches = tree.branches
+    levels_index = tree.levels_index
+    expansions = tree.expansions
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
     eimϕs = [zeros(TF, 2, expansion_order+1) for _ in 1:n_threads]
     weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
     weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    assignments = fill(1:0, n_threads)
 
     # iterate over levels
-    for i_level in length(levels_index):-1:2
+    for i_level in length(levels_index)-1:-1:1
         level_index = levels_index[i_level]
 
         # load balance
-        n_branches = length(level_index)
-        n_per_thread, rem = divrem(n_branches, n_threads)
+        n_interactions = 0
+        for i_branch in level_index
+            n_interactions += branches[i_branch].n_branches
+        end
+        n_per_thread, rem = divrem(n_interactions, n_threads)
         rem > 0 && (n_per_thread += 1)
 
         # if there are too many threads, we'll actually hurt performance
         n_per_thread < MIN_NPT_M2M && (n_per_thread = MIN_NPT_M2M)
 
+        # how many threads are actually needed
+        assign_m2m!(assignments, branches, level_index, n_per_thread, n_threads)
+
         # assign thread start branches
-        i_starts = 1:n_per_thread:n_branches
-        Threads.@threads for i_task in 1:length(i_starts)
-            # get first branch
-            i_start = i_starts[i_task]
+        Threads.@threads for i_task in 1:n_threads
+            # get assignment
+            assignment = assignments[i_task]
 
-            # get final branch
-            i_end = min(n_branches, i_start+n_per_thread-1)
-
-            # loop over branches
-            for i in i_start:i_end
-                i_branch = level_index[i]
-                child_branch = branches[i_branch]
-                parent_branch = branches[child_branch.i_parent]
-                Threads.lock(parent_branch.lock) do
-                    multipole_to_multipole!(parent_expansion, parent_branch, child_expansion, child_branch, weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
-                end
-            end
+            # execute assignment
+            execute_m2m!(expansions, branches, assignment, weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ζs_mag, Hs_π2, expansion_order, lamb_helmholtz)
         end
     end
 end
 
-function upward_pass_multithread!(branches, systems, expansion_order, lamb_helmholtz, levels_index, leaf_index, ::Val{n_threads}) where n_threads
+function upward_pass_multithread!(source_tree, source_systems, expansion_order, lamb_helmholtz, n_threads)
 
-    if n_threads == 1
+    # create multipole expansions
+    upward_pass_multithread_1!(source_tree, source_systems, expansion_order, n_threads)
 
-        # single threaded version
-        upward_pass_singlethread!(branches, systems, expansion_order, lamb_helmholtz, leaf_index)
-
-    else
-        # create multipole expansions
-        body_to_multipole_multithread!(branches, systems, expansion_order, leaf_index, n_threads)
-
-        # m2m translation
-        translate_multipoles_multithread!(branches, expansion_order, lamb_helmholtz, levels_index, n_threads)
-    end
+    # m2m translation
+    upward_pass_multithread_2!(source_tree, expansion_order, lamb_helmholtz, n_threads)
 end
 
 #------- direct interaction matrix -------#
@@ -398,154 +428,6 @@ end
 # TODO: add influence matrix approach to direct interactions
 
 #------- horizontal pass -------#
-
-# function horizontal_pass_debug!(target_system, target_branches::Vector{<:Branch{TF}}, source_system, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol; store="local", printstuff=74121) where TF
-#
-#     @assert isnothing(ε_tol) "ε must be turned off for this function"
-#
-#     # increment the expansion order if ε !== nothing
-#     error_check = !(isnothing(ε))
-#
-#     # preallocate containers to be reused
-#     weights_tmp_1 = initialize_expansion(expansion_order + error_check, TF)
-#     weights_tmp_2 = initialize_expansion(expansion_order + error_check, TF)
-#     velocity_n_m = zeros(TF, 2, 3, size(weights_tmp_1, 3))
-#     Ts = zeros(TF, length_Ts(expansion_order + error_check))
-#     eimϕs = zeros(TF, 2, expansion_order+1+error_check)
-#
-#     # zero potential
-#     for i in 1:get_n_bodies(target_system)
-#         target_system[i,ScalarPotential()] = zero(TF)
-#         target_system[i,Velocity()] = zero(SVector{3,TF})
-#     end
-#
-#     # store observed and predicted errors
-#     εs_obs = TF[]
-#     εs_pred = TF[]
-#
-#     i_worst = 0
-#     val_worst = 0.0
-#
-#     for (i_printstuff, (i_target, j_source)) in enumerate(m2l_list)
-#         # get local expansion due to just this multipole expansion
-#         target_branch = deepcopy(target_branches[i_target])
-#         target_branch.local_expansion .= zero(TF)
-#         source_branch = source_branches[j_source]
-#         multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε)
-#
-#         # store previous potential/velocity
-#         old_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
-#         old_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
-#
-#         # calculate direct velocity
-#         for i in target_branch.bodies_index
-#             target_system[i, ScalarPotential()] = zero(TF)
-#             target_system[i, Velocity()] = zero(SVector{3,TF})
-#         end
-#         derivatives_switch = DerivativesSwitch(true, true, false, target_system)
-#         nearfield_singlethread!(target_system, target_branches, derivatives_switch, source_system, source_branches, [SVector{2,Int32}(i_target, j_source)])
-#         direct_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
-#         direct_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
-#
-#         # calculate multipole influence
-#         for i in target_branch.bodies_index
-#             target_system[i, ScalarPotential()] = zero(TF)
-#             target_system[i, Velocity()] = zero(SVector{3,TF})
-#         end
-#         evaluate_multipole!(target_system, target_branch, source_branch, source_branch.harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
-#         multipole_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
-#         multipole_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
-#
-#         # calculate expansion velocity
-#         for i in target_branch.bodies_index
-#             target_system[i, ScalarPotential()] = zero(TF)
-#             target_system[i, Velocity()] = zero(SVector{3,TF})
-#         end
-#         evaluate_local!(target_system, target_branch, target_branch.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
-#         expansion_potential = [target_system[i, ScalarPotential()] for i in target_branch.bodies_index]
-#         expansion_velocity = [target_system[i, Velocity()] for i in target_branch.bodies_index]
-#
-#         # restore previous velocity
-#         if store == "direct"
-#             for (j,i) in enumerate(target_branch.bodies_index)
-#                 target_system[i, ScalarPotential()] = old_potential[j] + direct_potential[j]
-#                 target_system[i, Velocity()] = old_velocity[j] + direct_velocity[j]
-#             end
-#         elseif store == "multipole"
-#             for (j,i) in enumerate(target_branch.bodies_index)
-#                 target_system[i, ScalarPotential()] = old_potential[j] + multipole_potential[j]
-#                 target_system[i, Velocity()] = old_velocity[j] + multipole_velocity[j]
-#             end
-#         elseif store == "local"
-#             for (j,i) in enumerate(target_branch.bodies_index)
-#                 target_system[i, ScalarPotential()] = old_potential[j] + expansion_potential[j]
-#                 target_system[i, Velocity()] = old_velocity[j] + expansion_velocity[j]
-#             end
-#         end
-#
-#         # actual error
-#         ε_obs = [norm(v_direct - v_expansion) for (v_direct, v_expansion) in zip(direct_velocity, expansion_velocity)]
-#         ε_obs_mp = [norm(v_direct - v_expansion) for (v_direct, v_expansion) in zip(direct_velocity, multipole_velocity)]
-#         ε_obs_max = maximum(abs.(ε_obs))
-#
-#         if ε_obs_max > val_worst
-#             val_worst = ε_obs_max
-#             i_worst = i_printstuff
-#         end
-#
-#         if i_printstuff == printstuff
-#             println("\nM2L DEBUG:")
-#             @show mean(abs.(ε_obs_mp)) maximum(abs.(ε_obs_mp))
-#             @show mean(abs.(ε_obs)) maximum(abs.(ε_obs))
-#             @show target_branch.target_center source_branch.source_center target_branch.bodies_index source_branch.bodies_index target_branch.target_radius source_branch.source_radius target_branch.target_box source_branch.source_box
-#             println()
-#             println("for reproducibility:")
-#             source_x = [source_system[i,Position()] for i in source_branch.bodies_index]
-#             target_x = [target_system[i,Position()] for i in target_branch.bodies_index]
-#             source_m = [source_system[i,Strength()] for i in source_branch.bodies_index]
-#             target_m = [target_system[i,Strength()] for i in target_branch.bodies_index]
-#             source_r = [source_system[i,Radius()] for i in source_branch.bodies_index]
-#             target_r = [target_system[i,Radius()] for i in target_branch.bodies_index]
-#
-#             @show source_x source_m source_r target_x target_m target_r
-#         end
-#
-#         # predicted error
-#         ε_pred = error(target_branch, source_branch, expansion_order, RotatedCoefficients(), lamb_helmholtz)
-#
-#         # store results
-#         push!(εs_obs, ε_obs_max)
-#         push!(εs_pred, ε_pred)
-#
-#         if ε_obs_max > 0.1 && false
-#             println("\nERROR > 0.1 ")
-#             @show i_target j_source
-#             @show ε_obs_max ε_pred
-#             @show target_branch.target_radius
-#             @show source_branch.source_radius
-#             @show source_branch.bodies_index
-#             dx = target_branch.target_center - source_branch.source_center
-#             @show dx
-#             @show (source_branch.source_radius + target_branch.target_radius) / norm(dx)
-#
-#             # ensure all bodies are contained inside
-#             for i in target_branch.bodies_index
-#                 dx = target_system[i,Position()] - target_branch.target_center
-#                 @assert norm(dx) <= target_branch.target_radius "found a body outside: dx=$dx, r=$(target_branch.target_radius)"
-#             end
-#
-#             for i in source_branch.bodies_index
-#                 dx = source_system[i,Position()] - source_branch.source_center
-#                 @assert norm(dx) <= source_branch.source_radius
-#             end
-#
-#         end
-#
-#     end
-#
-#     println("\nWorst interaction:\n\ti=$i_worst\n")
-#     return εs_obs, εs_pred
-# end
 
 function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_tol; verbose=false) where {TF1,TF2}
 
@@ -584,44 +466,104 @@ function horizontal_pass_singlethread!(target_tree::Tree{TF1,<:Any}, source_tree
     return Pmax, error_success
 end
 
-function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads) where {TF1, TF2}
+function assign_m2l!(assignments, m2l_list, n_threads, n_per_thread, interaction_list_method)
+    i_start = 1
+    i_end = 1
+    i_thread = 1
+    n_interactions = 0
+
+    # loop over interaction list
+    for (i,(i_target, i_source)) in enumerate(m2l_list)
+        # update number of interactions in the current assignment
+        n_interactions += 1
+
+        # if sorting by target, make sure we finish off the current target
+        ready = check_completion(i_target, m2l_list, i, interaction_list_method)
+
+        # if we exceed n_per_thread, finish this assignment and reset counters
+        if n_interactions >= n_per_thread && ready
+            assignments[i_thread] = i_start:i_end
+            i_start = i_end + 1
+            i_thread += 1
+            n_interactions = 0
+        end
+
+        i_end += 1
+    end
+
+    i_thread <= n_threads && (assignments[i_thread] = i_start:length(m2l_list))
+end
+
+function execute_m2l!(target_expansions, target_branches, source_expansions, source_branches, m2l_list, assignment, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol, ::InteractionListMethod{SortByTarget()})
+    Pmax = 0
+    error_success = true
+    for i in assignment
+        i_target, j_source = m2l_list[i]
+        target_expansion = view(target_expansions, :, :, :, i_target)
+        source_expansion = view(source_expansions, :, :, :, j_source)
+        target_branch = target_branches[i_target]
+        source_branch = source_branches[j_source]
+        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol)
+        Pmax = max(P, Pmax)
+        error_success = error_success && this_error_success
+    end    
+
+    return Pmax, error_success
+end
+
+function execute_m2l!(target_expansions, target_branches, source_expansions, source_branches, m2l_list, assignment, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol, ::InteractionListMethod)
+    Pmax = 0
+    error_success = true
+    for i in assignment
+        i_target, j_source = m2l_list[i]
+        target_expansion = view(target_expansions, :, :, :, i_target)
+        source_expansion = view(source_expansions, :, :, :, j_source)
+        target_branch = target_branches[i_target]
+        source_branch = source_branches[j_source]
+        @lock target_branch.lock ( P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol) )
+        Pmax = max(P, Pmax)
+        error_success = error_success && this_error_success
+    end    
+
+    return Pmax, error_success
+end
+
+function horizontal_pass_multithread!(target_tree::Tree{TF1,<:Any}, source_tree::Tree{TF2,<:Any}, m2l_list, lamb_helmholtz, expansion_order, ε_tol, interaction_list_method, n_threads; verbose=false) where {TF1, TF2}
 
     TF = promote_type(TF1, TF2)
 
-    if n_threads == 1 # single thread
+    # number of translations per thread
+    n_per_thread, rem = divrem(length(m2l_list),n_threads)
+    rem > 0 && (n_per_thread += 1)
+    assignments = fill(1:0, n_threads)
 
-        horizontal_pass_singlethread!(target_branches, source_branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol)
+    # make assignments 
+    assign_m2l!(assignments, m2l_list, n_threads, n_per_thread, interaction_list_method)
 
-    else # multithread
+    # preallocate containers
+    Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
+    eimϕs = [zeros(TF, 2, expansion_order + 1) for _ in 1:n_threads]
+    weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    weights_tmp_3 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    Pmax = @MVector zeros(Int, n_threads)
+    error_success = @MVector zeros(Bool, n_threads)
+    target_expansions = target_tree.expansions
+    target_branches = target_tree.branches
+    source_expansions = source_tree.expansions
+    source_branches = source_tree.branches
 
-        # number of translations per thread
-        n_per_thread, rem = divrem(length(m2l_list),n_threads)
-        rem > 0 && (n_per_thread += 1)
-        assignments = 1:n_per_thread:length(m2l_list)
-
-        # increment the expansion order if ε !== nothing
-        # error_check = !(isnothing(ε))
-
-        # try preallocating one set of containers to be reused
-        Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
-        eimϕs = [zeros(TF, 2, expansion_order + 1) for _ in 1:n_threads]
-        weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
-        weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
-        weights_tmp_3 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
-
-        # execute tasks
-        Threads.@threads for i_thread in 1:length(assignments)
-            i_start = assignments[i_thread]
-            i_stop = min(i_start+n_per_thread-1, length(m2l_list))
-            for (i_target, j_source) in m2l_list[i_start:i_stop]
-                Threads.lock(target_tree.branches[i_target].lock) do
-                    multipole_to_local!(target_tree.branches[i_target], source_tree.branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], weights_tmp_3[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol)
-                end
-            end
-        end
+    # execute tasks
+    Threads.@threads for i_thread in 1:n_threads
+        this_Pmax, this_error_success = execute_m2l!(target_expansions, target_branches, source_expansions, source_branches, m2l_list, assignments[i_thread], weights_tmp_1[i_thread], weights_tmp_2[i_thread], weights_tmp_3[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol, interaction_list_method)
+        Pmax[i_thread] = this_Pmax
+        error_success[i_thread] = this_error_success
     end
 
-    return nothing
+    Pmax = maximum(Pmax)
+    error_success = prod(error_success)
+
+    return Pmax, error_success
 end
 
 #------- DOWNWARD PASS -------#
@@ -666,124 +608,131 @@ end
 
 end
 
-# @inline function downward_pass_singlethread!(branches::Vector{<:Branch{TF,<:Any}}, systems, expansion_order, lamb_helmholtz, derivatives_switches, is_target) where TF
-#     # try preallocating one container to be reused
-#     Ts = zeros(TF, length_Ts(expansion_order))
-#     eimϕs = zeros(TF, 2, expansion_order+1)
-#     weights_tmp_1 = initialize_expansion(expansion_order, TF)
-#     weights_tmp_2 = initialize_expansion(expansion_order, TF)
-#     velocity_n_m = zeros(eltype(branches[1]), 2, 3, size(weights_tmp_1, 3))
-#
-#     # loop over branches
-#     for branch in branches
-#         if branch.target # if branch is a target
-#             if branch.n_branches == 0 # leaf level
-#                 evaluate_local!(systems, branch, branch.harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches, is_target)
-#             else
-#                 for i_child_branch in branch.branch_index
-#                     child_branch = branches[i_child_branch]
-#                     child_branch.target && local_to_local!(child_branch, branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
-#                 end
-#             end
-#         end
-#     end
-# end
+assign_l2l!(assignments, branches, level_index, n_per_thread, n_threads) = assign_m2m!(assignments, branches, level_index, n_per_thread, n_threads)
 
-function translate_locals_multithread!(tree::Tree{TF,<:Any}, expansion_order, lamb_helmholtz, levels_index, n_threads) where TF
+function execute_l2l!(expansions, branches, assignment, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+    for i_branch in assignment
+        # extract branch
+        parent_branch = branches[i_branch]
+        parent_expansion = view(expansions, :, :, :, i_branch)
+
+        # loop over children
+        for i_child in parent_branch.branch_index
+            child_branch = branches[i_child]
+            child_expansion = view(expansions, :, :, :, i_child)
+            local_to_local!(child_expansion, child_branch, parent_expansion, parent_branch, weights_tmp_1, weights_tmp_2, Ts, eimϕs, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+        end
+    end
+end
+
+function downward_pass_multithread_1!(tree::Tree{TF,<:Any}, expansion_order, lamb_helmholtz, n_threads) where TF
+
+    # extract containers
+    branches = tree.branches
+    levels_index = tree.levels_index
+    expansions = tree.expansions
 
     # try preallocating one set of containers to be reused
     Ts = [zeros(TF, length_Ts(expansion_order)) for _ in 1:n_threads]
     eimϕs = [zeros(TF, 2, expansion_order+1) for _ in 1:n_threads]
     weights_tmp_1 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
     weights_tmp_2 = [initialize_expansion(expansion_order, TF) for _ in 1:n_threads]
+    assignments = fill(1:0, n_threads)
 
     # iterate over levels
-    for i_level in 2:length(levels_index)
+    for i_level in 1:length(levels_index)
         level_index = levels_index[i_level]
 
-        # divide chunks
-        n_per_thread, rem = divrem(length(level_index),n_threads)
+        # load balance
+        n_interactions = 0
+        for i_branch in level_index
+            n_interactions += branches[i_branch].n_branches
+        end
+        n_per_thread, rem = divrem(n_interactions, n_threads)
         rem > 0 && (n_per_thread += 1)
 
         # if there are too many threads, we'll actually hurt performance
         n_per_thread < MIN_NPT_L2L && (n_per_thread = MIN_NPT_L2L)
 
-        # loop over branches
-        i_starts = 1:n_per_thread:length(level_index)
-        #Threads.@threads for (i_task,i_start) in enumerate(1:n_per_thread:length(level_index))
-        Threads.@threads for i_task in 1:length(i_starts)
-            i_start = i_starts[i_task]
-            i_stop = min(i_start+n_per_thread-1,length(level_index))
+        # how many threads are actually needed
+        assign_l2l!(assignments, branches, level_index, n_per_thread, n_threads)
 
-            # loop over branches
-            for i_child in level_index[i_start]:level_index[i_stop]
-                child_branch = branches[i_child]
-                child_expansion = view(tree.expansions, :, :, :, i_child)
-                branch_expansion = view(tree.expansions, :, :, :, child_branch.i_parent)
-                local_to_local!(child_expansion, child_branch, branch_expansion, branches[child_branch.i_parent], weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ηs_mag, Hs_π2, expansion_order, lamb_helmholtz)
+        # assign thread start branches
+        Threads.@threads for i_task in 1:n_threads
+            
+            # get assignment
+            assignment = assignments[i_task]
+
+            # execute assignment
+            execute_l2l!(expansions, branches, assignment, weights_tmp_1[i_task], weights_tmp_2[i_task], Ts[i_task], eimϕs[i_task], ηs_mag, Hs_π2, expansion_order, lamb_helmholtz) 
+        end
+    end
+end
+
+function downward_pass_multithread_2!(tree::Tree{TF,<:Any}, systems, derivatives_switches, expansion_order, lamb_helmholtz, n_threads) where TF
+    
+    #--- load balance ---#
+
+    leaf_index = tree.leaf_index
+    branches = tree.branches
+
+    leaf_assignments = fill(1:0, length(systems), n_threads)
+    for (i_system, system) in enumerate(systems)
+
+        # total number of bodies
+        n_bodies = get_n_bodies(system)
+
+        # number of bodies per thread
+        n_per_thread, rem = divrem(n_bodies, n_threads)
+        rem > 0 && (n_per_thread += 1)
+
+        # if there are too many threads, we'll actually hurt performance
+        n_per_thread < MIN_NPT_L2B && (n_per_thread = MIN_NPT_L2B)
+
+        # create chunks
+        i_start = 1
+        i_thread = 1
+        n_bodies = 0
+        for (i_end,i_leaf) in enumerate(leaf_index)
+            n_bodies += length(branches[i_leaf].bodies_index[i_system])
+            if n_bodies >= n_per_thread
+                leaf_assignments[i_system,i_thread] = i_start:i_end
+                i_start = i_end+1
+                i_thread += 1
+                n_bodies = 0
+            end
+        end
+        i_thread <= n_threads && (leaf_assignments[i_system,i_thread] = i_start:length(leaf_index))
+    end
+
+    #--- preallocate memory ---#
+
+    harmonics = [initialize_harmonics(expansion_order, TF) for _ in 1:n_threads]
+    velocity_n_m = [initialize_velocity_n_m(expansion_order, TF) for _ in 1:n_threads]
+
+    #--- compute multipole expansion coefficients ---#
+
+    for (i_system, system) in enumerate(systems)
+        Threads.@threads for i_thread in 1:n_threads
+            leaf_assignment = leaf_assignments[i_system,i_thread]
+            these_harmonics = harmonics[i_thread]
+            these_velocity_n_m = velocity_n_m[i_thread]
+            for i_leaf in leaf_assignment
+                i_branch = leaf_index[i_leaf]
+                evaluate_local!(system, i_system, tree, i_branch, these_harmonics, these_velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
             end
         end
     end
-    return nothing
 end
 
-function local_to_body_multithread!(branches::Vector{Branch{TF,<:Any}}, systems, derivatives_switches, expansion_order, lamb_helmholtz, leaf_index, n_threads) where TF
-    # try preallocating one set of containers to be reused
-    velocity_n_m = [initialize_velocity_n_m(expansion_order, TF) for _ in 1:n_threads]
+function downward_pass_multithread!(tree, systems, derivatives_switch, expansion_order, lamb_helmholtz, n_threads)
 
-    # create assignments
-    n_bodies = 0
-    for i_leaf in leaf_index
-        n_bodies += get_n_bodies(branches[i_leaf])
-    end
+    # m2m translation
+    downward_pass_multithread_1!(tree, expansion_order, lamb_helmholtz, n_threads)
 
-    n_per_thread, rem = divrem(n_bodies,n_threads)
-    rem > 0 && (n_per_thread += 1)
+    # local to body interaction
+    downward_pass_multithread_2!(tree, systems, derivatives_switch, expansion_order, lamb_helmholtz, n_threads)
 
-    assignments = fill(1:0,n_threads)
-    i_start = 1
-    i_thread = 0
-    n_bodies = 0
-    for (i_end,i_leaf) in enumerate(leaf_index)
-        n_bodies += get_n_bodies(branches[i_leaf])
-        if n_bodies >= n_per_thread
-            i_thread += 1
-            assignments[i_thread] = i_start:i_end
-            i_start = i_end+1
-            n_bodies = 0
-        end
-    end
-    if i_start <= length(leaf_index)
-        i_thread += 1
-        assignments[i_thread] = i_start:length(leaf_index)
-    end
-    resize!(assignments, i_thread)
-
-    # spread remainder across rem chunks
-    Threads.@threads for i_thread in eachindex(assignments)
-        assignment = assignments[i_thread]
-        for i_task in assignment
-            leaf = branches[leaf_index[i_task]]
-            evaluate_local!(systems, leaf, leaf.harmonics, velocity_n_m[i_thread], expansion_order, lamb_helmholtz, derivatives_switches)
-        end
-    end
-end
-
-function downward_pass_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, levels_index, leaf_index, n_threads)
-    if n_threads == 1
-
-        # single thread
-        downward_pass_singlethread!(branches, systems, expansion_order, lamb_helmholtz, derivatives_switch)
-
-    else # multithread
-
-        # m2m translation
-	    translate_locals_multithread!(branches, expansion_order, lamb_helmholtz, levels_index, n_threads)
-
-        # local to body interaction
-        local_to_body_multithread!(branches, systems, derivatives_switch, expansion_order, lamb_helmholtz, leaf_index, n_threads)
-
-    end
 end
 
 #--- running FMM ---#
@@ -873,7 +822,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     t_lists = @elapsed m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced, interaction_list_method)
 
     # run fmm
-    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches; multipole_threshold, t_source_tree, t_target_tree, t_lists, optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches, interaction_list_method; multipole_threshold, t_source_tree, t_target_tree, t_lists, optargs...)
 end
 
 """
@@ -915,7 +864,7 @@ Dispatches `fmm!` using existing `::Tree` objects. Note that systems should be u
 - `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
 
 """
-function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree, leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple;
+function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree, leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple, interaction_list_method::InteractionListMethod;
     expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     horizontal_pass_verbose::Bool=false,
@@ -1004,14 +953,14 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
             t2 = Threads.@spawn begin
                     upward_pass && upward_pass_multithread!(source_tree.branches, source_systems, expansion_order, lamb_helmholtz, source_tree.levels_index, source_tree.leaf_index, n_threads_multipole)
                     horizontal_pass && length(m2l_list) > 0 && horizontal_pass_multithread!(target_tree.branches, source_tree.branches, m2l_list, lamb_helmholtz, expansion_order, ε_tol, n_threads_multipole)
-	                downward_pass && translate_locals_multithread!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
+	                downward_pass && downward_pass_multithread_1!(target_tree.branches, expansion_order, lamb_helmholtz, target_tree.levels_index, n_threads_multipole)
                 end
 
             fetch(t1)
             fetch(t2)
 
             # local to body interaction
-            downward_pass && local_to_body_multithread!(target_tree.branches, target_systems, derivatives_switches, Pmax, lamb_helmholtz, tree.leaf_index, n_threads)
+            downward_pass && downward_pass_multithread_2!(target_tree.branches, target_systems, derivatives_switches, Pmax, lamb_helmholtz, tree.leaf_index, n_threads)
 
         else # use CPU
 
@@ -1084,8 +1033,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
             else
 
                 # perform nearfield calculations
-                t_direct = nearfield_multithread!(target_tree.buffers, target_tree.branches, source_systems, source_tree.buffers, source_tree.branches, derivatives_switches, direct_list)
-
+                t_direct = nearfield_multithread!(target_tree.buffers, target_tree.branches, source_systems, source_tree.buffers, source_tree.branches, derivatives_switches, direct_list, interaction_list_method, n_threads)
                 # check number of interactions
                 if tune
                     n_interactions = 0
@@ -1102,27 +1050,25 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 # farfield computations
                 t_up = 0.0
                 if upward_pass
-                    t_up = @elapsed upward_pass_multithread!(source_tree, source_systems, expansion_order, lamb_helmholtz)
+                    t_up = @elapsed upward_pass_multithread!(source_tree, source_systems, expansion_order, lamb_helmholtz, n_threads)
                 end
 
                 t_m2l = 0.0
                 Pmax = 0
                 error_success = true
                 if horizontal_pass
-                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_multithread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_tol; verbose=horizontal_pass_verbose)
+                    t_m2l = @elapsed Pmax, error_success = horizontal_pass_multithread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_tol, interaction_list_method, n_threads)
                 end
                 if !error_success
                     Pmax += 1
                 end
-
+                
                 # @time downward_pass && downward_pass_singlethread!(tree.branches, tree.leaf_index, systems, expansion_order, lamb_helmholtz, derivatives_switches)
                 t_dp = 0.0
                 if downward_pass
-                    t_dp = @elapsed downward_pass_multithread_1!(target_tree, expansion_order, lamb_helmholtz)
-                    t_dp += @elapsed velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
-                    t_dp += @elapsed downward_pass_multithread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+                    t_dp = @elapsed downward_pass_multithread!(target_tree, target_tree.buffers, derivatives_switches, expansion_order, lamb_helmholtz, n_threads)
                 end
-
+                
                 # copy results to target systems
                 update_target_systems && buffer_to_target!(target_systems, target_tree, derivatives_switches)
 

@@ -164,11 +164,19 @@ RotatedCoefficientsRelativeVelocity(ε, BE::Bool=true) = RotatedCoefficientsRela
 
 #------- interaction list -------#
 
-abstract type InteractionListMethod end
+abstract type InteractionListMethod{TS} end
 
-struct Barba <: InteractionListMethod end
+struct Barba{TS} <: InteractionListMethod{TS} end
 
-struct SelfTuning <: InteractionListMethod end
+Barba(TS=SortByTarget()) = Barba{TS}()
+
+struct SortByTarget end
+
+struct SortBySource end
+
+struct SelfTuning{TS} <: InteractionListMethod{TS} end
+
+SelfTuning(TS=SortByTarget()) = SelfTuning{TS}()
 
 #------- octree creation -------#
 

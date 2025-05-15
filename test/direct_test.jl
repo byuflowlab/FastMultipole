@@ -71,7 +71,8 @@ for n in target_tree.leaf_index
 end
 
 derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (mass,))
-FastMultipole.nearfield_multithread!(target_tree.buffers, target_tree.branches, (mass,), source_tree.buffers, source_tree.branches, derivatives_switches, direct_list, Threads.nthreads())
+interaction_list_method = FastMultipole.SelfTuning(FastMultipole.SortByTarget())
+FastMultipole.nearfield_multithread!(target_tree.buffers, target_tree.branches, (mass,), source_tree.buffers, source_tree.branches, derivatives_switches, direct_list, interaction_list_method, Threads.nthreads())
 # copy results to target systems
 FastMultipole.buffer_to_target!((mass,), target_tree, derivatives_switches)
 

@@ -23,8 +23,10 @@ system2 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
 
 # println("\n===== radius factor = 0.0 =====\n")
 
-FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, ε_tol)
+velocity_null = system.potential[5:7,:]
+optimized_args, cache, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshold, nearfield=true, farfield=true, shrink_recenter, ε_tol)
 
+velocity_fmm = system.potential[5:7,:]
 velocity_err = [norm(system.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
 
 @test ε * 0.1 < maximum(velocity_err) < ε * 10
@@ -179,7 +181,7 @@ end
 # validation_velocity = validation_system.potential[5:7,:]
 
 # validation_system2 = generate_gravitational(seed, n_bodies; radius_factor=0.1)
-# fmm!(validation_system2; 
+# fmm!(validation_system2;
 #     scalar_potential = true, velocity = true, velocity_gradient = false,
 #     leaf_size_source = FastMultipole.to_vector(5, 1),
 #     expansion_order = 3, multipole_threshold = 0.6,
