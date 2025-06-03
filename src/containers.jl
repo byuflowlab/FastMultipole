@@ -287,10 +287,19 @@ end
 
 Convenience system for defining locations at which the potential, velocity, or velocity gradient may be desired.
 """
-struct ProbeSystem{TF,TSP,TVP,TV,TVG}
+struct ProbeSystem{TF}
     position::Vector{SVector{3,TF}}
-    scalar_potential::TSP
-    vector_potential::TVP
-    velocity::TV
-    velocity_gradient::TVG
+    scalar_potential::Vector{TF}
+    velocity::Vector{SVector{3,TF}}
+    velocity_gradient::Vector{SMatrix{3,3,TF,9}}
+end
+
+#------- SOLVERS -------#
+
+abstract type AbstractSolver end
+
+struct FastGaussSeidel{TF,N,TR} <: AbstractSolver
+    n_bodies::SVector{N,Int}
+    influence_matrices::Matrix{TF}
+    residual::TR
 end

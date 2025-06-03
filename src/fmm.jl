@@ -765,7 +765,7 @@ end
     return SVector{n}(input)
 end
 
-@inline function to_vector(input, n)
+@inline function to_vector(input::Number, n)
     return SVector{n}(input for _ in 1:n)
 end
 
@@ -944,6 +944,9 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
             reset_expansions!(source_tree)
         end
 
+        # declare error success
+        error_success = true
+
         # begin FMM
         if nearfield_device # use GPU
 
@@ -991,7 +994,6 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
                 t_m2l = 0.0
                 Pmax = 0
-                error_success = true
                 if horizontal_pass
                     t_m2l = @elapsed Pmax, error_success = horizontal_pass_singlethread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_tol; verbose=horizontal_pass_verbose)
                 end
@@ -1053,9 +1055,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                     t_up = @elapsed upward_pass_multithread!(source_tree, source_systems, expansion_order, lamb_helmholtz, n_threads)
                 end
 
-                t_m2l = 0.0
                 Pmax = 0
-                error_success = true
                 if horizontal_pass
                     t_m2l = @elapsed Pmax, error_success = horizontal_pass_multithread!(target_tree, source_tree, m2l_list, lamb_helmholtz, expansion_order, ε_tol, interaction_list_method, n_threads)
                 end
@@ -1097,6 +1097,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     else
 
         @warn "fmm! called but either sources or targets are empty; foregoing calculation"
+        error_success = true
 
     end
 

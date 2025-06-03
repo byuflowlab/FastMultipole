@@ -130,6 +130,8 @@ include("visualize.jl")
 
 export visualize
 
+include("probes.jl")
+
 #------- PRECALCULATIONS -------#
 
 # precompute y-axis rotation by π/2 matrices up to 20th order

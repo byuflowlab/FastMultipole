@@ -666,6 +666,54 @@ function body_to_multipole!(element::Type{<:Panel}, system, multipole_coefficien
     end
 end
 
+function body_to_multipole_quad!(element::Type{<:Panel}, system, multipole_coefficients, buffer, center, bodies_index, harmonics, expansion_order)
+    # loop over bodies
+    for i_body in bodies_index
+        
+        #--- first triangle ---#
+
+        # relative body position
+        # i1 = 5 + strength_dims(system)
+        # x1 = SVector{3}(buffer[i1,i_body], buffer[i1+1,i_body], buffer[i1+2,i_body])
+        # x2 = SVector{3}(buffer[i1+3,i_body], buffer[i1+4,i_body], buffer[i1+5,i_body])
+        # x3 = SVector{3}(buffer[i1+6,i_body], buffer[i1+7,i_body], buffer[i1+8,i_body])
+        x1 = get_vertex(buffer, system, i_body, 1)
+        x2 = get_vertex(buffer, system, i_body, 2)
+        x3 = get_vertex(buffer, system, i_body, 3)
+        x0 = x1 - center
+        xu = x2 - x1
+        xv = x3 - x1
+
+        # get normal
+        normal = get_normal(buffer, system, i_body)
+
+        # get strength
+        strength = get_strength(buffer, system, i_body)
+
+        # update values
+        body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
+
+        #--- second triangle ---#
+
+        x1 = get_vertex(buffer, system, i_body, 1)
+        x2 = get_vertex(buffer, system, i_body, 3)
+        x3 = get_vertex(buffer, system, i_body, 4)
+        x0 = x1 - center
+        xu = x2 - x1
+        xv = x3 - x1
+
+        # get normal
+        normal = cross(x2-x1, x3-x1) 
+        normal / norm(normal)
+
+        # get strength
+        strength = get_strength(buffer, system, i_body)
+
+        # update values
+        body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
+    end
+end
+
 function body_to_multipole_panel!(::Type{Panel{SourceDipole}}, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
     body_to_multipole_panel!(Panel{Source}, multipole_coefficients, harmonics, x0, xu, xv, normal, SVector{1}(strength[1]), expansion_order)
     body_to_multipole_panel!(Panel{Dipole}, multipole_coefficients, harmonics, x0, xu, xv, normal, SVector{1}(strength[2]), expansion_order)

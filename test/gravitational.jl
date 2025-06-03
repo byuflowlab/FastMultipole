@@ -1,7 +1,6 @@
 import FastMultipole
 using FastMultipole
 using FastMultipole.WriteVTK
-import Distributions
 import Base: getindex, setindex!
 using FastMultipole.StaticArrays
 const i_POSITION = 1:3
@@ -31,9 +30,11 @@ function Gravitational(bodies::Matrix)
     return Gravitational(bodies2,potential)
 end
 
-function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_scale=1/n_bodies, distribution=Distributions.Uniform{Float64}(0,1), bodies_fun=(x)->x)
+function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_scale=1/n_bodies, bodies_fun=(x)->x)
+# function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_scale=1/n_bodies, distribution=Distributions.Uniform{Float64}(0,1), bodies_fun=(x)->x)
     Random.seed!(seed)
-    bodies = rand(distribution,8,n_bodies)
+    bodies = rand(8,n_bodies)
+    # bodies = rand(distribution,8,n_bodies)
     bodies[4,:] ./= (n_bodies^(1/3)*2)
     bodies[4,:] .*= radius_factor
     bodies[5,:] .*= strength_scale
@@ -90,10 +91,10 @@ FastMultipole.body_to_multipole!(system::Gravitational, args...) = FastMultipole
 
 function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_buffer, source_index)
     # nbad = 0
-    for i_source in source_index
+    @inbounds for i_source in source_index
         source_x, source_y, source_z = FastMultipole.get_position(source_buffer, i_source)
         source_strength = FastMultipole.get_strength(source_buffer, source_system, i_source)[1]
-        for j_target in target_index
+        @inbounds for j_target in target_index
             target_x, target_y, target_z = FastMultipole.get_position(target_system, j_target)
             dx = target_x - source_x
             dy = target_y - source_y
