@@ -332,8 +332,9 @@ println("===== nthreads: $(Threads.nthreads()) =====")
 # err, sys, tree, sys2 = bm_fmm_accuracy(expansion_order, leaf_size, multipole_threshold, n_bodies, shrink_recenter)
 # @show err
 
-n_bodies = 100_000
-# system = generate_gravitational(123, n_bodies)
+n_bodies = 10_000
+system = generate_gravitational(123, n_bodies)
+optimized_args, cache, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(system)
 # bm_fmm_system(system)
 # @time bm_fmm_system(system)
 

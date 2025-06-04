@@ -385,6 +385,6 @@ function reset!(small_buffers::Vector{<:Matrix})
     end
 end
 
-function reset!(system::Matrix)
-    system[4:16, :] .= zero(eltype(system))
+function reset!(system::Matrix, indices=1:size(system, 2))
+    system[4:16, indices] .= zero(eltype(system))
 end

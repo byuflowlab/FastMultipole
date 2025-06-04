@@ -1,4 +1,4 @@
-using Roots
+# using Roots
 
 struct VortexFilaments{TF}
     x::Matrix{SVector{3,TF}}

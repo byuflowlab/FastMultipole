@@ -216,11 +216,11 @@ function InteractionList(direct_list, target_systems, target_tree::Tree, source_
     influence_matrices = Vector{Matrix{TF}}(undef, length(leaf_index))
 
     # determine strength dimensions
-    strength_dims = get_strength_dims(source_systems)
+    d = strength_dims(source_systems)
 
     # add influence matrices
     for (i_matrix,i_source_branch) in enumerate(leaf_index)
-        add_influence_matrix!(influence_matrices, i_matrix, target_systems, target_tree.branches, source_systems, source_tree.branches, i_source_branch, strength_dims, direct_list, derivatives_switches)
+        add_influence_matrix!(influence_matrices, i_matrix, target_systems, target_tree.branches, source_systems, source_tree.branches, i_source_branch, d, direct_list, derivatives_switches)
     end
 
     # create largest needed storage strength and influence vectors

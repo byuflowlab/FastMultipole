@@ -298,8 +298,23 @@ end
 
 abstract type AbstractSolver end
 
-struct FastGaussSeidel{TF,N,TR} <: AbstractSolver
-    n_bodies::SVector{N,Int}
-    influence_matrices::Matrix{TF}
-    residual::TR
+struct Matrices{TF}
+    data::Vector{TF}
+    rhs::Vector{TF}
+    sizes::Vector{Tuple{Int,Int}}
+    matrix_offsets::Vector{Int}
+    rhs_offsets::Vector{Int}
+end
+
+struct FastGaussSeidel{TF,Nsys} <: AbstractSolver
+    self_matrices::Matrices{TF}
+    nonself_matrices::Matrices{TF}
+    m2l_list::Vector{SVector{2,Int}}
+    direct_list::Vector{SVector{2,Int}}
+    strengths::Vector{TF}
+    source_tree::Tree{TF,Nsys}
+    target_tree::Tree{TF,Nsys}
+    right_hand_side::Vector{TF}
+    external_right_hand_side::Vector{TF}
+    influences_per_system::Vector{Vector{TF}}
 end
