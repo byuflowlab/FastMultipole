@@ -67,4 +67,5 @@ include("tree_test.jl")
 include("dynamic_expansion_order_test.jl")
 include("interaction_list_test.jl")
 include("fmm_test.jl")
+include("solve_test.jl")
 

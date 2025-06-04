@@ -3,6 +3,7 @@ using FastMultipole
 using FastMultipole.WriteVTK
 import Base: getindex, setindex!
 using FastMultipole.StaticArrays
+using Random
 const i_POSITION = 1:3
 const i_RADIUS = 4
 const i_STRENGTH = 5:8
