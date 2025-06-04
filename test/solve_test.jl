@@ -1,9 +1,3 @@
-using FastMultipole
-using LinearAlgebra
-using Test
-
-include("gravitational.jl")
-
 #--- define influence function ---#
 
 function FastMultipole.influence!(influence, target_buffer, ::Gravitational, source_buffer)
