@@ -184,7 +184,7 @@ function direct!(target_buffer, target_index, derivatives_switch, source_system,
 end
 
 """
-    buffer_to_target_system!(target_system::{UserDefinedSystem}, i_target, target_buffer, i_buffer)
+    buffer_to_target_system!(target_system::{UserDefinedSystem}, i_target, ::DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
 
 Compatibility function used to update target systems. It should be overloaded for each system (where `{UserDefinedSystem}` is replaced with the type of the user-defined system) to be a target and should behave as follows. For the `i_body`th body contained inside of `target_system`,
 
@@ -203,6 +203,77 @@ The following convenience functions can may be used to access the buffer:
 """
 function buffer_to_target_system!(target_system, i_target, derivatives_switch, target_buffer, i_buffer)
     throw("buffer_to_target_system! not overloaded for type $(typeof(target_system))")
+end
+
+"""
+    target_influence_to_buffer!(target_buffer, i_buffer, ::DerivativesSwitch{PS,VS,GS}, target_system::{UserDefinedSystem}, i_target) where {PS,VS,GS}
+
+NOTE: this function is primarily used for the boundary element solver, and is not required for the FMM.
+
+Updates the `target_buffer` with influences from `target_system` for the `i_target`th body. Should be overloaded for each user-defined system object (where `{UserDefinedSystem}` is replaced with the type of the user-defined system) to be used as a target, assuming the target buffer positions have already been set. It should behave as follows:
+
+* `target_buffer[4, i_buffer]` should be set to the scalar potential at the body position
+* `target_buffer[5:7, i_buffer]` should be set to the velocity at the body position
+* `target_buffer[8:16, i_buffer]` should be set to the velocity gradient at the body position
+
+The following convenience functions can may be used to access the buffer:
+
+* `set_scalar_potential!(target_buffer, i_buffer, scalar_potential)`: accumulates the `scalar_potential` to the `i_buffer` body in `target_buffer`
+* `set_velocity!(target_buffer, i_buffer, velocity)`: accumulates the `velocity` to the `i_buffer` body in `target_buffer`
+* `set_velocity_gradient!(target_buffer, i_buffer, velocity_gradient)`: accumulates the `velocity_gradient` to the `i_buffer` body in `target_buffer`
+
+"""
+function target_influence_to_buffer!(target_buffer, i_buffer, derivatives_switch, target_system, i_target)
+    throw("target_influence_to_buffer! not overloaded for type $(typeof(target_system))")
+end
+
+"""
+    strength_to_value(strength, source_system)
+
+NOTE: this function is primarily used for the boundary element solver, and is not required for the FMM.
+
+Converts the strength of a body in `source_system` to a scalar value. Should be overloaded for each user-defined system object used with the boundary element solver.
+
+**Arguments:**
+
+* `strength::SVector{dim, Float64}`: the strength of the body, where `dim` is the number of components in the strength vector (e.g., 1 for a point source, 3 for a point vortex, etc.)
+* `source_system::{UserDefinedSystem}`: the user-defined system object, used solely for dispatch
+
+"""
+function strength_to_value(strength::SVector, source_system)
+    throw("strength_to_value not overloaded for type $(typeof(source_system))")
+end
+
+function strength_to_value(source_buffer::Matrix, source_system, i_body)
+    return strength_to_value(get_strength(source_buffer, source_system, i_body), source_system)
+end
+
+"""
+    value_to_strength!(source_buffer, source_system, i_body, value)
+
+NOTE: this function is primarily used for the boundary element solver, and is not required for the FMM.
+
+Converts a scalar value to a vector strength of a body in `source_system`. Should be overloaded for each user-defined system object used with the boundary element solver.
+
+**Arguments:**
+
+* `source_buffer::Matrix{Float64}`: the source buffer containing the body information
+* `source_system::{UserDefinedSystem}`: the user-defined system object, used solely for dispatch
+* `i_body::Int`: the index of the body in `source_buffer` to set the strength for
+* `value::Float64`: the scalar value used to set the strength
+
+The following convenience function may be helpful when accessing the buffer:
+
+* `get_strength(source_buffer, source_system, i_body)`: returns the strength of the `i_body` body in `source_buffer`, formatted as a vector (e.g. `strength::SVector{dim,Float64}`)
+
+"""
+function value_to_strength!(source_buffer, source_system, i_body, value)
+    # set the source strength to a value
+    # dim = strength_dims(source_system)
+    # for i in 1:dim
+    #     source_buffer[4+i, i_body] = value
+    # end
+    throw("value_to_strength! not overloaded for type $(typeof(source_system))")
 end
 
 #------- internal functions -------#
@@ -269,6 +340,19 @@ function target_to_buffer(system, sort_index=1:get_n_bodies(system))
     buffer = allocate_target_buffer(eltype(system), system)
     target_to_buffer!(buffer, system, sort_index)
     return buffer
+end
+
+function target_influence_to_buffer!(target_buffers::Tuple, target_systems::Tuple, derivatives_switches, sort_index_list=SVector{length(target_systems)}([1:get_n_bodies(system) for system in target_systems]))
+    for (target_buffer, target_system, derivatives_switch, sort_index) in zip(target_buffers, target_systems, derivatives_switches, sort_index_list)
+        reset!(target_buffer)
+        target_influence_to_buffer!(target_buffer, target_system, derivatives_switch, sort_index)
+    end
+end
+
+function target_influence_to_buffer!(target_buffer::Matrix, target_system, derivatives_switch, sort_index=1:get_n_bodies(target_system))
+    for i_body in 1:get_n_bodies(target_system)
+        target_influence_to_buffer!(target_buffer, i_body, derivatives_switch, target_system, sort_index[i_body])
+    end
 end
 
 function system_to_buffer!(buffers, systems::Tuple, sort_index_list=SVector{length(systems)}([1:get_n_bodies(system) for system in systems]))

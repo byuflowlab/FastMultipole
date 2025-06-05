@@ -309,9 +309,13 @@ end
 struct FastGaussSeidel{TF,Nsys} <: AbstractSolver
     self_matrices::Matrices{TF}
     nonself_matrices::Matrices{TF}
+    index_map::Vector{UnitRange{Int}}
     m2l_list::Vector{SVector{2,Int}}
     direct_list::Vector{SVector{2,Int}}
+    multipole_threshold::Float64
+    lamb_helmholtz::Bool
     strengths::Vector{TF}
+    strengths_by_leaf::Vector{UnitRange{Int}}
     source_tree::Tree{TF,Nsys}
     target_tree::Tree{TF,Nsys}
     right_hand_side::Vector{TF}
