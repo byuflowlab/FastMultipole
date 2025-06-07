@@ -306,19 +306,23 @@ struct Matrices{TF}
     rhs_offsets::Vector{Int}
 end
 
-struct FastGaussSeidel{TF,Nsys} <: AbstractSolver
+struct FastGaussSeidel{TF,Nsys,TIL} <: AbstractSolver
     self_matrices::Matrices{TF}
     nonself_matrices::Matrices{TF}
     index_map::Vector{UnitRange{Int}}
     m2l_list::Vector{SVector{2,Int}}
-    direct_list::Vector{SVector{2,Int}}
+    direct_list::Vector{SVector{2,Int32}}
+    full_direct_list::Vector{SVector{2,Int32}}
+    interaction_list_method::TIL
     multipole_threshold::Float64
     lamb_helmholtz::Bool
     strengths::Vector{TF}
     strengths_by_leaf::Vector{UnitRange{Int}}
+    targets_by_branch::Vector{UnitRange{Int}}
     source_tree::Tree{TF,Nsys}
     target_tree::Tree{TF,Nsys}
-    right_hand_side::Vector{TF}
-    external_right_hand_side::Vector{TF}
+    old_influence_storage::Vector{TF}
+    extra_right_hand_side::Vector{TF}
     influences_per_system::Vector{Vector{TF}}
+    residual_vector::Vector{TF}
 end

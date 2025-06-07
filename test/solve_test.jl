@@ -1,11 +1,33 @@
+using FastMultipole
+using Random
+using LinearAlgebra
+using Test
+
+include("gravitational.jl")
+
 #--- define influence function ---#
 
+# just the scalar potential
 function FastMultipole.influence!(influence, target_buffer, ::Gravitational, source_buffer)
     influence .= view(target_buffer, 4, :)
 end
 
+function FastMultipole.target_influence_to_buffer!(target_buffer, i_buffer, derivatives_switch, target_system::Gravitational, i_target)
+    target_buffer[4, i_buffer] = target_system.potential[1, i_target]
+end
+
 function FastMultipole.value_to_strength!(source_buffer, ::Gravitational, i_body, value)
     source_buffer[5, i_body] = value
+end
+
+function FastMultipole.strength_to_value(strength, ::Gravitational)
+    return strength[1]
+end
+
+function FastMultipole.buffer_to_system_strength!(system::Gravitational, i_body, source_buffer, i_buffer)
+    (; position, radius) = system.bodies[i_body]
+    strength = source_buffer[5, i_buffer]
+    system.bodies[i_body] = eltype(system.bodies)(position, radius, strength)
 end
 
 @testset "Fast Gauss Seidel: self influence" begin
@@ -58,7 +80,7 @@ phi_desired = system.potential[1, :]
 
 #--- create FGS solver ---#
 
-fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=5) # try with leaf_size=3 for sources with no non-self influence
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=100) # try with leaf_size=3 for sources with no non-self influence
 
 #--- check self influence matrices ---#
 
@@ -127,6 +149,200 @@ for i_leaf in 1:length(fgs.source_tree.leaf_index)
         end
     else
         @assert fgs.nonself_matrices.sizes[i_leaf][1] == 0 "this influence matrix should be empty"
+    end
+end
+
+end
+
+@testset "Fast Gauss Seidel: various functions" begin
+
+#--- generate system ---#
+
+n_bodies = 1000
+seed = 1234
+system = generate_gravitational(seed, n_bodies)
+derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
+
+direct!(system; scalar_potential=true, velocity=false)
+phi_desired = system.potential[1, :]
+
+#--- create FGS solver ---#
+
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=100) # try with leaf_size=3 for sources with no non-self influence
+
+#--- unpack containers ---#
+
+source_tree = fgs.source_tree
+target_tree = fgs.target_tree
+source_buffers = source_tree.buffers
+target_buffers = target_tree.buffers
+self_matrices = fgs.self_matrices
+nonself_matrices = fgs.nonself_matrices
+index_map = fgs.index_map
+m2l_list = fgs.m2l_list
+direct_list = fgs.direct_list
+multipole_threshold = fgs.multipole_threshold
+lamb_helmholtz = fgs.lamb_helmholtz
+strengths = fgs.strengths
+strengths_by_leaf = fgs.strengths_by_leaf
+targets_by_branch = fgs.targets_by_branch
+influences_per_system = fgs.influences_per_system
+old_influence_storage = fgs.old_influence_storage
+right_hand_side = self_matrices.rhs
+extra_right_hand_side = fgs.extra_right_hand_side
+
+#--- external right-hand side based on current influence ---#
+
+# reset and update buffers
+FastMultipole.target_influence_to_buffer!(target_buffers, (system,), derivatives_switches, target_tree.sort_index_list)
+
+# run influence function on buffers
+FastMultipole.reset!(extra_right_hand_side)
+FastMultipole.influence!(extra_right_hand_side, influences_per_system, target_buffers, (system,), source_buffers, source_tree)
+
+#--- check influence function ---#
+
+i_body = 1
+for i_branch in source_tree.leaf_index
+    branch = source_tree.branches[i_branch]
+    bodies_index = branch.bodies_index[1]
+    for i in bodies_index
+        @test isapprox(extra_right_hand_side[i_body], phi_desired[FastMultipole.sorted_index_2_unsorted_index(i, 1, source_tree)]; atol=1e-6)
+        i_body += 1
+    end
+end
+
+#--- check strengths_by_leaf ---#
+
+for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
+    branch = source_tree.branches[i_branch]
+    bodies_index = branch.bodies_index[1]
+    n_bodies = length(bodies_index)
+    @test length(strengths_by_leaf[i_leaf]) == n_bodies
+end
+
+#--- update strengths ---#
+
+FastMultipole.update_by_leaf!(strengths, strengths_by_leaf, (system,), source_buffers, source_tree)
+
+#--- check strengths ---#
+
+i_body = 1
+for i_branch in source_tree.leaf_index
+    branch = source_tree.branches[i_branch]
+    bodies_index = branch.bodies_index[1]
+    for i in bodies_index
+        @test isapprox(strengths[i_body], system.bodies[FastMultipole.sorted_index_2_unsorted_index(i, 1, source_tree)].strength; atol=1e-6)
+        i_body += 1
+    end
+end
+
+#--- nonself influence function: first matrix ---#
+
+# just the first nonself matrix
+i_branch = direct_list[1][2]
+i_leaf = findfirst(x -> source_tree.leaf_index[x] == i_branch, 1:length(source_tree.leaf_index)) # i_leaf = 3
+right_hand_side .= zero(eltype(right_hand_side))
+old_influence_storage .= zero(eltype(old_influence_storage))
+FastMultipole.update_nonself_influence!(right_hand_side, strengths, nonself_matrices, old_influence_storage, i_leaf, source_tree, target_tree, strengths_by_leaf, index_map, direct_list, targets_by_branch)
+
+# updated branch influence
+i_target = direct_list[1][1] # i_target = 82
+branch_influence = right_hand_side[targets_by_branch[i_target]]
+
+# manual influence
+FastMultipole.reset!(target_buffers)
+source_index = source_tree.branches[i_branch].bodies_index[1]
+target_index = target_tree.branches[i_target].bodies_index[1]
+direct!(target_buffers[1], target_index, derivatives_switches[1], system, source_buffers[1], source_index)
+test_influence = zero(extra_right_hand_side)
+FastMultipole.influence!(test_influence, influences_per_system, target_buffers, (system,), source_buffers, source_tree)
+manual_influence = test_influence[targets_by_branch[i_target]]
+
+@test isapprox(branch_influence, manual_influence; atol=1e-6)
+
+#--- nonself influence function: all matrices ---#
+
+# zero RHS
+right_hand_side .= zero(eltype(right_hand_side))
+
+# zero nonself rhs
+nonself_matrices.rhs .= zero(eltype(nonself_matrices.rhs))
+
+# update nonself influence
+FastMultipole.update_nonself_influence!(right_hand_side, strengths, nonself_matrices, old_influence_storage, source_tree, target_tree, strengths_by_leaf, index_map, direct_list, targets_by_branch)
+
+# #--- check nonself influence function ---#
+
+FastMultipole.reset!(target_buffers)
+
+# all nonself nearfield interactions
+FastMultipole.nearfield_singlethread!(target_buffers, target_tree.branches, (system,), source_buffers, source_tree.branches, derivatives_switches, direct_list)
+
+# get influence from target buffers
+test_influence = similar(extra_right_hand_side)
+test_influence .= zero(eltype(test_influence))
+FastMultipole.influence!(test_influence, influences_per_system, target_buffers, (system,), source_buffers, source_tree)
+
+# check that the influence is the same as the right-hand side
+@test isapprox(test_influence, right_hand_side; atol=1e-6)
+
+#--- update strengths ---#
+
+strengths .= rand(length(strengths)) # randomize strengths
+FastMultipole.update_by_leaf!(source_buffers, (system,), strengths, strengths_by_leaf, source_tree)
+FastMultipole.buffer_to_system_strength!((system,), source_tree)
+
+#--- check strengths ---#
+
+i_body = 1
+for i_branch in source_tree.leaf_index
+    branch = source_tree.branches[i_branch]
+    bodies_index = branch.bodies_index[1]
+    for i in bodies_index
+        @test isapprox(strengths[i_body], system.bodies[FastMultipole.sorted_index_2_unsorted_index(i, 1, source_tree)].strength; atol=1e-6)
+        i_body += 1
+    end
+end
+
+end
+
+@testset "Fast Gauss Seidel: full solve" begin
+
+#--- generate system ---#
+
+n_bodies = 100
+seed = 123
+system = generate_gravitational(seed, n_bodies)
+derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
+
+direct!(system; scalar_potential=true, velocity=false)
+strengths_desired = [b.strength for b in system.bodies]
+phi_desired = system.potential[1, :]
+
+# perturb strengths slightly
+for i in eachindex(system.bodies)
+    (; position, radius, strength) = system.bodies[i]
+    system.bodies[i] = eltype(system.bodies)(position, radius, strength + round(strength, sigdigits=1)*100*(rand()-0.5))
+end
+
+#--- create FGS solver ---#
+
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=n_bodies, lamb_helmholtz=false, shrink_recenter=false) # try with leaf_size=3 for sources with no non-self influence
+
+#--- test solve! ---#
+
+FastMultipole.solve!(system, fgs; max_iterations=10, tolerance=1e-3)
+
+#--- check strengths ---#
+
+i_body = 1
+for i_branch in fgs.source_tree.leaf_index
+    branch = fgs.source_tree.branches[i_branch]
+    bodies_index = branch.bodies_index[1]
+    for i in bodies_index
+        @test isapprox(system.bodies[FastMultipole.sorted_index_2_unsorted_index(i, 1, fgs.source_tree)].strength, strengths_desired[i_body]; atol=1e-3)
+        i_body += 1
     end
 end
 

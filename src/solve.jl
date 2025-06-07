@@ -29,12 +29,25 @@ function EmptyMatrices(TF=Float64)
     return Matrices{TF}(zeros(TF, 0), zeros(TF, 0), Tuple{Int,Int}[], Int[], Int[])
 end
 
-function get_matrix_vector(ms::Matrices, k::Int)
+@inline function get_matrix_range(ms::Matrices, k::Int, m, n)
+    # get the range of values corresponding to the k-th matrix
     m, n = ms.sizes[k]
     matrix_offset = ms.matrix_offsets[k]
+    return matrix_offset:matrix_offset + m*n - 1
+end
+
+@inline function get_vector_range(ms::Matrices, k::Int, m)
+    # get the range of values corresponding to the k-th rhs vector
     rhs_offset = ms.rhs_offsets[k]
-    mat = @view ms.data[matrix_offset:matrix_offset + m*n - 1]
-    return reshape(mat, m, n), view(ms.rhs, rhs_offset:rhs_offset + m - 1)
+    return rhs_offset:rhs_offset + m - 1
+end
+
+function get_matrix_vector(ms::Matrices, k::Int)
+    m, n = ms.sizes[k]
+    vrange = get_vector_range(ms, k, m)
+    mrange = get_matrix_range(ms, k, m, n)
+    mat = @view ms.data[mrange]
+    return reshape(mat, m, n), view(ms.rhs, vrange)
 end
 
 function set_unit_strength!(source_buffers::Tuple, source_systems::Tuple)
@@ -63,7 +76,7 @@ function save_strengths(source_buffers::Tuple, source_systems::Tuple)
     for k in eachindex(source_systems)
         source_system = source_systems[k]
         source_buffer = source_buffers[k]
-        old_strengths[k] .= view(source_buffer, 4:4 + strength_dims(source_system) - 1, :)
+        old_strengths[k] .= view(source_buffer, 5:5 + strength_dims(source_system) - 1, :)
     end
 
     return old_strengths
@@ -74,7 +87,7 @@ function restore_strengths!(source_buffers::Tuple, source_systems::Tuple, old_st
     for k in eachindex(source_systems)
         source_system = source_systems[k]
         source_buffer = source_buffers[k]
-        source_buffer[4:4 + strength_dims(source_system) - 1, :] .= old_strengths[k]
+        source_buffer[5:5 + strength_dims(source_system) - 1, :] .= old_strengths[k]
     end
 end
 
@@ -259,6 +272,9 @@ function nonself_influence_matrices(target_buffers::Tuple, source_buffers::Tuple
         # restore old strengths
         restore_strengths!(source_buffers, source_systems, old_strengths)
 
+        # zero rhs
+        matrices.rhs .= zero(TF)
+
     else
         matrices = EmptyMatrices(TF)
     end
@@ -266,82 +282,97 @@ function nonself_influence_matrices(target_buffers::Tuple, source_buffers::Tuple
     return matrices, sorted_list
 end
 
-function index_by_source(sorted_list::Vector{SVector{2,Int}}, leaf_index::Vector{Int})
+"""
+    index_by_source(sorted_list::Vector{SVector{2,Int}}, leaf_index::Vector{Int})
+
+Constructs an index map that maps each leaf to the range of indices in the sorted list where it acts as a source. It is possible for some leaves to never act as sources, in which case the range will be empty.
+"""
+function index_by_source(sorted_list::Vector{SVector{2,Int32}}, leaf_index::Vector{Int})
     
     # preallocate index map
-    index_map = Vector{UnitRange{Int}}(undef, length(leaf_index))
+    # index_map = Vector{UnitRange{Int}}(undef, length(leaf_index))
+    index_map = fill(1:0, length(leaf_index)) # initialize with empty ranges
 
-    # loop over direct list
-    this_source = 0
-    i_start = 1
-    i_leaf = 1
-    this_source = sorted_list[1][2] # start with the first source
-    for (i_list, (i_target, j_source)) in enumerate(sorted_list)
+    # check if sorted_list is empty
+    if length(sorted_list) > 0
+    
+        # loop over direct list
+        this_source = 0
+        i_start = 1
+        i_leaf = 1
+        this_source = sorted_list[1][2] # start with the first source
+        for (i_list, (i_target, j_source)) in enumerate(sorted_list)
 
-        # finished a non-empty matrix
-        if j_source != this_source
+            # finished a non-empty matrix
+            if j_source != this_source
 
-            # upper bound of number of leaves we've skipped
-            n_missing_ub = this_source - leaf_index[i_leaf]
+                # upper bound of number of leaves we've skipped
+                n_missing_ub = this_source - leaf_index[i_leaf]
 
-            # increment i_leaf until we line up with j_source
-            for i_plus in 1:n_missing_ub
+                # increment i_leaf until we line up with j_source
+                for i_plus in 1:n_missing_ub
 
-                # no interactions for this leaf
-                index_map[i_leaf] = i_start:i_start - 1
+                    # no interactions for this leaf
+                    # index_map[i_leaf] = i_start:i_start - 1
 
-                # move on to the next leaf
-                i_leaf += 1
+                    # move on to the next leaf
+                    i_leaf += 1
 
-                # check if we've reached j_source
-                if leaf_index[i_leaf] == this_source
-                    break
+                    # check if we've reached j_source
+                    if leaf_index[i_leaf] == this_source
+                        break
+                    end
                 end
+
+                # store leaf index range
+                index_map[i_leaf] = i_start:i_list-1
+
+                # recurse
+                i_leaf += 1
+                this_source = j_source
+                i_start = i_list
             end
+        end
 
-            # store leaf index range
-            index_map[i_leaf] = i_start:i_list-1
+        #--- last index ---#
 
-            # recurse
+        # upper bound of number of leaves we've skipped
+        n_missing_ub = this_source - leaf_index[i_leaf]
+
+        # increment i_leaf until we line up with j_source
+        for i_plus in 1:n_missing_ub
+
+            # no interactions for this leaf
+            # index_map[i_leaf] = i_start:i_start - 1
+
+            # move on to the next leaf
             i_leaf += 1
-            this_source = j_source
-            i_start = i_list
+
+            # check if we've reached j_source
+            if leaf_index[i_leaf] == this_source
+                break
+            end
         end
-    end
 
-    #--- last index ---#
+        # store leaf index range
+        index_map[i_leaf] = i_start:length(sorted_list)
+        i_start = length(sorted_list) + 1
 
-    # upper bound of number of leaves we've skipped
-    n_missing_ub = this_source - leaf_index[i_leaf]
+        #--- all remaining leaves do not act as sources ---#
 
-    # increment i_leaf until we line up with j_source
-    for i_plus in 1:n_missing_ub
-
-        # no interactions for this leaf
-        index_map[i_leaf] = i_start:i_start - 1
-
-        # move on to the next leaf
-        i_leaf += 1
-
-        # check if we've reached j_source
-        if leaf_index[i_leaf] == this_source
-            break
-        end
-    end
-
-    # store leaf index range
-    index_map[i_leaf] = i_start:length(sorted_list)
-    i_start = length(sorted_list) + 1
-
-    #--- all remaining leaves do not act as sources ---#
-
-    for i in i_leaf + 1:length(leaf_index)
-        index_map[i] = i_start:i_start - 1
+        # for i in i_leaf + 1:length(leaf_index)
+        #     index_map[i] = i_start:i_start - 1
+        # end
     end
 
     return index_map
 end
 
+"""
+    self_influence_matrices(target_buffers, source_buffers, source_systems, target_tree, source_tree, derivatives_switches)
+
+Constructs influence matrices for all leaves of the tree. (Assumes source tree and target trees are identical.)
+"""
 function self_influence_matrices(target_buffers, source_buffers, source_systems, target_tree::Tree{TF,<:Any}, source_tree, derivatives_switches) where TF
     
     #--- pre-allocate influence matrices ---#
@@ -423,7 +454,77 @@ function self_influence_matrices(target_buffers, source_buffers, source_systems,
     # restore old strengths
     restore_strengths!(source_buffers, source_systems, old_strengths)
 
+    # zero rhs
+    matrices.rhs .= zero(TF)
+
     return matrices
+end
+
+"""
+    map_by_leaf(source_tree::Tree)
+
+Constructs a mapping from each leaf to the range of indices in the strengths vector that correspond to the bodies in that leaf.
+"""
+function map_by_leaf(source_tree::Tree)
+    strengths_by_leaf = Vector{UnitRange{Int}}(undef, length(source_tree.leaf_index))
+    i_start = 1
+    for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
+
+        # get bodies index
+        bodies_index = source_tree.branches[i_branch].bodies_index
+        
+        # get number of bodies in this branch
+        n_bodies = get_n_bodies(bodies_index)
+        
+        # store strength index
+        strengths_by_leaf[i_leaf] = i_start:i_start + n_bodies - 1
+        i_start += n_bodies
+
+    end
+    return strengths_by_leaf
+end
+
+"""
+    map_by_branch(target_tree::Tree)
+
+Constructs a mapping from each branch to the range of indices in the targets vector that correspond to the bodies in that branch.
+
+This relies on the fact that `tree.leaf_index` is sorted in order of increasing branch index.
+
+"""
+function map_by_branch(target_tree::Tree)
+    targets_by_branch = fill(1:0, length(target_tree.branches)) # initialize with empty ranges
+    i_start = 1
+    for i_branch in target_tree.leaf_index
+
+        # get bodies index
+        bodies_index = target_tree.branches[i_branch].bodies_index
+        
+        # get number of bodies in this branch
+        n_bodies = get_n_bodies(bodies_index)
+        
+        # store target index
+        targets_by_branch[i_branch] = i_start:i_start + n_bodies - 1
+        i_start += n_bodies
+    end
+    return targets_by_branch
+end
+
+function add_self_interactions(direct_list::Vector{SVector{2,Int32}}, source_tree::Tree)
+    # prepare container
+    full_direct_list = copy(direct_list)
+    i_start = length(full_direct_list)
+    resize!(full_direct_list, length(full_direct_list) + length(source_tree.leaf_index))
+    
+    # add leaf-on-self interactions
+    for (i_leaf,i_branch) in enumerate(source_tree.leaf_index)
+        full_direct_list[i_start + i_leaf] = SVector{2,Int32}(i_branch, i_branch)
+    end
+
+    # sort by target
+    full_direct_list = sort_by_target(full_direct_list, source_tree.branches)
+
+    return full_direct_list
 end
 
 function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple; 
@@ -444,8 +545,17 @@ function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple;
 
     # create trees
     TF = promote_type(eltype.(target_systems)...)
-    target_tree = Tree(target_systems, true; expansion_order, leaf_size, shrink_recenter)
-    source_tree = Tree(source_systems, false; expansion_order, leaf_size, shrink_recenter)
+    target_tree = Tree(target_systems, true; expansion_order, leaf_size, shrink_recenter, interaction_list_method)
+    source_tree = Tree(source_systems, false; expansion_order, leaf_size, shrink_recenter, interaction_list_method)
+
+    #--- ensure no leaves have fewer than 2 bodies ---#
+
+    # n_bodies_min = 1000000
+    # for i_branch in source_tree.leaf_index
+    #     n_bodies = get_n_bodies(source_tree.branches[i_branch].bodies_index)
+    #     n_bodies_min = min(n_bodies_min, n_bodies)
+    # end
+    # @assert n_bodies_min >= 2 "The smallest leaf has only $n_bodies_min bodies, but at least 2 are required for FastGaussSeidel.\nConsider increasing the leaf_size or using a different interaction_list_method."
 
     #--- build interaction lists ---#
 
@@ -455,6 +565,11 @@ function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple;
     #--- build non-self influence matrices ---#
 
     nonself_matrices, sorted_list = nonself_influence_matrices(target_tree.buffers, source_tree.buffers, source_systems, target_tree, source_tree, direct_list, derivatives_switches)
+    old_influence_storage = similar(nonself_matrices.rhs)
+
+    #--- full direct list includes leaf-on-self interactions ---#
+
+    full_direct_list = add_self_interactions(direct_list, source_tree)
     
     #--- index by source ---#
 
@@ -467,29 +582,15 @@ function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple;
     #--- source strength vector ---#
 
     strengths = zeros(TF, get_n_bodies(source_systems))
-    strengths_by_leaf = Vector{UnitRange{Int}}(undef, length(source_tree.leaf_index))
-    i_start = 1
-    for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
-
-        # get bodies index
-        bodies_index = source_tree.branches[i_branch].bodies_index
-        
-        # get number of bodies in this branch
-        n_bodies = get_n_bodies(bodies_index)
-        
-        # store strength index
-        strengths_by_leaf[i_leaf] = i_start:i_start + n_bodies - 1
-        i_start += n_bodies
-
-    end
+    strengths_by_leaf = map_by_leaf(source_tree)
     
-    #--- right-hand side vector ---#
+    #--- mapping to targets by branch ---#
     
-    right_hand_side = Vector{TF}(undef, get_n_bodies(target_systems))
+    targets_by_branch = map_by_branch(target_tree)
     
     #--- external right-hand side vector ---#
     
-    external_right_hand_side = Vector{TF}(undef, get_n_bodies(target_systems))
+    extra_right_hand_side = Vector{TF}(undef, get_n_bodies(target_systems))
     
     #--- influences per system ---#
     
@@ -502,21 +603,37 @@ function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple;
         influences_per_system[i_target_system] = zeros(TF, n_bodies)
     end
 
-    return FastGaussSeidel{TF,length(source_systems)}(
+    #--- residual vector ---#
+
+    # get max number of strengths in a leaf
+    n_max = 0
+    for i_leaf in eachindex(self_matrices.sizes)
+        n_sources = self_matrices.sizes[i_leaf][1]
+        n_max = max(n_max, n_sources)
+    end
+
+    # construct residual vector
+    residual_vector = Vector{TF}(undef, n_max)
+
+    return FastGaussSeidel{TF,length(source_systems),typeof(interaction_list_method)}(
         self_matrices,
         nonself_matrices,
         index_map,
         m2l_list,
         sorted_list,
+        full_direct_list,
+        interaction_list_method,
         multipole_threshold,
         lamb_helmholtz,
         strengths,
         strengths_by_leaf,
+        targets_by_branch,
         source_tree,
         target_tree,
-        right_hand_side,
-        external_right_hand_side,
-        influences_per_system
+        old_influence_storage,
+        extra_right_hand_side,
+        influences_per_system,
+        residual_vector
     )
 end
 
@@ -531,34 +648,145 @@ function reset!(influences_per_system::Vector{<:AbstractVector})
     end
 end
 
-function update_strengths_by_leaf!(strengths::Vector{TF}, strengths_by_leaf::Vector{UnitRange{Int}}, source_systems::Tuple, source_buffers::Tuple{<:Matrix}, source_tree::Tree) where TF
+function update_by_leaf!(strengths::Vector, strengths_by_leaf::Vector{UnitRange{Int}}, source_systems::Tuple, source_buffers::Tuple{<:Matrix}, source_tree::Tree)
     # update strengths by leaf
     for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
         # get bodies index
         bodies_index = source_tree.branches[i_branch].bodies_index
 
-        # get strengths for this leaf
-        strength_index = strengths_by_leaf[i_leaf]
-        strengths = view(strengths, strength_index)
+        if get_n_bodies(bodies_index) > 0
+            # get strengths for this leaf
+            strength_index = strengths_by_leaf[i_leaf]
+            these_strengths = view(strengths, strength_index)
 
-        # loop over source systems
-        i_strength = 1
-        for i_source_system in eachindex(source_systems)
-            # unpack source system and buffer
-            source_system = source_systems[i_source_system]
-            source_buffer = source_buffers[i_source_system]
+            # loop over source systems
+            i_strength = 1
+            for i_source_system in eachindex(source_systems)
+                # unpack source system and buffer
+                source_system = source_systems[i_source_system]
+                source_buffer = source_buffers[i_source_system]
 
-            # update strengths
-            for i_body in bodies_index[i_source_system]
-                # set strength value
-                strengths[i_strength] = strength_to_value(source_buffer, source_system, i_body)
+                # update strengths
+                for i_body in bodies_index[i_source_system]
+                    # set strength value
+                    these_strengths[i_strength] = strength_to_value(source_buffer, source_system, i_body)
 
-                # increment index
-                i_strength += 1
+                    # increment index
+                    i_strength += 1
+                end
             end
+            @assert i_strength - 1 == get_n_bodies(bodies_index) "number of strengths does not match number of bodies in leaf $(i_leaf)"
         end
-        @assert i_strength - 1 == get_n_bodies(bodies_index) "number of strengths does not match number of bodies in leaf $(i_leaf)"
     end
+end
+
+function update_by_leaf!(source_buffers::Tuple{<:Matrix}, source_systems::Tuple, strengths::Vector, strengths_by_leaf::Vector{UnitRange{Int}}, source_tree::Tree)
+    # update strengths by leaf
+    for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
+        # get bodies index
+        bodies_index = source_tree.branches[i_branch].bodies_index
+
+        if get_n_bodies(bodies_index) > 0
+            # get strengths for this leaf
+            strength_index = strengths_by_leaf[i_leaf]
+            these_strengths = view(strengths, strength_index)
+
+            # loop over source systems
+            i_strength = 1
+            for i_source_system in eachindex(source_systems)
+                # unpack source system and buffer
+                source_system = source_systems[i_source_system]
+                source_buffer = source_buffers[i_source_system]
+
+                # update strengths
+                for i_body in bodies_index[i_source_system]
+                    # set strength value
+                    value_to_strength!(source_buffer, source_system, i_body, these_strengths[i_strength])
+
+                    # increment index
+                    i_strength += 1
+                end
+            end
+            @assert i_strength - 1 == get_n_bodies(bodies_index) "number of strengths does not match number of bodies in leaf $(i_leaf)"
+        end
+    end
+end
+
+"""
+    update_nonself_influence!(right_hand_side, nonself_matrices::Matrices, old_influence_storage::Vector, source_tree::Tree, target_tree::Tree, strengths_by_leaf::Vector{UnitRange{Int}}, index_map::Vector{UnitRange{Int}}, direct_list::Vector{SVector{2,Int32}}, targets_by_branch::Vector{UnitRange{Int}})
+
+Updates the right-hand side vector based on the non-self influence matrices and the current strengths of the source systems. Does this by removing the old influence and adding the new.
+
+"""
+function update_nonself_influence!(right_hand_side, strengths::Vector, nonself_matrices::Matrices, old_influence_storage::Vector, source_tree::Tree, target_tree::Tree, strengths_by_leaf::Vector{UnitRange{Int}}, index_map::Vector{UnitRange{Int}}, direct_list::Vector{SVector{2,Int32}}, targets_by_branch::Vector{UnitRange{Int}})
+    
+    # check if there are any direct interactions
+    if length(direct_list) > 0
+
+        # loop over source leaves
+        for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
+            update_nonself_influence!(right_hand_side, strengths, nonself_matrices, old_influence_storage, i_leaf, source_tree, target_tree, strengths_by_leaf, index_map, direct_list, targets_by_branch)
+        end
+    end
+end
+
+function update_nonself_influence!(right_hand_side, strengths::Vector, nonself_matrices::Matrices, old_influence_storage, i_leaf::Int, source_tree::Tree, target_tree::Tree, strengths_by_leaf::Vector{UnitRange{Int}}, index_map::Vector{UnitRange{Int}}, direct_list::Vector{SVector{2,Int32}}, targets_by_branch::Vector{UnitRange{Int}})
+
+    # unpack influence matrix and right-hand side
+    mat, target_influence = get_matrix_vector(nonself_matrices, i_leaf)
+    m = size(mat, 1)
+    rhs_offset = nonself_matrices.rhs_offsets[i_leaf]
+    old_influence = view(old_influence_storage, rhs_offset:rhs_offset + m - 1)
+
+    if length(target_influence) > 0
+
+        #--- compute the updated influence ---#
+
+        # unpack strengths
+        leaf_strengths = view(strengths, strengths_by_leaf[i_leaf])
+
+        # copy the old influence for later
+        old_influence .= target_influence
+
+        # compute the influence
+        mul!(target_influence, mat, leaf_strengths)
+
+        #--- move to right-hand side ---#
+
+        # determine which target branches this leaf influences
+        direct_list_indices = index_map[i_leaf]
+        i_influence_start = 1
+        for index in direct_list_indices
+
+            # determine which target leaf
+            i_target, _ = direct_list[index]
+
+            # how many targets
+            n_targets = get_n_bodies(target_tree.branches[i_target].bodies_index)
+
+            # influence on this target leaf
+            this_influence = view(target_influence, i_influence_start:i_influence_start + n_targets - 1)
+            this_old_influence = view(old_influence, i_influence_start:i_influence_start + n_targets - 1)
+            i_influence_start += n_targets
+
+            # get influence at the appropriate target
+            this_rhs = view(right_hand_side, targets_by_branch[i_target])
+
+            # remove old influence from right-hand side
+            this_rhs .-= this_old_influence
+
+            # add influence to the right-hand side
+            this_rhs .+= this_influence
+        end
+    end
+end
+
+function solve!(system, solver::FastGaussSeidel; optargs...)
+    return solve!((system,), solver; optargs...)
+end
+
+function solve!(systems::Tuple, solver::FastGaussSeidel; optargs...)
+    return solve!(systems, systems, solver; optargs...)
 end
 
 function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussSeidel{TF,N}; 
@@ -577,13 +805,18 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
     index_map = solver.index_map
     m2l_list = solver.m2l_list
     direct_list = solver.direct_list
+    full_direct_list = solver.full_direct_list
+    interaction_list_method = solver.interaction_list_method
     multipole_threshold = solver.multipole_threshold
     lamb_helmholtz = solver.lamb_helmholtz
     strengths = solver.strengths
     strengths_by_leaf = solver.strengths_by_leaf
+    targets_by_branch = solver.targets_by_branch
     influences_per_system = solver.influences_per_system
+    old_influence_storage = solver.old_influence_storage
     right_hand_side = self_matrices.rhs
-    external_right_hand_side = solver.external_right_hand_side
+    extra_right_hand_side = solver.extra_right_hand_side
+    residual_vector = solver.residual_vector
 
     #--- external right-hand side based on current influence ---#
 
@@ -591,49 +824,38 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
     target_influence_to_buffer!(target_buffers, target_systems, derivatives_switches, target_tree.sort_index_list)
 
     # run influence function on buffers
-    reset!(external_right_hand_side)
-    influence!(external_right_hand_side, influences_per_system, target_buffers, source_systems, source_buffers, source_tree)
+    reset!(extra_right_hand_side)
+    influence!(extra_right_hand_side, influences_per_system, target_buffers, source_systems, source_buffers, source_tree)
 
-    #--- right-hand side based on non-self influence (current guess) ---#
-    
-    for i_leaf in source_tree.leaf_index
-        # unpack influence matrix and right-hand side
-        mat, rhs = get_matrix_vector(nonself_matrices, i_leaf)
-
-        if length(rhs) > 0
-            # unpack strengths
-            leaf_strengths = view(strengths, strengths_by_leaf[i_leaf])
-
-            # compute the influence
-            mul!(rhs, mat, leaf_strengths)
-
-            # move to right-hand side
-
-        end
-    end
+    # set the right-hand side to the external influence
+    # NOTE: this only happens once as it is not reset in the iterations
+    right_hand_side .= extra_right_hand_side
 
     #--- update strengths ---#
 
-    update_strengths_by_leaf!(strengths, strengths_by_leaf, source_systems, source_buffers, source_tree)
+    update_by_leaf!(strengths, strengths_by_leaf, source_systems, source_buffers, source_tree)
+
+    #--- non-self influence ---#
+
+    # add nonself influence to the right-hand side
+    nonself_matrices.rhs .= zero(TF) # reset rhs
+    update_nonself_influence!(right_hand_side, strengths, nonself_matrices, old_influence_storage, source_tree, target_tree, strengths_by_leaf, index_map, direct_list, targets_by_branch)
 
     #--- fast gauss seidel iterations ---#
 
     # prepare inputs
     empty_direct_list = Vector{Tuple{Int,Int}}(undef, 0)
+    mse = zero(TF)
 
     # begin iterations
     for iteration in 1:max_iterations
-        
-        #--- external influence on the right-hand side ---#
-
-        right_hand_side .= external_right_hand_side
 
         #--- farfield influence ---#
         
         # fmm call
         reset!(target_buffers)
-        fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, empty_direct_list, derivatives_switches, interaction_list_method;
-            expansion_order, ε_tol=nothing, lamb_helmholtz,
+        fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, empty_direct_list, derivatives_switches, interaction_list_method;
+            source_tree.expansion_order, ε_tol=nothing, lamb_helmholtz,
             upward_pass=true, horizontal_pass=true, downward_pass=true,
             # horizontal_pass_verbose::Bool=false,
             reset_target_tree=true, reset_source_tree=true,
@@ -643,10 +865,22 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
             # silence_warnings=false,
         )
 
-        # move to right-hand side
-        influence!(right_hand_side, influences_per_system, target_buffers, source_systems, source_buffers, source_tree)
+        # add farfield influence to the right-hand side
+        reset!(extra_right_hand_side)
+        influence!(extra_right_hand_side, influences_per_system, target_buffers, source_systems, source_buffers, source_tree)
+        right_hand_side .+= extra_right_hand_side
 
-        #--- self influence (solve for strengths) ---#
+        #--- check residual ---#
+
+        # note that `right_hand_side` now contains external, nonself, and farfield influence
+        mse = residual!(residual_vector, self_matrices, strengths, strengths_by_leaf)
+
+        if mse <= tolerance
+            @info "FastGaussSeidel converged after $(iteration-1) iterations with MSE = $(mse)"
+            break
+        end
+
+        #--- nearfield influence and solve ---#
 
         for (i_leaf, i_branch) in enumerate(source_tree.leaf_index)
             
@@ -659,21 +893,42 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
             # solve for strengths
             leaf_strengths .= mat \ rhs
 
-            #--- update non-self influence ---#
-
-            # unpack non-self influence matrix and target influence
-            mat, inf = get_matrix_vector(nonself_matrices, i_leaf)
-
-            # remove old influence from right-hand side
-
-            # compute the updated influence
-            mul!(inf, mat, leaf_strengths)
-
-            # move to right-hand side
+            # update non-self influence
+            length(direct_list) > 0 && update_nonself_influence!(right_hand_side, strengths, nonself_matrices, old_influence_storage, i_leaf, source_tree, target_tree, strengths_by_leaf, index_map, direct_list, targets_by_branch)
 
         end
 
+        #--- update strengths in buffers ---#
+
+        update_by_leaf!(source_buffers, source_systems, strengths, strengths_by_leaf, source_tree)
+
+        #--- restore right hand side to exclude farfield influence ---#
+
+        right_hand_side .-= extra_right_hand_side
+
     end
+
+    #--- check if we converged ---#
+    if mse > tolerance
+        @warn "FastGaussSeidel did not converge after $(max_iterations) iterations with MSE = $(mse)"
+    end
+
+    #--- final update of systems ---#
+
+    # use new strengths to get the full influence
+    fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, full_direct_list, derivatives_switches, interaction_list_method;
+            expansion_order=source_tree.expansion_order, ε_tol=nothing, lamb_helmholtz,
+            upward_pass=false, horizontal_pass=false, downward_pass=false, # just nearfield influence
+            # horizontal_pass_verbose::Bool=false,
+            reset_target_tree=false, reset_source_tree=false, # false now
+            # nearfield_device::Bool=false,
+            tune=false, update_target_systems=true, multipole_threshold, # update_target_systems is `true` now
+            # t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
+            # silence_warnings=false,
+        )
+
+    # update source system strengths
+    buffer_to_system_strength!(source_systems, source_tree)
 
 end
 
@@ -718,27 +973,38 @@ function influence!(sorted_influences::Vector{TF}, influences_per_system::Vector
             influences = influences_per_system[i_system]
 
             # update influences
-            sorted_influences[i_influence:i_influence + length(index) - 1] .-= view(influences, index)
+            sorted_influences[i_influence:i_influence + length(index) - 1] .+= view(influences, index)
             i_influence += length(index)
         end
     end
 end
 
-"""
-    influence!(influence, target_buffer, source_system, source_buffer)
+function residual!(residual_vector, self_matrices::Matrices, strengths::Vector, strengths_by_leaf::Vector{UnitRange{Int}})
 
-Evaluate the influence as pertains to the boundary element influence matrix and overwrites it to `influence` (which would need to be subtracted for it to act like the RHS of a linear system). Based on the current state of the `target_buffer` and `source_buffer`. Should be overloaded for each system type that is used in the boundary element solver.
+    # loop over self influence matrices
+    for i_leaf in eachindex(self_matrices.rhs_offsets)
+        # get matrix and rhs
+        mat, rhs = get_matrix_vector(self_matrices, i_leaf)
 
-Note that `source_system` is provided solely for dispatch. It's member bodies will be out of order and should not be referenced.
+        # unpack strengths
+        leaf_strengths = view(strengths, strengths_by_leaf[i_leaf])
 
-**Arguments:**
+        # compute the residual
+        vrange = 1:length(rhs)
+        this_residual = view(residual_vector, vrange)
+        this_residual .= rhs
+        mul!(this_residual, mat, leaf_strengths, 1.0, -1.0)
+    end
 
-* `influence::AbstractVector{TF}`: vector containing the influence for every body in the target buffer
-* `target_buffer::Matrix{TF}`: target buffer used to compute the influence
-* `source_system::{UserDefinedSystem}`: system object used solely for dispatch
-* `source_buffer::Matrix{TF}`: source buffer used to compute the influence
+    # sum of the squared residuals
+    mse = zero(eltype(residual_vector))
+    for i in eachindex(residual_vector)
+        r = residual_vector[i]
+        mse += r * r
+    end
 
-"""
-function influence!(influence, target_buffer, source_system, source_buffer)
-    error("influence! not overloaded for systems of type $(typeof(source_system))")
+    # compute the mean squared error
+    mse /= length(residual_vector)
+
+    return mse
 end

@@ -208,7 +208,7 @@ end
 """
     target_influence_to_buffer!(target_buffer, i_buffer, ::DerivativesSwitch{PS,VS,GS}, target_system::{UserDefinedSystem}, i_target) where {PS,VS,GS}
 
-NOTE: this function is primarily used for the boundary element solver, and is not required for the FMM.
+**NOTE:** this function is primarily used for the boundary element solver, and is not required for the FMM.
 
 Updates the `target_buffer` with influences from `target_system` for the `i_target`th body. Should be overloaded for each user-defined system object (where `{UserDefinedSystem}` is replaced with the type of the user-defined system) to be used as a target, assuming the target buffer positions have already been set. It should behave as follows:
 
@@ -230,7 +230,7 @@ end
 """
     strength_to_value(strength, source_system)
 
-NOTE: this function is primarily used for the boundary element solver, and is not required for the FMM.
+**NOTE:** this function is primarily used for the boundary element solver, and is not required for the FMM.
 
 Converts the strength of a body in `source_system` to a scalar value. Should be overloaded for each user-defined system object used with the boundary element solver.
 
@@ -240,7 +240,7 @@ Converts the strength of a body in `source_system` to a scalar value. Should be 
 * `source_system::{UserDefinedSystem}`: the user-defined system object, used solely for dispatch
 
 """
-function strength_to_value(strength::SVector, source_system)
+function strength_to_value(strength, source_system)
     throw("strength_to_value not overloaded for type $(typeof(source_system))")
 end
 
@@ -251,7 +251,7 @@ end
 """
     value_to_strength!(source_buffer, source_system, i_body, value)
 
-NOTE: this function is primarily used for the boundary element solver, and is not required for the FMM.
+**NOTE:** this function is primarily used for the boundary element solver, and is not required for the FMM.
 
 Converts a scalar value to a vector strength of a body in `source_system`. Should be overloaded for each user-defined system object used with the boundary element solver.
 
@@ -268,13 +268,49 @@ The following convenience function may be helpful when accessing the buffer:
 
 """
 function value_to_strength!(source_buffer, source_system, i_body, value)
-    # set the source strength to a value
-    # dim = strength_dims(source_system)
-    # for i in 1:dim
-    #     source_buffer[4+i, i_body] = value
-    # end
     throw("value_to_strength! not overloaded for type $(typeof(source_system))")
 end
+
+"""
+    buffer_to_system_strength!(system::{UserDefinedSystem}, source_buffer::Matrix{Float64}, i_body::Int)
+
+**NOTE:** this function is primarily used for the boundary element solver, and is not required for the FMM.
+
+Updates the strength in `system` for the `i_body`th body using the strength information contained in `source_buffer`. Should be overloaded for each user-defined system object used with the boundary element solver.
+
+**Arguments:**
+
+* `system::{UserDefinedSystem}`: the user-defined system object
+* `i_body::Int`: the index of the body in `source_system` whose strength is to be set
+* `source_buffer::Matrix{Float64}`: the source buffer containing the body information
+* `i_buffer::Int`: the index of the body in `source_buffer` whose strength is to be set
+
+"""
+function buffer_to_system_strength!(system, i_body, source_buffer, i_buffer)
+    throw("buffer_to_system_strength! not overloaded for type $(typeof(system))")
+end
+
+"""
+    influence!(influence, target_buffer, source_system, source_buffer)
+
+**NOTE:** `source_system` is provided solely for dispatch; it's member bodies will be out of order and should not be referenced.
+
+**NOTE:** This function is primarily used for the boundary element solver, and is not required for the FMM.
+
+Evaluate the influence as pertains to the boundary element influence matrix and overwrites it to `influence` (which would need to be subtracted for it to act like the RHS of a linear system). Based on the current state of the `target_buffer` and `source_buffer`. Should be overloaded for each system type that is used in the boundary element solver.
+
+**Arguments:**
+
+* `influence::AbstractVector{TF}`: vector containing the influence for every body in the target buffer
+* `target_buffer::Matrix{TF}`: target buffer used to compute the influence
+* `source_system::{UserDefinedSystem}`: system object used solely for dispatch
+* `source_buffer::Matrix{TF}`: source buffer used to compute the influence
+
+"""
+function influence!(influence, target_buffer, source_system, source_buffer)
+    error("influence! not overloaded for systems of type $(typeof(source_system))")
+end
+
 
 #------- internal functions -------#
 
@@ -314,7 +350,7 @@ end
 
 function buffer_to_target!(target_system, target_buffer, derivatives_switch, sort_index=1:get_n_bodies(target_system), buffer_index=1:get_n_bodies(target_system))
     for i_body in buffer_index
-        buffer_to_target_system!(target_system, sort_index[i_body], derivatives_switch, target_buffer, i_body) # TODO: check this
+        buffer_to_target_system!(target_system, sort_index[i_body], derivatives_switch, target_buffer, i_body)
     end
 end
 
@@ -377,6 +413,22 @@ function system_to_buffer(system, sort_index=1:get_n_bodies(system))
     buffer = allocate_source_buffer(eltype(system), system)
     system_to_buffer!(buffer, system, sort_index)
     return buffer
+end
+
+function buffer_to_system_strength!(source_systems::Tuple, source_tree::Tree)
+    buffer_to_system_strength!(source_systems, source_tree.buffers, source_tree.sort_index_list)
+end
+
+function buffer_to_system_strength!(source_systems::Tuple, source_buffers::NTuple{<:Any,<:Matrix}, sort_index_list=SVector{length(source_systems)}([1:get_n_bodies(system) for system in source_systems]), buffer_index_list=SVector{length(source_systems)}([1:get_n_bodies(system) for system in source_systems]))
+    for (source_system, source_buffer, sort_index, buffer_index) in zip(source_systems, source_buffers, sort_index_list, buffer_index_list)
+        buffer_to_system_strength_range!(source_system, source_buffer, sort_index, buffer_index)
+    end
+end
+
+function buffer_to_system_strength_range!(source_system, source_buffer::Matrix, sort_index::AbstractVector=1:get_n_bodies(source_system), buffer_index::AbstractVector=1:get_n_bodies(source_system))
+    for i_buffer in buffer_index
+        buffer_to_system_strength!(source_system, sort_index[i_buffer], source_buffer, i_buffer)
+    end
 end
 
 #--- auxilliary functions ---#
