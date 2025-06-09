@@ -773,10 +773,10 @@ function update_nonself_influence!(right_hand_side, strengths::Vector, nonself_m
             this_rhs = view(right_hand_side, targets_by_branch[i_target])
 
             # remove old influence from right-hand side
-            this_rhs .-= this_old_influence
+            this_rhs .+= this_old_influence
 
             # add influence to the right-hand side
-            this_rhs .+= this_influence
+            this_rhs .-= this_influence
         end
     end
 end
@@ -865,10 +865,10 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
             # silence_warnings=false,
         )
 
-        # add farfield influence to the right-hand side
+        # move farfield influence to the right-hand side
         reset!(extra_right_hand_side)
         influence!(extra_right_hand_side, influences_per_system, target_buffers, source_systems, source_buffers, source_tree)
-        right_hand_side .+= extra_right_hand_side
+        right_hand_side .-= extra_right_hand_side
 
         #--- check residual ---#
 
@@ -904,7 +904,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
         #--- restore right hand side to exclude farfield influence ---#
 
-        right_hand_side .-= extra_right_hand_side
+        right_hand_side .+= extra_right_hand_side
 
     end
 
@@ -915,7 +915,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
     #--- final update of systems ---#
 
-    # use new strengths to get the full influence
+    # use new strengths to get the full influence (farfield was already computed)
     fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, full_direct_list, derivatives_switches, interaction_list_method;
             expansion_order=source_tree.expansion_order, ε_tol=nothing, lamb_helmholtz,
             upward_pass=false, horizontal_pass=false, downward_pass=false, # just nearfield influence
@@ -973,7 +973,7 @@ function influence!(sorted_influences::Vector{TF}, influences_per_system::Vector
             influences = influences_per_system[i_system]
 
             # update influences
-            sorted_influences[i_influence:i_influence + length(index) - 1] .+= view(influences, index)
+            sorted_influences[i_influence:i_influence + length(index) - 1] .-= view(influences, index)
             i_influence += length(index)
         end
     end
