@@ -1,9 +1,9 @@
-using FastMultipole
-using Random
-using LinearAlgebra
-using Test
+# using FastMultipole
+# using Random
+# using LinearAlgebra
+# using Test
 
-include("gravitational.jl")
+# include("gravitational.jl")
 
 #--- define influence function ---#
 
