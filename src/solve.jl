@@ -227,7 +227,7 @@ function nonself_influence_matrices(target_buffers::Tuple, source_buffers::Tuple
                 # unpack source buffer
                 source_system = source_systems[i_source_system]
                 source_buffer = source_buffers[i_source_system]
-                this_source_buffer = view(source_buffer, :, source_index)
+                # this_source_buffer = view(source_buffer, :, source_index)
 
                 # loop over target systems
                 for i_target_system in eachindex(target_buffers)
@@ -241,6 +241,8 @@ function nonself_influence_matrices(target_buffers::Tuple, source_buffers::Tuple
                     # unpack target buffer
                     target_buffer = target_buffers[i_target_system]
                     this_target_buffer = view(target_buffer, :, target_index)
+                    target_source_buffer = source_buffers[i_target_system]
+                    this_source_buffer = view(target_source_buffer, :, target_index)
                     derivatives_switch = derivatives_switches[i_target_system]
 
                     # loop over source bodies
@@ -527,6 +529,12 @@ function add_self_interactions(direct_list::Vector{SVector{2,Int32}}, source_tre
     return full_direct_list
 end
 
+FastGaussSeidel(system; optargs...) = FastGaussSeidel((system,); optargs...)
+
+FastGaussSeidel(systems::Tuple; optargs...) = FastGaussSeidel(systems, systems; optargs...)
+
+FastGaussSeidel(target_systems, source_systems; optargs...) = FastGaussSeidel((target_systems,), (source_systems,); optargs...)
+
 function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple; 
     expansion_order=4, multipole_threshold=0.5, leaf_size=30, lamb_helmholtz=true,
     interaction_list_method=Barba(), shrink_recenter=true,
@@ -781,13 +789,11 @@ function update_nonself_influence!(right_hand_side, strengths::Vector, nonself_m
     end
 end
 
-function solve!(system, solver::FastGaussSeidel; optargs...)
-    return solve!((system,), solver; optargs...)
-end
+solve!(system, solver::FastGaussSeidel; optargs...) = solve!((system,), solver; optargs...)
 
-function solve!(systems::Tuple, solver::FastGaussSeidel; optargs...)
-    return solve!(systems, systems, solver; optargs...)
-end
+solve!(systems::Tuple, solver::FastGaussSeidel; optargs...) = solve!(systems, systems, solver; optargs...)
+
+solve!(target_systems, source_systems, solver::FastGaussSeidel; optargs...) = solve!((target_systems,), (source_systems,), solver; optargs...)
 
 function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussSeidel{TF,N}; 
     derivatives_switches=DerivativesSwitch(true, true, false, target_systems),
@@ -874,6 +880,8 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
         # note that `right_hand_side` now contains external, nonself, and farfield influence
         mse = residual!(residual_vector, self_matrices, strengths, strengths_by_leaf)
+
+        println("Iteration $(iteration): MSE = $(mse)")
 
         if mse <= tolerance
             @info "FastGaussSeidel converged after $(iteration-1) iterations with MSE = $(mse)"

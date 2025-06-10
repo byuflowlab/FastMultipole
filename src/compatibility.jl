@@ -449,21 +449,21 @@ end
 #     return SVector{3}(view(source_buffer, 1:3, i_body))
 # end
 
-function get_position(system::Matrix{TF}, i) where TF
+function get_position(system::AbstractMatrix{TF}, i) where TF
     @inbounds val = SVector{3,TF}(system[1, i], system[2, i], system[3, i])
     return val
 end
 
-get_scalar_potential(system::Matrix, i) = @inbounds system[4, i]
+get_scalar_potential(system::AbstractMatrix, i) = @inbounds system[4, i]
 
-get_velocity(system::Matrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
+get_velocity(system::AbstractMatrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
 
-get_velocity_gradient(system::Matrix{TF}, i) where TF =
+get_velocity_gradient(system::AbstractMatrix{TF}, i) where TF =
     @inbounds SMatrix{3,3,TF,9}(system[8, i], system[9, i], system[10, i],
     system[11, i], system[12, i], system[13, i],
     system[14, i], system[15, i], system[16, i])
 
-get_n_bodies(sys::Matrix) = size(sys, 2)
+get_n_bodies(sys::AbstractMatrix) = size(sys, 2)
 
 #--- setters ---#
 

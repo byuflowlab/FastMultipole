@@ -349,3 +349,57 @@ for i_branch in fgs.source_tree.leaf_index
 end
 
 end
+
+@testset "Fast Gauss Seidel: update system strengths" begin
+
+#--- generate system ---#
+
+n_bodies = 10000
+seed = 123
+system = generate_gravitational(seed, n_bodies)
+derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
+
+#--- generate buffers ---#
+
+systems = (system,)
+target = false
+source_tree = Tree(systems, target; buffers=FastMultipole.allocate_buffers(systems, target), small_buffers = FastMultipole.allocate_small_buffers(systems), expansion_order=4, leaf_size=SVector{1}(20), n_divisions=20, shrink_recenter=false, interaction_list_method=Barba())
+
+#--- modify the buffer strengths ---#
+
+for i in 1:FastMultipole.get_n_bodies(system)
+    source_tree.buffers[1][5,i] = rand()
+end
+
+buffer_strengths = source_tree.buffers[1][5, :]
+buffer_positions = source_tree.buffers[1][1:3, :]
+
+#--- update system strengths ---#
+
+FastMultipole.buffer_to_system_strength!(systems, source_tree)
+
+#--- check strengths ---#
+
+# sort system by position
+system_positions = zeros(3, FastMultipole.get_n_bodies(system))
+for i in 1:FastMultipole.get_n_bodies(system)
+    system_positions[:, i] = system.bodies[i].position
+end
+system_strengths = [system.bodies[i].strength for i in 1:FastMultipole.get_n_bodies(system)]
+
+system_p = sortperm(eachcol(system_positions))
+sorted_system_positions = system_positions[:, system_p]
+sorted_system_strengths = system_strengths[system_p]
+
+# sort buffer by position
+buffer_p = sortperm(eachcol(buffer_positions))
+sorted_buffer_positions = buffer_positions[:, buffer_p]
+sorted_buffer_strengths = buffer_strengths[buffer_p]
+
+# test that the sorted positions and strengths are the same
+for i in 1:FastMultipole.get_n_bodies(system)
+    @test isapprox(sorted_system_positions[:, i], sorted_buffer_positions[:, i]; atol=1e-6)
+    @test isapprox(sorted_system_strengths[i], sorted_buffer_strengths[i]; atol=1e-6)
+end
+
+end
