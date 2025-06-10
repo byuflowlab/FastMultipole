@@ -851,7 +851,8 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
     # prepare inputs
     empty_direct_list = Vector{Tuple{Int,Int}}(undef, 0)
-    mse = zero(TF)
+    mse = one(TF) * 100000
+    mse_best = mse
 
     # begin iterations
     for iteration in 1:max_iterations
@@ -880,8 +881,14 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
         # note that `right_hand_side` now contains external, nonself, and farfield influence
         mse = residual!(residual_vector, self_matrices, strengths, strengths_by_leaf)
-
+        
         println("Iteration $(iteration): MSE = $(mse)")
+        
+        # if mse > mse_best * 10 # stop if mse begins increasing
+        #     @warn "FastGaussSeidel stopped early at iteration $(iteration) with MSE = $(mse) (previous was $(mse_best))"
+        #     break
+        # end
+        # mse_best = min(mse_best, mse)
 
         if mse <= tolerance
             @info "FastGaussSeidel converged after $(iteration-1) iterations with MSE = $(mse)"
