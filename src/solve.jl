@@ -874,7 +874,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
         # move farfield influence to the right-hand side
         reset!(extra_right_hand_side)
         influence!(extra_right_hand_side, influences_per_system, target_buffers, source_systems, source_buffers, source_tree)
-        right_hand_side .-= extra_right_hand_side
+        right_hand_side .+= extra_right_hand_side
 
         #--- check residual ---#
 
@@ -912,7 +912,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
         #--- restore right hand side to exclude farfield influence ---#
 
-        right_hand_side .+= extra_right_hand_side
+        right_hand_side .-= extra_right_hand_side
 
     end
 
