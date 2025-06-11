@@ -626,8 +626,9 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
 
         # number of translations per thread
         n_per_thread, rem = divrem(length(m2l_list),n_threads)
-        rem > 0 && (n_per_thread += 1)
-        assignments = 1:n_per_thread:length(m2l_list)
+        # rem > 0 && (n_per_thread += 1)
+        n = n_per_thread + (rem > 0)
+        assignments = 1:n:length(m2l_list)
 
         # increment the expansion order if ε_tol !== nothing
         error_check = !(isnothing(ε_tol))
@@ -641,7 +642,7 @@ function horizontal_pass_multithread!(target_branches, source_branches::Vector{<
         # execute tasks
         Threads.@threads for i_thread in 1:length(assignments)
             i_start = assignments[i_thread]
-            i_stop = min(i_start+n_per_thread-1, length(m2l_list))
+            i_stop = min(i_start+n-1, length(m2l_list))
             for (i_target, j_source) in m2l_list[i_start:i_stop]
                 Threads.lock(target_branches[i_target].lock) do
                     multipole_to_local!(target_branches[i_target], source_branches[j_source], weights_tmp_1[i_thread], weights_tmp_2[i_thread], Ts[i_thread], eimϕs[i_thread], ζs_mag, ηs_mag, Hs_π2, expansion_order, lamb_helmholtz, ε_tol)
