@@ -495,6 +495,36 @@ end
     return fraction > 0.5 && n_bodies > 1
 end
 
+@inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size::SVector, ::SelfTuningTreeStop)
+    fraction = 0.0
+    n_bodies = 0
+    for i_element in 1:size(cumulative_octant_census, 1)
+        # fraction += cumulative_octant_census[i_element,end] / leaf_size[i_element]
+        n = cumulative_octant_census[i_element,end]
+        n_bodies += n
+        fraction += n / (leaf_size[i_element] * leaf_size[i_element])
+        # cumulative_octant_census[i_element,end] > leaf_size[i_element] && (return true)
+    end
+    fraction *= minimum(leaf_size)
+
+    return fraction > 2.8284271247461903 && n_bodies > 1 # sqrt(8) == 2.8284271247461903; leads to the expectation value
+                                                         # of n_source * n_target => leaf_size^2 (break-even point)
+    # return fraction > nextfloat(1.0)
+end
+
+@inline function exceeds(branch::Branch, leaf_size, ::SelfTuningTreeStop)
+    fraction = 0.0
+    n_bodies = 0
+    for i_element in 1:length(leaf_size)
+        n = length(leaf_size.bodies_index[i_element])
+        n_bodies += n
+        fraction += n / (leaf_size[i_element] * leaf_size[i_element])
+    end
+    fraction *= minimum(leaf_size)
+
+    return fraction > 2.8284271247461903 && n_bodies > 1
+end
+
 @inline function exceeds(cumulative_octant_census::AbstractMatrix, leaf_size, ::Barba)
     not_over = true
     for i_element in 1:size(cumulative_octant_census, 1)

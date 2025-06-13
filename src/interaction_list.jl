@@ -119,6 +119,52 @@ function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, tar
     end
 end
 
+function build_interaction_lists!(m2l_list, direct_list, i_target, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield::Val{ff}, nearfield::Val{nf}, self_induced::Val{si}, method::SelfTuningTreeStop) where {ff,nf,si}
+    # unpack
+    source_branch = source_branches[j_source]
+    target_branch = target_branches[i_target]
+
+    # both are leaves, so direct!
+    if source_branch.n_branches == target_branch.n_branches == 0
+        (nf || (i_target==j_source && si)) && (i_target!=j_source || si) && push!(direct_list, SVector{2}(i_target, j_source))
+        return nothing
+    end
+
+    # branch center separation distance
+    Δx, Δy, Δz = target_branch.target_center - source_branch.source_center
+    separation_distance_squared = Δx*Δx + Δy*Δy + Δz*Δz
+
+    # decide whether or not to accept the multipole expansion
+    summed_radii = source_branch.source_radius + target_branch.target_radius
+    # summed_radii = sqrt(3) * mean(source_branch.source_box) + sqrt(3) * mean(target_branch.target_box)
+
+    if separation_distance_squared * multipole_threshold * multipole_threshold > summed_radii * summed_radii
+    #if ρ_max <= multipole_threshold * r_min && r_max <= multipole_threshold * ρ_min # exploring a new criterion
+        if ff
+            push!(m2l_list, SVector{2}(i_target, j_source))
+        end
+        return nothing
+    end
+
+    # count number of sources
+    n_targets = sum(target_branch.n_bodies)
+    n_sources = sum(source_branch.n_bodies)
+
+    # source is a leaf OR target is not a leaf and has more bodies, so subdivide target branch
+    if source_branch.n_branches == 0 || (n_targets >= n_sources && target_branch.n_branches != 0)
+
+        for i_child in target_branch.branch_index
+            build_interaction_lists!(m2l_list, direct_list, i_child, j_source, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method)
+        end
+
+    # source is not a leaf AND target is a leaf or has fewer bodies, so subdivide source branch
+    else
+        for j_child in source_branch.branch_index
+            build_interaction_lists!(m2l_list, direct_list, i_target, j_child, target_branches, source_branches, source_leaf_size, multipole_threshold, farfield, nearfield, self_induced, method)
+        end
+    end
+end
+
 @inline preallocate_bodies_index(T::Type{<:Branch{<:Any,NT}}, n) where NT = Tuple(Vector{UnitRange{Int64}}(undef, n) for _ in 1:NT)
 # @inline preallocate_bodies_index(T::Type{<:SingleBranch}, n) = Vector{UnitRange{Int64}}(undef, n)
 

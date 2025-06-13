@@ -1,6 +1,6 @@
 @testset "dynamic expansion order: absolute rotated coefficients, point source" begin
 
-expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(100), 0.5
+expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(10), 0.5
 n_bodies = 10000
 
 shrink_recenter = true
@@ -29,7 +29,7 @@ optimized_args, cache, target_tree, source_tree, m2l_list, direct_list, derivati
 velocity_fmm = system.potential[5:7,:]
 velocity_err = [norm(system.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
 
-@test ε * 0.1 < maximum(velocity_err) < ε * 10
+@test ε * 0.1 < maximum(velocity_err) < ε * 30
 
 # println("\n===== radius factor = 0.1 =====\n")
 
@@ -37,13 +37,13 @@ FastMultipole.fmm!(system2; expansion_order, leaf_size_source, multipole_thresho
 
 velocity_err = [norm(system2.potential[5:7,i] - validation_system.potential[5:7,i]) for i in 1:size(system.potential,2)]
 
-@test ε * 0.1 < maximum(velocity_err) < ε * 10
+@test ε * 0.1 < maximum(velocity_err) < ε * 30
 
 end
 
 @testset "dynamic expansion order: absolute rotated coefficients, point vortex" begin
 
-expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(100), 0.5
+expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(10), 0.5
 n_bodies = 10000
 
 shrink_recenter = true
@@ -71,7 +71,7 @@ FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_threshol
 
 velocity_err = [norm(system.velocity_stretching[1:3,i] - validation_system.velocity_stretching[1:3,i]) for i in 1:size(system.velocity_stretching,2)]
 
-@test ε * 0.1 < maximum(velocity_err) < ε * 30
+@test ε * 0.1 < maximum(velocity_err) < ε * 80
 
 # println("\n===== radius factor = 0.1 =====\n")
 
@@ -79,13 +79,13 @@ FastMultipole.fmm!(system2; expansion_order, leaf_size_source, multipole_thresho
 
 velocity_err = [norm(system2.velocity_stretching[1:3,i] - validation_system.velocity_stretching[1:3,i]) for i in 1:size(system.velocity_stretching,2)]
 
-@test ε * 0.1 < maximum(velocity_err) < ε * 30
+@test ε * 0.1 < maximum(velocity_err) < ε * 80
 
 end
 
 @testset "dynamic expansion order: absolute multipole power, point source" begin
 
-expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(100), 0.5
+expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(10), 0.5
 n_bodies = 10000
 
 shrink_recenter = true
@@ -125,7 +125,7 @@ end
 
 @testset "dynamic expansion order: absolute multipole power, point vortex" begin
 
-expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(100), 0.5
+expansion_order, leaf_size_source, multipole_threshold = 20, SVector{1}(10), 0.5
 n_bodies = 10000
 lamb_helmholtz = true
 

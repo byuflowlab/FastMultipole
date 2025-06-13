@@ -178,6 +178,9 @@ struct SelfTuning{TS} <: InteractionListMethod{TS} end
 
 SelfTuning(TS=SortByTarget()) = SelfTuning{TS}()
 
+struct SelfTuningTreeStop{TS} <: InteractionListMethod{TS} end
+SelfTuningTreeStop(TS=SortByTarget()) = SelfTuningTreeStop{TS}()
+
 #------- octree creation -------#
 
 """

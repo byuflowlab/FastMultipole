@@ -48,40 +48,48 @@ function get_n_interactions(i_target_system, target_branches, i_source_system, s
     return n_interactions
 end
 
-function check_completion(i_target, list, i, ::InteractionListMethod{SortByTarget()})
-    return i == length(list) || list[i+1][1] != i_target
-end
+"""
+    make_direct_assignments!(assignments, i_target_system, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread, interaction_list_method)
 
-function check_completion(i_target, list, i, interaction_list_method)
-    return true
-end
+Assumes `direct_list` is sorted by target branch index. Assigns ranges of interactions to each thread.
 
+"""
 function make_direct_assignments!(assignments, i_target_system, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread, interaction_list_method)
     i_start = 1
     i_end = 1
     i_thread = 1
     n_interactions = 0
 
-    # loop over interaction list
-    for (i,(i_target, i_source)) in enumerate(direct_list)
-        # update number of interactions in the current assignment
-        n_interactions += target_branches[i_target].n_bodies[i_target_system] * source_branches[i_source].n_bodies[i_source_system]
+    if length(direct_list) > 0
 
-        # if sorting by target, make sure we finish off the current target
-        ready = check_completion(i_target, direct_list, i, interaction_list_method)
+        # prepare recursive quantities
+        i_target, i_source = direct_list[1]
 
-        # if we exceed n_per_thread, finish this assignment and reset counters
-        if n_interactions >= n_per_thread && ready
-            assignments[i_thread] = i_start:i_end
-            i_start = i_end + 1
-            i_thread += 1
-            n_interactions = 0
+        # loop over interaction list
+        for (i_target_next, i_source_next) in view(direct_list, 2:length(direct_list))
+            # update number of interactions in the current assignment
+            n_interactions += target_branches[i_target].n_bodies[i_target_system] * source_branches[i_source].n_bodies[i_source_system]
+
+            # if sorting by target, make sure we finish off the current target
+            ready = i_target_next != i_target
+
+            # if we exceed n_per_thread, finish this assignment and reset counters
+            if n_interactions >= n_per_thread && ready
+                assignments[i_thread] = i_start:i_end
+                i_start = i_end + 1
+                i_thread += 1
+                n_interactions = 0
+            end
+
+            # recurse
+            i_end += 1
+            i_target, i_source = i_target_next, i_source_next
         end
+        
+        # get the last assignment
+        assignments[i_thread] = i_start:i_end
 
-        i_end += 1
     end
-
-    i_thread <= n_threads && (assignments[i_thread] = i_start:length(direct_list))
 end
 
 function execute_assignment!(target_buffer, i_target_buffer, target_branches, derivatives_switch, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment, interaction_list_method)
@@ -97,7 +105,8 @@ function execute_assignment!(target_buffer, i_target_buffer, target_branches, de
         target_index = target_branch.bodies_index[i_target_buffer]
 
         # compute interaction
-        @lock target_branch.lock direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
+        # @lock target_branch.lock 
+        direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
     end
 end
 
@@ -137,24 +146,39 @@ function nearfield_multithread!(target_buffer, i_target_buffer, target_branches,
     end
     make_direct_assignments!(assignments, i_target_buffer, target_branches, i_source_system, source_branches, direct_list, n_threads, n_per_thread, interaction_list_method)
 
-    # rule out datarace conditions
-    copies = Tuple(zeros(size(target_buffer)) for _ in 1:n_threads)
-    pos = view(target_buffer, 1:3, :)
-    for i_copy in 1:n_threads
-        copies[i_copy][1:3,:] .= pos
-    end
+    # # rule out datarace conditions
+    # copies = Tuple(zeros(size(target_buffer)) for _ in 1:n_threads)
+    # pos = view(target_buffer, 1:3, :)
+    # for i_copy in 1:n_threads
+    #     copies[i_copy][1:3,:] .= pos
+    # end
 
     # execute tasks
     Threads.@threads for i_task in eachindex(assignments)
         assignment = assignments[i_task]
-        this_buffer = copies[i_task]
-        execute_assignment!(this_buffer, i_target_buffer, target_branches, derivatives_switch, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment, interaction_list_method)
+        # this_buffer = copies[i_task]
+        # execute_assignment!(this_buffer, i_target_buffer, target_branches, derivatives_switch, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment, interaction_list_method)
+        execute_assignment!(target_buffer, i_target_buffer, target_branches, derivatives_switch, source_system, source_buffer, i_source_system, source_branches, direct_list, assignment, interaction_list_method)
     end
 
+    # if DEBUG[]
+    #     test_buffer = deepcopy(target_buffer)
+    #     test_buffer[4:16,:] .= zero(eltype(target_buffer))
+    #     rs = 900:920
+    #     @show target_buffer[4,rs]
+    #     for (i,b) in enumerate(copies)
+    #         println("i=$i")
+    #         @show b[4,rs]
+    #         test_buffer[4,:] .+= view(b, 4, :)
+    #     end
+    #    @show findmax(abs.(test_buffer[4,:] - target_buffer[4,:]))
+    # end
+
     # consolidate buffers
-    for b in copies
-        target_buffer[4:end,:] .+= view(b, 4:16, :)
-    end
+    # for b in copies
+    #     target_buffer[4:end,:] .+= view(b, 4:16, :)
+    # end
+
 end
 
 """
@@ -472,26 +496,34 @@ function assign_m2l!(assignments, m2l_list, n_threads, n_per_thread, interaction
     i_thread = 1
     n_interactions = 0
 
-    # loop over interaction list
-    for (i,(i_target, i_source)) in enumerate(m2l_list)
-        # update number of interactions in the current assignment
-        n_interactions += 1
+    if length(m2l_list) > 0
 
-        # if sorting by target, make sure we finish off the current target
-        ready = check_completion(i_target, m2l_list, i, interaction_list_method)
+        i_target, i_source = m2l_list[1]
 
-        # if we exceed n_per_thread, finish this assignment and reset counters
-        if n_interactions >= n_per_thread && ready
-            assignments[i_thread] = i_start:i_end
-            i_start = i_end + 1
-            i_thread += 1
-            n_interactions = 0
+        # loop over interaction list
+        for (i_target_next, i_source_next) in view(m2l_list, 2:length(m2l_list))
+            # update number of interactions in the current assignment
+            n_interactions += 1
+
+            # if sorting by target, make sure we finish off the current target
+            ready = i_target != i_target_next
+
+            # if we exceed n_per_thread, finish this assignment and reset counters
+            if n_interactions >= n_per_thread && ready
+                assignments[i_thread] = i_start:i_end
+                i_start = i_end + 1
+                i_thread += 1
+                n_interactions = 0
+            end
+
+            i_end += 1
+            i_target, i_source = i_target_next, i_source_next
         end
 
-        i_end += 1
-    end
+        # get the last assignment
+        assignments[i_thread] = i_start:i_end
 
-    i_thread <= n_threads && (assignments[i_thread] = i_start:length(m2l_list))
+    end
 end
 
 function execute_m2l!(target_expansions, target_branches, source_expansions, source_branches, m2l_list, assignment, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol, ::InteractionListMethod{SortByTarget()})
@@ -520,7 +552,8 @@ function execute_m2l!(target_expansions, target_branches, source_expansions, sou
         source_expansion = view(source_expansions, :, :, :, j_source)
         target_branch = target_branches[i_target]
         source_branch = source_branches[j_source]
-        @lock target_branch.lock ( P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol) )
+        # @lock target_branch.lock ( P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol) )
+        P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol)
         Pmax = max(P, Pmax)
         error_success = error_success && this_error_success
     end    
@@ -787,6 +820,7 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     expansion_order=5,
     ε_tol=nothing,
     shrink_recenter=true,
+    interaction_list_method::InteractionListMethod=SelfTuningTreeStop(),
     optargs...
 )
 
@@ -795,17 +829,17 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     leaf_size_target = to_vector(isnothing(leaf_size_target) ? minimum(leaf_size_source) : leaf_size_target, length(target_systems))
 
     # create trees
-    t_target_tree = @elapsed target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order, leaf_size=leaf_size_target, shrink_recenter)
-    t_source_tree = @elapsed source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order, leaf_size=leaf_size_source, shrink_recenter)
+    t_target_tree = @elapsed target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order, leaf_size=leaf_size_target, shrink_recenter, interaction_list_method)
+    t_source_tree = @elapsed source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order, leaf_size=leaf_size_source, shrink_recenter, interaction_list_method)
 
-    return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_tol, t_source_tree, t_target_tree, optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_tol, t_source_tree, t_target_tree, interaction_list_method, optargs...)
 end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree;
     leaf_size_source=default_leaf_size(source_systems), multipole_threshold=0.4,
     scalar_potential=false, velocity=true, velocity_gradient=false,
     farfield=true, nearfield=true, self_induced=true,
-    interaction_list_method::InteractionListMethod=SelfTuning(),
+    interaction_list_method::InteractionListMethod=SelfTuningTreeStop(),
     t_source_tree=0.0, t_target_tree=0.0,
     optargs...
 )
@@ -819,7 +853,11 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
 
     # create interaction lists
-    t_lists = @elapsed m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced, interaction_list_method)
+    t_lists = @elapsed begin
+        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced, interaction_list_method)
+        m2l_list = sort_by_target(m2l_list, target_tree.branches)
+        direct_list = sort_by_target(direct_list, target_tree.branches)
+    end
 
     # run fmm
     return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches, interaction_list_method; multipole_threshold, t_source_tree, t_target_tree, t_lists, optargs...)
@@ -874,6 +912,12 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
     silence_warnings=false,
 )
+
+    #--- check for datarace condition ---#
+
+    if Threads.nthreads() > 1 && typeof(interaction_list_method) <: Union{InteractionListMethod{SortBySource}, SelfTuning}
+        throw(ArgumentError("InteractionListMethod $interaction_list_method is not thread-safe; use <:InteractionListMethod{SortByTarget} instead, and avoid `SelfTuning`."))
+    end
 
     #--- silence warnings ---#
 
