@@ -664,7 +664,7 @@ function sort_bodies!(buffer::Matrix, small_buffer::Matrix, sort_index, octant_i
         this_i = octant_indices[i_octant]
 
         # update small buffer
-        small_buffer[1:3,this_i] .= buffer[1:3,i_body]
+        small_buffer[1:3,this_i] .= view(buffer, 1:3, i_body)
         # tmp = system[i_body, Body()]
         # buffer[this_i] = tmp
 
@@ -677,13 +677,10 @@ function sort_bodies!(buffer::Matrix, small_buffer::Matrix, sort_index, octant_i
 
     # place buffers
     for i_body in bodies_index
-        buffer[1:3, i_body] .= small_buffer[1:3,i_body]
+        buffer[1:3, i_body] .= view(small_buffer, 1:3, i_body)
     end
 
-    # for i_index in bodies_index
-    #     sort_index[i_index] = sort_index_buffer[i_index]
-    # end
-    sort_index[bodies_index] .= view(sort_index_buffer,bodies_index)
+    sort_index[bodies_index] .= view(sort_index_buffer, bodies_index)
 end
 
 function sort_bodies!(buffers, small_buffers, sort_indices, octant_indices::AbstractMatrix, sort_index_buffers, bodies_indices::AbstractVector, center)
