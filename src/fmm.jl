@@ -153,7 +153,7 @@ function nearfield_multithread!(target_buffer, i_target_buffer, target_branches,
 
     # consolidate buffers
     for b in copies
-        target_buffer[4:end,:] .+= b[4:end,:]
+        target_buffer[4:end,:] .+= view(b, 4:16, :)
     end
 end
 
