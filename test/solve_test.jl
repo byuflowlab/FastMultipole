@@ -38,7 +38,7 @@ n_bodies = 10
 seed = 1234
 system = generate_gravitational(seed, n_bodies)
 
-direct!(system; scalar_potential=true, velocity=false)
+direct!(system; scalar_potential=true, vector_field=false)
 phi_desired = system.potential[1, :]
 
 #--- create FGS solver ---#
@@ -75,7 +75,7 @@ n_bodies = 1000
 seed = 1234
 system = generate_gravitational(seed, n_bodies)
 
-direct!(system; scalar_potential=true, velocity=false)
+direct!(system; scalar_potential=true, vector_field=false)
 system.potential[1, :] .*= -1.0
 
 #--- create FGS solver ---#
@@ -163,7 +163,7 @@ seed = 1234
 system = generate_gravitational(seed, n_bodies)
 derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
 
-direct!(system; scalar_potential=true, velocity=false)
+direct!(system; scalar_potential=true, vector_field=false)
 phi_desired = system.potential[1, :]
 system.potential[1, :] .*= -1.0 # invert potential to compel FGS to compute strengths
 
@@ -317,7 +317,7 @@ seed = 123
 system = generate_gravitational(seed, n_bodies)
 derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
 
-direct!(system; scalar_potential=true, velocity=false)
+direct!(system; scalar_potential=true, vector_field=false)
 strengths_desired = [b.strength for b in system.bodies]
 phi_desired = system.potential[1, :]
 system.potential[1, :] .*= -1.0 # invert external potential to compel FGS to compute the original strengths

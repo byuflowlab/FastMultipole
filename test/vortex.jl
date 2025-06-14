@@ -13,8 +13,8 @@ const i_POSITION_vortex = 1:3
 const i_STRENGTH_vortex = 4:6
 const i_POTENTIAL_SCALAR = 1:1
 const i_POTENTIAL_VECTOR = 2:4
-const i_VELOCITY_GRADIENT_vortex = 5:13
-const i_VELOCITY_vortex = 1:3
+const i_VECTOR_FIELD_GRADIENT_vortex = 5:13
+const i_VECTOR_FIELD_vortex = 1:3
 const i_STRETCHING_vortex = 4:6
 
 struct Vorton{TF}
@@ -26,7 +26,7 @@ end
 struct VortexParticles{TF}
     bodies::Vector{Vorton{TF}}
     potential::Matrix{TF}
-    velocity_stretching::Matrix{TF}
+    vector_field_stretching::Matrix{TF}
 end
 
 function generate_vortex(seed, n_bodies; strength_scale=1/n_bodies, radius_factor=0.0)
@@ -42,7 +42,7 @@ end
 
 function reset!(system::VortexParticles{TF}) where TF
     system.potential .= zero(TF)
-    system.velocity_stretching .= zero(TF)
+    system.vector_field_stretching .= zero(TF)
 end
 
 abstract type IntegrationScheme end
@@ -98,16 +98,16 @@ function fmm.direct!(target_system::Matrix{TF}, target_index, ::FastMultipole.De
                 # useful denominator
                 denom = FastMultipole.ONE_OVER_4π * rinv * rinv2
 
-                # induced velocity
+                # induced vector field
                 vx, vy, vz = zero(r2), zero(r2), zero(r2)
                 if V
                     vx = (dz * Γy - dy * Γz) * denom
                     vy = (dx * Γz - dz * Γx) * denom
                     vz = (dy * Γx - dx * Γy) * denom
-                    FastMultipole.set_velocity!(target_system, i_target, SVector{3,TF}(vx,vy,vz))
+                    FastMultipole.set_vector_field!(target_system, i_target, SVector{3,TF}(vx,vy,vz))
                 end
 
-                # velocity gradient
+                # vector gradient
                 if VG
                     denom *= rinv2
                     vxx = -3 * dx * (Γy * dz - Γz * dy) * denom
@@ -119,7 +119,7 @@ function fmm.direct!(target_system::Matrix{TF}, target_index, ::FastMultipole.De
                     vzx = (-3 * dz * (Γy * dz - Γz * dy) + Γy * r2) * denom
                     vzy = (-3 * dz * (Γz * dx - Γx * dz) - Γx * r2) * denom
                     vzz = -3 * dz * (Γx * dy - Γy * dx) * denom
-                    FastMultipole.set_velocity_gradient!(target_system, i_target, SMatrix{3,3,TF,9}(vxx, vxy, vxz, vyx, vyy, vyz, vzx, vzy, vzz))
+                    FastMultipole.set_vector_gradient!(target_system, i_target, SMatrix{3,3,TF,9}(vxx, vxy, vxz, vyx, vyy, vyz, vzx, vzy, vzz))
                 end
 
             end
@@ -130,15 +130,15 @@ end
 function FastMultipole.buffer_to_target_system!(target_system::VortexParticles, i_target, ::FastMultipole.DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
     # retrieve fields
     TF = eltype(target_system)
-    velocity = VS ? FastMultipole.get_velocity(target_buffer, i_buffer) : zero(SVector{3,TF})
-    velocity_gradient = GS ? FastMultipole.get_velocity_gradient(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
+    vector_field = VS ? FastMultipole.get_vector_field(target_buffer, i_buffer) : zero(SVector{3,TF})
+    vector_gradient = GS ? FastMultipole.get_vector_field_gradient(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
 
     # update system
     if VS
-        target_system.velocity_stretching[i_VELOCITY_vortex, i_target] .+= velocity
+        target_system.vector_field_stretching[i_VECTOR_FIELD_vortex, i_target] .+= vector_field
     end
     if GS
-        target_system.potential[i_VELOCITY_GRADIENT_vortex, i_target] .+= reshape(velocity_gradient, 9)
+        target_system.potential[i_VECTOR_FIELD_GRADIENT_vortex, i_target] .+= reshape(vector_gradient, 9)
     end
 end
 
@@ -148,14 +148,14 @@ Base.eltype(::VortexParticles{TF}) where TF = TF
 
 function flatten_derivatives!(jacobian, hessian, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     if VS
-        # velocity
+        # vector field
         jacobian[1,1] = -jacobian[1,1] + jacobian[2,4] - jacobian[3,3]
         jacobian[2,1] = -jacobian[2,1] + jacobian[3,2] - jacobian[1,4]
         jacobian[3,1] = -jacobian[3,1] + jacobian[1,3] - jacobian[2,2]
     end
 
     if GS
-        # velocity gradient
+        # vector gradient
         hessian[1,1,1] = -hessian[1,1,1] + hessian[2,1,4] - hessian[3,1,3]
         hessian[2,1,1] = -hessian[2,1,1] + hessian[3,1,2] - hessian[1,1,4]
         hessian[3,1,1] = -hessian[3,1,1] + hessian[1,1,3] - hessian[2,1,2]
@@ -171,25 +171,25 @@ end
 
 function VortexParticles(position, strength, radius=zeros(size(position,2));
     N = size(position)[2],
-    potential = zeros(i_VELOCITY_GRADIENT_vortex[end],N),
-    velocity_stretching = zeros(3+3,N),
+    potential = zeros(i_VECTOR_FIELD_GRADIENT_vortex[end],N),
+    vector_field_stretching = zeros(3+3,N),
 )
     @assert size(position)[1] == 3
     @assert size(strength)[1] == 3
     bodies = [Vorton(SVector{3}(position[:,i]), SVector{3}(strength[:,i]), radius[i]) for i in 1:size(position)[2]]
-    return VortexParticles(bodies, potential, velocity_stretching)
+    return VortexParticles(bodies, potential, vector_field_stretching)
 end
 
 function VortexParticles(bodies;
     N = size(bodies)[2],
-    potential = zeros(i_VELOCITY_GRADIENT_vortex[end],N),
-    velocity_stretching = zeros(3+3,N)
+    potential = zeros(i_VECTOR_FIELD_GRADIENT_vortex[end],N),
+    vector_field_stretching = zeros(3+3,N)
 )
     bodies = [Vorton(SVector{3}(bodies[1:3,i]), SVector{3}(bodies[5:7,i]), bodies[4,i]) for i in 1:size(bodies)[2]]
-    return VortexParticles(bodies, potential, velocity_stretching)
+    return VortexParticles(bodies, potential, vector_field_stretching)
 end
 
-@inline function update_velocity_stretching!(system, i_body)
+@inline function update_vector_field_stretching!(system, i_body)
     # vorticity = @SVector [
     #     jacobian[2,3] - jacobian[3,2],
     #     jacobian[3,1] - jacobian[1,3],
@@ -198,20 +198,20 @@ end
     # stretching term (omega dot nabla)
 
     # total derivative of the strength due to vortex stretching
-    duidxj = reshape(view(system.potential,i_VELOCITY_GRADIENT_vortex,i_body),3,3)
+    duidxj = reshape(view(system.potential,i_VECTOR_FIELD_GRADIENT_vortex,i_body),3,3)
     # @show duidxj system.bodies[i_body].strength
-    fmm.mul!(view(system.velocity_stretching,i_STRETCHING_vortex,i_body), duidxj, system.bodies[i_body].strength)
+    fmm.mul!(view(system.vector_field_stretching,i_STRETCHING_vortex,i_body), duidxj, system.bodies[i_body].strength)
 
     return nothing
 end
 
-function update_velocity_stretching!(vortex_particles::VortexParticles)
+function update_vector_field_stretching!(vortex_particles::VortexParticles)
     for i_body in 1:fmm.get_n_bodies(vortex_particles)
-        update_velocity_stretching!(vortex_particles, i_body)
+        update_vector_field_stretching!(vortex_particles, i_body)
     end
 end
 
-@inline function update_velocity_stretching_new!(system, i_body)
+@inline function update_vector_field_stretching_new!(system, i_body)
     # vorticity = @SVector [
     #     jacobian[2,3] - jacobian[3,2],
     #     jacobian[3,1] - jacobian[1,3],
@@ -219,18 +219,18 @@ end
     # ]
     # stretching term (omega dot nabla)
 
-    velocity_gradient = reshape(view(system.potential,i_VELOCITY_GRADIENT_vortex,i_body),3,3)
+    vector_gradient = reshape(view(system.potential,i_VECTOR_FIELD_GRADIENT_vortex,i_body),3,3)
 
-    system.velocity_stretching[4] = dot(velocity_gradient[1,1:3], system.bodies[i_body].strength)
-    system.velocity_stretching[5] = dot(velocity_gradient[2,1:3], system.bodies[i_body].strength)
-    system.velocity_stretching[6] = dot(velocity_gradient[3,1:3], system.bodies[i_body].strength)
+    system.vector_field_stretching[4] = dot(vector_gradient[1,1:3], system.bodies[i_body].strength)
+    system.vector_field_stretching[5] = dot(vector_gradient[2,1:3], system.bodies[i_body].strength)
+    system.vector_field_stretching[6] = dot(vector_gradient[3,1:3], system.bodies[i_body].strength)
 
     return nothing
 end
 
-function update_velocity_stretching_new!(vortex_particles::VortexParticles)
+function update_vector_field_stretching_new!(vortex_particles::VortexParticles)
     for i_body in 1:fmm.get_n_bodies(vortex_particles)
-        update_velocity_stretching_new!(vortex_particles, i_body)
+        update_vector_field_stretching_new!(vortex_particles, i_body)
     end
 end
 
@@ -238,8 +238,8 @@ end
 function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     # reset potential
     vortex_particles.potential .*= 0
-    # reset velocity and stretching
-    vortex_particles.velocity_stretching .*= 0
+    # reset vector field and stretching
+    vortex_particles.vector_field_stretching .*= 0
 
     # calculate influences
     if direct
@@ -251,11 +251,11 @@ function (euler::Euler)(vortex_particles::VortexParticles, fmm_options, direct)
     # convect bodies
     bodies = vortex_particles.bodies
     potential = vortex_particles.potential
-    velocity_stretching = vortex_particles.velocity_stretching
-    update_velocity_stretching!(vortex_particles)
+    vector_field_stretching = vortex_particles.vector_field_stretching
+    update_vector_field_stretching!(vortex_particles)
     for i_body in 1:fmm.get_n_bodies(vortex_particles)
-        vortex_particles[i_body, Position()] = vortex_particles[i_body, Position()] + vortex_particles.velocity_stretching[i_VELOCITY_vortex,i_body] * euler.dt
-        vortex_particles[i_body, Strength()] = vortex_particles[i_body, Strength()] + vortex_particles.velocity_stretching[i_STRETCHING_vortex] * euler.dt
+        vortex_particles[i_body, Position()] = vortex_particles[i_body, Position()] + vortex_particles.vector_field_stretching[i_VECTOR_FIELD_vortex,i_body] * euler.dt
+        vortex_particles[i_body, Strength()] = vortex_particles[i_body, Strength()] + vortex_particles.vector_field_stretching[i_STRETCHING_vortex] * euler.dt
     end
 end
 
@@ -283,12 +283,12 @@ function save_vtk(filename, vortex_particles::VortexParticles, nt=0; compress=fa
 
     positions = reshape([FastMultipole.get_position(vortex_particles, j)[i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
     vectorstrength = reshape([vortex_particles.bodies[j].strength[i] for i in 1:3, j in 1:n_bodies], 3, n_bodies, 1, 1)
-    velocity = reshape(vortex_particles.velocity_stretching[i_VELOCITY_vortex,:],3,n_bodies,1,1)
-    stretching = reshape(vortex_particles.velocity_stretching[i_STRETCHING_vortex,:],3,n_bodies,1,1)
+    vector_field = reshape(vortex_particles.vector_field_stretching[i_VECTOR_FIELD_vortex,:],3,n_bodies,1,1)
+    stretching = reshape(vortex_particles.vector_field_stretching[i_STRETCHING_vortex,:],3,n_bodies,1,1)
 
     WriteVTK.vtk_grid(filename*"."*string(nt)*".vts", positions; compress) do vtk
         vtk["vector strength"] = vectorstrength
-        vtk["velocity"] = velocity
+        vtk["vector_field"] = vector_field
         vtk["stretching"] = stretching
     end
 

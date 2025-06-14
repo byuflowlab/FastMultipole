@@ -313,11 +313,11 @@ FastMultipole.multipole_to_local!(local_expansion, local_branch, multipole_expan
 
 # evaluate local expansion
 Δx = x_target - local_branch.target_center
-velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
-ϕ, v, vg = FastMultipole.evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
+ϕ, v, vg = FastMultipole.evaluate_local(Δx, harmonics, vector_field_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 
 Δx = x_target - x_source
-velocity = -cross(Δx, Γ) / norm(Δx)^3 / (4*pi)
+vector_field = -cross(Δx, Γ) / norm(Δx)^3 / (4*pi)
 
 Δx5 = norm(Δx)^5
 g11 = -3*(-Γ[3]*Δx[2] + Γ[2] * Δx[3]) * Δx[1]^2 / Δx5
@@ -329,11 +329,11 @@ g23 = -Γ[1]/norm(Δx)^3 - 3*(Γ[3]*Δx[1]-Γ[1]*Δx[3])*Δx[3]^2/Δx5
 g31 = -Γ[2]/norm(Δx)^3 - 3*(-Γ[2]*Δx[1]+Γ[1]*Δx[2])*Δx[1]^2 / Δx5
 g32 = Γ[1]/norm(Δx)^3 - 3*(-Γ[2]*Δx[1]+Γ[1]*Δx[2])*Δx[2]^2/Δx5
 g33 = -3*(-Γ[2]*Δx[1]+Γ[1]*Δx[2])*Δx[3]^2 / Δx5
-velocity_gradient = SMatrix{3,3}(g11,g21,g31,g12,g22,g32,g13,g23,g33) / (4*pi)
+vector_gradient = SMatrix{3,3}(g11,g21,g31,g12,g22,g32,g13,g23,g33) / (4*pi)
 
-@test isapprox(velocity, v; atol=1e-11)
+@test isapprox(vector_field, v; atol=1e-11)
 for i in 1:9
-    @test isapprox(velocity_gradient[i], vg[i]; atol=1e-9)
+    @test isapprox(vector_gradient[i], vg[i]; atol=1e-9)
 end
 
 end

@@ -10,11 +10,11 @@ using BSON
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
 
-function get_velocity(system::Gravitational)
+function get_vector_field(system::Gravitational)
     return system.potential[5:7,:]
 end
 
-function get_velocity(system::VortexParticles)
+function get_vector_field(system::VortexParticles)
     return system.velocity_stretching[1:3,:]
 end
 
@@ -23,8 +23,8 @@ function benchmark_system(source, vortex, expansion_orders)
     reset!(source)
     reset!(vortex)
     direct!((source, vortex))
-    v_source_direct = get_velocity(source)
-    v_vortex_direct = get_velocity(vortex)
+    v_source_direct = get_vector_field(source)
+    v_vortex_direct = get_vector_field(vortex)
 
     # storage containers
     max_errs_source_combined = Float64[]
@@ -53,8 +53,8 @@ function benchmark_system(source, vortex, expansion_orders)
         push!(ts_combined, min(t_combined_1, t_combined_2))
         
         # calculate errors
-        v_source_fmm = get_velocity(source)
-        v_vortex_fmm = get_velocity(vortex)
+        v_source_fmm = get_vector_field(source)
+        v_vortex_fmm = get_vector_field(vortex)
         err_source = maximum(sqrt.(sum((v_source_fmm - v_source_direct) .^2; dims=1)))
         err_vortex = maximum(sqrt.(sum((v_vortex_fmm - v_vortex_direct) .^2; dims=1)))
         push!(max_errs_source_combined, err_source)
@@ -70,8 +70,8 @@ function benchmark_system(source, vortex, expansion_orders)
         push!(ts_source, min(t_source_1, t_source_2))
         
         # save velocity
-        v_source_fmm_source = get_velocity(source)
-        v_vortex_fmm_source = get_velocity(vortex)
+        v_source_fmm_source = get_vector_field(source)
+        v_vortex_fmm_source = get_vector_field(vortex)
 
         # benchmark FMM vortex
         println("\n\tbegin vortex")
@@ -83,8 +83,8 @@ function benchmark_system(source, vortex, expansion_orders)
         push!(ts_vortex, min(t_vortex_1, t_vortex_2))
 
         # calculate errors
-        v_source_fmm = get_velocity(source) .+ v_source_fmm_source
-        v_vortex_fmm = get_velocity(vortex) .+ v_vortex_fmm_source
+        v_source_fmm = get_vector_field(source) .+ v_source_fmm_source
+        v_vortex_fmm = get_vector_field(vortex) .+ v_vortex_fmm_source
         err_source = maximum(sqrt.(sum((v_source_fmm - v_source_direct) .^2; dims=1)))
         err_vortex = maximum(sqrt.(sum((v_vortex_fmm - v_vortex_direct) .^2; dims=1)))
         push!(max_errs_source_individual, err_source)

@@ -552,7 +552,7 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsAbsoluteVelocity{ε,BE}) where {LH,ε,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsAbsoluteVectorField{ε,BE}) where {LH,ε,BE}
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -687,7 +687,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, error_success
 end
 
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsRelativeVelocity{ε_tol,BE}) where {LH,ε_tol,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsRelativeVectorField{ε_tol,BE}) where {LH,ε_tol,BE}
     
     # scale error tolerance by max influence
     ε = target_branch.max_influence * ε_tol
@@ -1121,7 +1121,7 @@ end
 """
 Expects ζs_mag, ηs_mag, and Hs_π2 to be computed a priori.
 """
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteVelocity{ε,BE}) where {LH,ε,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteVectorField{ε,BE}) where {LH,ε,BE}
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
     r, θ, ϕ = cartesian_to_spherical(Δx)
@@ -1264,7 +1264,7 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, error_success
 end
 
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerRelativeVelocity{ε_tol,BE}) where {LH,ε_tol,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerRelativeVectorField{ε_tol,BE}) where {LH,ε_tol,BE}
     
     # scale error tolerance by max influence    
     ε = target_branch.max_influence * ε_tol
@@ -1559,7 +1559,7 @@ multipole_to_local!(target_weights, target_branch, source_weights, source_branch
 #     return n, false
 # end
 
-# function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, ::AbsoluteVelocity{ε}, source_center, source_box, source_radius, target_center, target_box, target_radius; bonus_expansion::Bool=true) where {LH, ε}
+# function dynamic_expansion_order!(weights_tmp_1, weights_tmp_2, Ts, eimϕs, ζs_mag, source_weights, Hs_π2, expansion_order, lamb_helmholtz::Val{LH}, r, θ, ϕ, ::AbsoluteVectorField{ε}, source_center, source_box, source_radius, target_center, target_box, target_radius; bonus_expansion::Bool=true) where {LH, ε}
 
 #     #--- distance information ---#
 

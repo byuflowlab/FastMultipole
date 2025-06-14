@@ -1315,7 +1315,7 @@ function initialize_expansions(expansion_order, n_branches, type=Float64)
     return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1, n_branches)
 end
 
-function initialize_velocity_n_m(expansion_order, type=Float64)
+function initialize_vector_field_n_m(expansion_order, type=Float64)
     # incrememnt expansion order to make room for error predictions
     # expansion_order += 1
 

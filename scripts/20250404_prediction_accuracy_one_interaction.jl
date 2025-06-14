@@ -14,11 +14,11 @@ include("../test/bodytolocal.jl")
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
 
-function get_velocity(system::Gravitational)
+function get_vector_field(system::Gravitational)
     return system.potential[5:7,:]
 end
 
-function get_velocity(system::VortexParticles)
+function get_vector_field(system::VortexParticles)
     return system.velocity_stretching[1:3,:]
 end
 
@@ -98,7 +98,7 @@ function test_accuracy(source_systems::Tuple, r_l_over_r_mp_list, expansion_orde
     Ts = zeros(Float64, FastMultipole.length_Ts(max_expansion_order))
     eimϕs = zeros(Float64, 2, max_expansion_order + 1)
     harmonics = initialize_harmonics(max_expansion_order)
-    velocity_n_m = FastMultipole.initialize_velocity_n_m(max_expansion_order, Float64)
+    velocity_n_m = FastMultipole.initialize_vector_field_n_m(max_expansion_order, Float64)
     derivatives_switches = DerivativesSwitch(true, true, false, (nothing,))
 
     for r_l_over_r_mp in r_l_over_r_mp_list

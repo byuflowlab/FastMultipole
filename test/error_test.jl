@@ -90,7 +90,7 @@ function expansion_errors(tree::FastMultipole.Tree{TF,<:Any,<:Any}, m2l_list, sy
             strength = system[j,Strength()]
             body_to_local_point!(body_type, local_expansion, local_branch.harmonics, Δx, strength, expansion_order)
         end
-        velocity_n_m = initialize_velocity_n_m(expansion_order)
+        velocity_n_m = initialize_vector_field_n_m(expansion_order)
         harmonics = initialize_harmonics(expansion_order)
         FastMultipole.evaluate_local!(system, local_branch.bodies_index[1], harmonics, velocity_n_m, local_expansion, local_branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
         v_local = [SVector{3}(system[i,Velocity()]) for i in local_branch.bodies_index[1]]

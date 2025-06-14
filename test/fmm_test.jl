@@ -129,23 +129,23 @@ target_buffer = FastMultipole.target_to_buffer(vortexparticles)
 
 # using direct method
 direct!((vortexparticles,))
-update_velocity_stretching!(vortexparticles)
+update_vector_field_stretching!(vortexparticles)
 
-@test isapprox(vortexparticles.velocity_stretching[1,1], 1/4/pi; atol=1e-10)
-@test isapprox(vortexparticles.velocity_stretching[1,2], 1/4/pi; atol=1e-10)
-@test isapprox(vortexparticles.velocity_stretching[2,1], 0; atol=1e-10)
-@test isapprox(vortexparticles.velocity_stretching[2,2], 0; atol=1e-10)
-@test isapprox(vortexparticles.velocity_stretching[3,1], 0; atol=1e-10)
-@test isapprox(vortexparticles.velocity_stretching[3,2], 0; atol=1e-10)
+@test isapprox(vortexparticles.vector_field_stretching[1,1], 1/4/pi; atol=1e-10)
+@test isapprox(vortexparticles.vector_field_stretching[1,2], 1/4/pi; atol=1e-10)
+@test isapprox(vortexparticles.vector_field_stretching[2,1], 0; atol=1e-10)
+@test isapprox(vortexparticles.vector_field_stretching[2,2], 0; atol=1e-10)
+@test isapprox(vortexparticles.vector_field_stretching[3,1], 0; atol=1e-10)
+@test isapprox(vortexparticles.vector_field_stretching[3,2], 0; atol=1e-10)
 
 vorton_potential_check = zeros(4,2)
 vorton_potential_check[i_POTENTIAL_VECTOR,:] = deepcopy(vortexparticles.potential[i_POTENTIAL_VECTOR,1:2])
 
-vorton_velocity_check = deepcopy(vortexparticles.velocity_stretching[i_VELOCITY_vortex,:])
+vorton_vector_field_check = deepcopy(vortexparticles.vector_field_stretching[i_VECTOR_FIELD_vortex,:])
 
 # reset vortons
 vortexparticles.potential .*= 0
-vortexparticles.velocity_stretching .*= 0
+vortexparticles.vector_field_stretching .*= 0
 
 # manually build tree for testing
 expansion_order = 9
@@ -197,22 +197,22 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 FastMultipole.multipole_to_local!(local_coefficients_2, tree.branches[2], multipole_coefficients_3, tree.branches[3], weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 FastMultipole.multipole_to_local!(local_coefficients_3, tree.branches[3], multipole_coefficients_2, tree.branches[2], weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
+vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
 
-FastMultipole.evaluate_local!(target_buffer, 1, tree, 2, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
-FastMultipole.evaluate_local!(target_buffer, 1, tree, 3, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
+FastMultipole.evaluate_local!(target_buffer, 1, tree, 2, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
+FastMultipole.evaluate_local!(target_buffer, 1, tree, 3, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
 
 # update system
 FastMultipole.buffer_to_target!(vortexparticles, target_buffer, DerivativesSwitch(false, true, true), 1:FastMultipole.get_n_bodies(vortexparticles))
 
-update_velocity_stretching!(vortexparticles)
+update_vector_field_stretching!(vortexparticles)
 
 for i in 1:2
     for ind in 1:4
         @test isapprox(vortexparticles.potential[ind,i], vorton_potential_check[ind,i]; atol=1e-12)
     end
     for dim in 1:3
-        @test isapprox(vortexparticles.velocity_stretching[dim,i], vorton_velocity_check[dim,i]; atol=1e-12)
+        @test isapprox(vortexparticles.vector_field_stretching[dim,i], vorton_vector_field_check[dim,i]; atol=1e-12)
     end
 end
 
@@ -255,13 +255,13 @@ ss[:,2] = stretching(bodies[1:3,2], bodies[1:3,1], bodies[5:7,2], bodies[5:7,1])
 
 FastMultipole.direct!((vortex_particles,))
 potential_direct = deepcopy(vortex_particles.potential)
-update_velocity_stretching!(vortex_particles)
+update_vector_field_stretching!(vortex_particles)
 
-us_direct = vortex_particles.velocity_stretching[1:3,:]
+us_direct = vortex_particles.vector_field_stretching[1:3,:]
 for i in 1:length(us)
     @test isapprox(us_direct, us;atol=1e-12)
 end
-ss_direct = vortex_particles.velocity_stretching[4:6,:]
+ss_direct = vortex_particles.vector_field_stretching[4:6,:]
 for i in 1:length(ss)
     @test isapprox(ss_direct[i], ss[i];atol=1e-12)
 end
@@ -270,7 +270,7 @@ end
 
 # reset potential
 vortex_particles.potential .*= 0
-vortex_particles.velocity_stretching .*= 0
+vortex_particles.vector_field_stretching .*= 0
 
 # set up fmm call
 expansion_order = 20
@@ -322,25 +322,25 @@ FastMultipole.multipole_to_local!(local_coefficients_2, branch_2, multipole_coef
 FastMultipole.multipole_to_local!(local_coefficients_3, branch_3, multipole_coefficients_2, branch_2, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
 # evaluate multipoles
-velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
+vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
 harmonics = FastMultipole.initialize_harmonics(expansion_order)
 derivatives_switches = DerivativesSwitch(true, true, true, (vortex_particles,))
 
-FastMultipole.evaluate_local!(target_buffer, 1, tree, 2, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
-FastMultipole.evaluate_local!(target_buffer, 1, tree, 3, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
+FastMultipole.evaluate_local!(target_buffer, 1, tree, 2, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
+FastMultipole.evaluate_local!(target_buffer, 1, tree, 3, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, (FastMultipole.DerivativesSwitch(),))
 
 FastMultipole.buffer_to_target!(vortex_particles, target_buffer, DerivativesSwitch(false, true, true), 1:FastMultipole.get_n_bodies(vortex_particles))
 
-update_velocity_stretching!(vortex_particles)
+update_vector_field_stretching!(vortex_particles)
 # hessians_fmm.= deepcopy(reshape(vortex_particles.potential[i_POTENTIAL_HESSIAN[10:end],:],3,3,3,2))
 # for i in 1:length(hessians)
 #     @test isapprox(hessians_fmm.i], hessians[i]; atol=1e-8)
 # end
-us_fmm = vortex_particles.velocity_stretching[1:3,:]
+us_fmm = vortex_particles.vector_field_stretching[1:3,:]
 for i in eachindex(us_fmm)
     @test isapprox(us_fmm[i], us[i];atol=1e-12)
 end
-ss_fmm = vortex_particles.velocity_stretching[4:6,:]
+ss_fmm = vortex_particles.vector_field_stretching[4:6,:]
 for i in 1:length(ss)
     @test isapprox(ss_fmm[i], ss[i];atol=1e-12)
 end
@@ -349,21 +349,21 @@ end
 
 # reset potential
 vortex_particles.potential .*= 0
-vortex_particles.velocity_stretching .*= 0
+vortex_particles.vector_field_stretching .*= 0
 
 # run fmm
 multipole_threshold = 0.7
-tree, m2l_list, direct_list, derivatives_switches = fmm!((vortex_particles,); expansion_order, leaf_size_source, multipole_threshold, shrink_recenter=true, lamb_helmholtz=true, scalar_potential=false, velocity_gradient=true)
-update_velocity_stretching!(vortex_particles)
+tree, m2l_list, direct_list, derivatives_switches = fmm!((vortex_particles,); expansion_order, leaf_size_source, multipole_threshold, shrink_recenter=true, lamb_helmholtz=true, scalar_potential=false, vector_gradient=true)
+update_vector_field_stretching!(vortex_particles)
 
-# test velocity
-us_fmm_2 = vortex_particles.velocity_stretching[1:3,:]
+# test vector
+us_fmm_2 = vortex_particles.vector_field_stretching[1:3,:]
 for i in eachindex(us_fmm_2)
     @test isapprox(us_fmm_2[i], us[i];atol=1e-12)
 end
 
 # test stretching
-ss_fmm_2 = vortex_particles.velocity_stretching[4:6,:]
+ss_fmm_2 = vortex_particles.vector_field_stretching[4:6,:]
 for i in 1:length(ss)
     @test isapprox(ss_fmm_2[i], ss[i];atol=1e-12)
 end
@@ -410,17 +410,17 @@ ss[:,3] = stretching(bodies[1:3,3], bodies[1:3,1], bodies[5:7,3], bodies[5:7,1])
 #--- use direct method ---#
 
 FastMultipole.direct!((vortex_particles,))
-update_velocity_stretching!(vortex_particles)
+update_vector_field_stretching!(vortex_particles)
 
 #psis_direct = deepcopy(vortex_particles.potential[2:4,:])
 #for i in 1:length(psis_direct)
 #    @test isapprox(psis_direct[i], psis[i]; atol=1e-10)
 #end
-us_direct = deepcopy(vortex_particles.velocity_stretching[1:3,:])
+us_direct = deepcopy(vortex_particles.vector_field_stretching[1:3,:])
 for i in 1:length(us)
     @test isapprox(us_direct[i], us[i];atol=1e-12)
 end
-ss_direct = deepcopy(vortex_particles.velocity_stretching[4:6,:])
+ss_direct = deepcopy(vortex_particles.vector_field_stretching[4:6,:])
 for i in 1:length(ss)
     @test isapprox(ss_direct[i], ss[i];atol=1e-12)
 end
@@ -429,7 +429,7 @@ end
 
 # reset potential
 vortex_particles.potential .*= 0
-vortex_particles.velocity_stretching .*= 0
+vortex_particles.vector_field_stretching .*= 0
 
 expansion_order = 20
 leaf_size = SVector{1}(1)
@@ -437,19 +437,19 @@ leaf_size = SVector{1}(1)
 source_tree = FastMultipole.Tree((vortex_particles,), false; expansion_order, leaf_size, shrink_recenter=false)
 target_tree = FastMultipole.Tree((vortex_particles,), true; expansion_order, leaf_size, shrink_recenter=false)
 
-m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!((vortex_particles,), target_tree, (vortex_particles,), source_tree; expansion_order, multipole_threshold=0.8, lamb_helmholtz=true, scalar_potential=false, velocity_gradient=true)
+m2l_list, direct_list, derivatives_switches = FastMultipole.fmm!((vortex_particles,), target_tree, (vortex_particles,), source_tree; expansion_order, multipole_threshold=0.8, lamb_helmholtz=true, scalar_potential=false, vector_gradient=true)
 
-update_velocity_stretching!(vortex_particles)
+update_vector_field_stretching!(vortex_particles)
 
 #psis_fmm = deepcopy(vortex_particles.potential[2:4,:])
 #for i in 1:length(psis_fmm)
 #    @test isapprox(psis_fmm[i], psis[i]; rtol=1e-12)
 #end
-us_fmm = deepcopy(vortex_particles.velocity_stretching[1:3,:])
+us_fmm = deepcopy(vortex_particles.vector_field_stretching[1:3,:])
 for i in 1:length(us)
     @test isapprox(us_fmm[i], us[i]; atol=1e-12)
 end
-ss_fmm = deepcopy(vortex_particles.velocity_stretching[4:6,:])
+ss_fmm = deepcopy(vortex_particles.vector_field_stretching[4:6,:])
 for i in 1:length(ss)
     @test isapprox(ss_fmm[i], ss[i]; atol=1e-12)
 end

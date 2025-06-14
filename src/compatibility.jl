@@ -78,40 +78,6 @@ Returns the number of bodies contained inside `system`. Should be overloaded for
 """
 get_n_bodies(system) = throw("FastMultipole.get_n_bodies() not overloaded for type $(typeof(system))")
 
-# function get_scalar_potential(system, i)
-#     if WARNING_FLAG_SCALAR_POTENTIAL[]
-#         @warn "get_scalar_potential not overloaded for type $(typeof(system)); zero assumed"
-#         WARNING_FLAG_SCALAR_POTENTIAL[] = false
-#     end
-#     return zero(eltype(system))
-# end
-
-#function Base.getindex(sys, i, ::VectorPotential)
-#    if WARNING_FLAG_VECTOR_POTENTIAL[]
-#        @warn "getindex! not overloaded for `FastMultipole.VectorPotential` for type $(typeof(sys)); zero assumed"
-#        WARNING_FLAG_VECTOR_POTENTIAL[] = false
-#    end
-#    return SVector{3}(0.0,0.0,0.0)
-#end
-
-# function get_velocity(system, i)
-#     if WARNING_FLAG_VELOCITY[]
-#         @warn "get_velocity not overloaded for type $(typeof(system)); zero assumed"
-#         WARNING_FLAG_VELOCITY[] = false
-#     end
-#     return zero(SVector{3,eltype(system)})
-# end
-
-# function get_velocity_gradient(system, i)
-#     if WARNING_FLAG_VELOCITY_GRADIENT[]
-#         @warn "get_velocity_gradient not overloaded for type $(typeof(system)); zero assumed"
-#         WARNING_FLAG_VELOCITY_GRADIENT[] = false
-#     end
-#     return zero(SMatrix{3,3,eltype(system),9})
-# end
-
-#--- setters ---#
-
 """
     body_to_multipole!(system::{UserDefinedSystem}, multipole_coefficients, buffer, expansion_center, bodies_index, harmonics, expansion_order)
 
@@ -156,10 +122,10 @@ for i_source in source_index
             set_scalar_potential!(target_buffer, i_target, scalar_potential)
         end
         if VS
-            set_velocity!(target_buffer, i_target, velocity)
+            set_vector_field!(target_buffer, i_target, vector_field)
         end
         if GS
-            set_velocity_gradient!(target_buffer, i_target, velocity_gradient)
+            set_vector_gradient!(target_buffer, i_target, vector_gradient)
         end
 
     end
@@ -173,6 +139,8 @@ The following convenience getter functions are available for accessing the sourc
 * `get_position(source_system::{UserDefinedSystem}, i_body::Int)`: returns an SVector of length 3 containing the position of the `i_body` body
 * `get_strength(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int)`: returns an SVector containing the strength of the `i_body` body
 * `get_vertex(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int, i_vertex::Int)`: returns an SVector containing the x, y, and z coordinates of the `i_vertex` vertex of the `i_body` body
+
+Note also that the compile time parameters `PS`, `VS`, and `GS` are used to determine whether the scalar potential and vector field should be computed, respectively. This allows us to skip unnecessary calculations and improve performance.
 
 """
 function direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
@@ -189,16 +157,18 @@ end
 Compatibility function used to update target systems. It should be overloaded for each system (where `{UserDefinedSystem}` is replaced with the type of the user-defined system) to be a target and should behave as follows. For the `i_body`th body contained inside of `target_system`,
 
 * `target_buffer[4, i_buffer]` contains the scalar potential influence to be added to the `i_target` body of `target_system`
-* `target_buffer[5:7, i_buffer]` contains the velocity influence to be added to the `i_target` body of `target_system`
-* `target_buffer[8:16, i_buffer]` contains the velocity gradient to be added to the `i_target` body of `target_system`
+* `target_buffer[5:7, i_buffer]` contains the vector field influence to be added to the `i_target` body of `target_system`
+* `target_buffer[8:16, i_buffer]` contains the vector field gradient to be added to the `i_target` body of `target_system`
 
 Note that any system acting only as a source (and not as a target) need not overload `buffer_to_target_system!`.
 
 The following convenience functions can may be used to access the buffer:
 
 * `get_scalar_potential(target_buffer, i_buffer::Int)`: returns the scalar potential induced at the `i_buffer` body in `target_buffer`
-* `get_velocity(target_buffer, i_buffer::Int)`: returns an SVector of length 3 containing the velocity induced at the `i_buffer` body in `target_buffer`
-* `get_velocity_gradient(target_buffer, i_buffer::Int)`: returns an SMatrix of size 3x3 containing the velocity gradient induced at the `i_buffer` body in `target_buffer`
+* `get_vector_field(target_buffer, i_buffer::Int)`: returns an SVector of length 3 containing the vector field induced at the `i_buffer` body in `target_buffer`
+* `get_vector_field_gradient(target_buffer, i_buffer::Int)`: returns an SMatrix of size 3x3 containing the vector gradient induced at the `i_buffer` body in `target_buffer`
+
+For some slight performance improvements, the booleans `PS`, `VS`, and `GS` can be used as a switch to indicate whether the scalar potential, vector field, and vector gradient are to be stored, respectively. Since they are compile-time parameters, `if` statements relying on them will not incur a runtime cost.
 
 """
 function buffer_to_target_system!(target_system, i_target, derivatives_switch, target_buffer, i_buffer)
@@ -213,14 +183,14 @@ end
 Updates the `target_buffer` with influences from `target_system` for the `i_target`th body. Should be overloaded for each user-defined system object (where `{UserDefinedSystem}` is replaced with the type of the user-defined system) to be used as a target, assuming the target buffer positions have already been set. It should behave as follows:
 
 * `target_buffer[4, i_buffer]` should be set to the scalar potential at the body position
-* `target_buffer[5:7, i_buffer]` should be set to the velocity at the body position
-* `target_buffer[8:16, i_buffer]` should be set to the velocity gradient at the body position
+* `target_buffer[5:7, i_buffer]` should be set to the vector field at the body position
+* `target_buffer[8:16, i_buffer]` should be set to the vector gradient at the body position
 
 The following convenience functions can may be used to access the buffer:
 
 * `set_scalar_potential!(target_buffer, i_buffer, scalar_potential)`: accumulates the `scalar_potential` to the `i_buffer` body in `target_buffer`
-* `set_velocity!(target_buffer, i_buffer, velocity)`: accumulates the `velocity` to the `i_buffer` body in `target_buffer`
-* `set_velocity_gradient!(target_buffer, i_buffer, velocity_gradient)`: accumulates the `velocity_gradient` to the `i_buffer` body in `target_buffer`
+* `set_vector_field!(target_buffer, i_buffer, vector_field)`: accumulates `vector_field` to the `i_buffer` body in `target_buffer`
+* `set_vector_gradient!(target_buffer, i_buffer, vector_gradient)`: accumulates `vector_gradient` to the `i_buffer` body in `target_buffer`
 
 """
 function target_influence_to_buffer!(target_buffer, i_buffer, derivatives_switch, target_system, i_target)
@@ -456,9 +426,9 @@ end
 
 get_scalar_potential(system::AbstractMatrix, i) = @inbounds system[4, i]
 
-get_velocity(system::AbstractMatrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
+get_vector_field(system::AbstractMatrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
 
-get_velocity_gradient(system::AbstractMatrix{TF}, i) where TF =
+get_vector_field_gradient(system::AbstractMatrix{TF}, i) where TF =
     @inbounds SMatrix{3,3,TF,9}(system[8, i], system[9, i], system[10, i],
     system[11, i], system[12, i], system[13, i],
     system[14, i], system[15, i], system[16, i])
@@ -478,33 +448,33 @@ function set_scalar_potential!(system::Matrix, i, scalar_potential)
 end
 
 """
-    set_velocity!(target_buffer, i_body, velocity)
+    set_vector_field!(target_buffer, i_body, vector_field)
 
-Accumulates `velocity` to `target_buffer`.
+Accumulates `vector_field` to `target_buffer`.
 
 """
-function set_velocity!(system::Matrix, i, velocity)
-    @inbounds system[5,i] += velocity[1]
-    @inbounds system[6,i] += velocity[2]
-    @inbounds system[7,i] += velocity[3]
+function set_vector_field!(system::Matrix, i, vector_field)
+    @inbounds system[5,i] += vector_field[1]
+    @inbounds system[6,i] += vector_field[2]
+    @inbounds system[7,i] += vector_field[3]
 end
 
 """
-    set_velocity_gradient!(target_buffer, i_body, velocity_gradient)
+    set_vector_gradient!(target_buffer, i_body, vector_gradient)
 
-Accumulates `velocity_gradient` to `target_buffer`.
+Accumulates `vector_gradient` to `target_buffer`.
 
 """
-function set_velocity_gradient!(system::Matrix, i, velocity_gradient)
-    @inbounds system[8, i] += velocity_gradient[1]
-    @inbounds system[9, i] += velocity_gradient[2]
-    @inbounds system[10, i] += velocity_gradient[3]
-    @inbounds system[11, i] += velocity_gradient[4]
-    @inbounds system[12, i] += velocity_gradient[5]
-    @inbounds system[13, i] += velocity_gradient[6]
-    @inbounds system[14, i] += velocity_gradient[7]
-    @inbounds system[15, i] += velocity_gradient[8]
-    @inbounds system[16, i] += velocity_gradient[9]
+function set_vector_gradient!(system::Matrix, i, vector_gradient)
+    @inbounds system[8, i] += vector_gradient[1]
+    @inbounds system[9, i] += vector_gradient[2]
+    @inbounds system[10, i] += vector_gradient[3]
+    @inbounds system[11, i] += vector_gradient[4]
+    @inbounds system[12, i] += vector_gradient[5]
+    @inbounds system[13, i] += vector_gradient[6]
+    @inbounds system[14, i] += vector_gradient[7]
+    @inbounds system[15, i] += vector_gradient[8]
+    @inbounds system[16, i] += vector_gradient[9]
 end
 
 #--- auxilliary functions ---#

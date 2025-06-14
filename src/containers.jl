@@ -8,9 +8,9 @@ struct Radius <: Indexable end
 
 struct ScalarPotential <: Indexable end
 
-struct Velocity <: Indexable end
+struct VectorField <: Indexable end
 
-struct VelocityGradient <: Indexable end
+struct VectorGradient <: Indexable end
 
 struct Vertex <: Indexable end
 
@@ -45,7 +45,7 @@ abstract type Panel{NS,TK} <: AbstractElement{TK} end
 """
     DerivativesSwitch
 
-Switch indicating whether the scalar potential, vector potential, velocity, and/or velocity gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
+Switch indicating whether the scalar potential, vector potential, vector field, and/or vector gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
 """
 struct DerivativesSwitch{PS,VS,GS} end
 
@@ -58,65 +58,6 @@ Switch indicating which expansions should be used:
 2. vector potential via Lamb-Helmholtz decomposition (`VP`)
 """
 struct ExpansionSwitch{SP,VP} end
-
-#####
-##### cost parameters
-#####
-# abstract type CostParameters end
-
-# struct SingleCostParameters <: CostParameters
-#     alloc_M2M_L2L::SVector{3,Float64}
-#     tau_M2M_L2L::SVector{5,Float64}
-#     alloc_M2L::SVector{3,Float64}
-#     tau_M2L::SVector{5,Float64}
-#     alloc_L2B::SVector{3,Float64}
-#     tau_L2B::SVector{3,Float64}
-#     C_nearfield::Float64
-#     tau_B2M::SVector{3,Float64}
-# end
-
-# SingleCostParameters(;
-#     alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT,
-#     tau_M2M_L2L = TAU_M2M_DEFAULT,
-#     alloc_M2L = ALLOC_M2L_DEFAULT,
-#     tau_M2L = TAU_M2L_DEFAULT,
-#     tau_L2L = TAU_L2L_DEFAULT,
-#     alloc_L2B = ALLOC_L2B_DEFAULT,
-#     tau_L2B = TAU_L2B_DEFAULT,
-#     C_nearfield = C_NEARFIELD_DEFAULT,
-#     tau_B2M = TAU_B2M_DEFAULT
-# ) = SingleCostParameters(alloc_M2M_L2L, tau_M2M_L2L, alloc_M2L, tau_M2L, alloc_L2B, tau_L2B, C_nearfield, tau_B2M)
-
-# struct MultiCostParameters{N} <: CostParameters
-#     alloc_M2M_L2L::SVector{3,Float64}
-#     tau_M2M_L2L::SVector{5,Float64}
-#     alloc_M2L::SVector{3,Float64}
-#     tau_M2L::SVector{5,Float64}
-#     alloc_L2B::SVector{3,Float64}
-#     tau_L2B::SVector{3,Float64}
-#     C_nearfield::SVector{N,Float64}
-#     tau_B2M::SVector{N,SVector{3,Float64}}
-# end
-
-# MultiCostParameters{N}(;
-#     alloc_M2M_L2L = ALLOC_M2M_L2L_DEFAULT,
-#     tau_M2M_L2L = TAU_M2M_L2L_DEFAULT,
-#     alloc_M2L = ALLOC_M2L_DEFAULT,
-#     tau_M2L = TAU_M2L_DEFAULT,
-#     alloc_L2B = ALLOC_L2B_DEFAULT,
-#     tau_L2B = TAU_L2B_DEFAULT,
-#     C_nearfield = SVector{N,Float64}(C_NEARFIELD_DEFAULT for _ in 1:N),
-#     tau_B2M = SVector{N,SVector{3,Float64}}(TAU_B2M_DEFAULT for _ in 1:N)
-# ) where N = MultiCostParameters{N}(alloc_M2M_L2L, tau_M2M_L2L, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_B2M)
-
-# CostParameters(systems::Tuple) = MultiCostParameters()
-# CostParameters(system) = SingleCostParameters()
-
-# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::Float64, tau_M2M_L2L) =
-#     SingleCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
-
-# CostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield::SVector, tau_M2M_L2L) =
-#     MultiCostParameters(alloc_M2M_L2L, tau_B2M, alloc_M2L, tau_M2L, tau_L2L, alloc_L2B, tau_L2B, C_nearfield, tau_M2M_L2L)
 
 #------- error predictors -------#
 
@@ -144,11 +85,11 @@ AbsoluteUpperBound(ε) = AbsoluteUpperBound{ε}()
 struct PowerAbsolutePotential{ε,BE} <: AbsoluteError end
 PowerAbsolutePotential(ε, BE::Bool=true) = PowerAbsolutePotential{ε,BE}()
 
-struct PowerAbsoluteVelocity{ε,BE} <: AbsoluteError end
-PowerAbsoluteVelocity(ε, BE::Bool=true) = PowerAbsoluteVelocity{ε,BE}()
+struct PowerAbsoluteVectorField{ε,BE} <: AbsoluteError end
+PowerAbsoluteVectorField(ε, BE::Bool=true) = PowerAbsoluteVectorField{ε,BE}()
 
-struct RotatedCoefficientsAbsoluteVelocity{ε,BE} <: AbsoluteError end
-RotatedCoefficientsAbsoluteVelocity(ε, BE::Bool=true) = RotatedCoefficientsAbsoluteVelocity{ε,BE}()
+struct RotatedCoefficientsAbsoluteVectorField{ε,BE} <: AbsoluteError end
+RotatedCoefficientsAbsoluteVectorField(ε, BE::Bool=true) = RotatedCoefficientsAbsoluteVectorField{ε,BE}()
 
 struct RelativeUpperBound{ε} <: RelativeError end
 RelativeUpperBound(ε) = RelativeUpperBound{ε}()
@@ -156,11 +97,11 @@ RelativeUpperBound(ε) = RelativeUpperBound{ε}()
 struct PowerRelativePotential{ε,BE} <: RelativeError end
 PowerRelativePotential(ε, BE::Bool=true) = PowerRelativePotential{ε,BE}()
 
-struct PowerRelativeVelocity{ε,BE} <: RelativeError end
-PowerRelativeVelocity(ε, BE::Bool=true) = PowerRelativeVelocity{ε,BE}()
+struct PowerRelativeVectorField{ε,BE} <: RelativeError end
+PowerRelativeVectorField(ε, BE::Bool=true) = PowerRelativeVectorField{ε,BE}()
 
-struct RotatedCoefficientsRelativeVelocity{ε,BE} <: RelativeError end
-RotatedCoefficientsRelativeVelocity(ε, BE::Bool=true) = RotatedCoefficientsRelativeVelocity{ε,BE}()
+struct RotatedCoefficientsRelativeVectorField{ε,BE} <: RelativeError end
+RotatedCoefficientsRelativeVectorField(ε, BE::Bool=true) = RotatedCoefficientsRelativeVectorField{ε,BE}()
 
 #------- interaction list -------#
 
@@ -277,13 +218,13 @@ end
 """
     ProbeSystem
 
-Convenience system for defining locations at which the potential, velocity, or velocity gradient may be desired.
+Convenience system for defining locations at which the potential, vector field, or vector gradient may be desired.
 """
 struct ProbeSystem{TF}
     position::Vector{SVector{3,TF}}
     scalar_potential::Vector{TF}
-    velocity::Vector{SVector{3,TF}}
-    velocity_gradient::Vector{SMatrix{3,3,TF,9}}
+    vector_field::Vector{SVector{3,TF}}
+    vector_gradient::Vector{SMatrix{3,3,TF,9}}
 end
 
 #------- SOLVERS -------#

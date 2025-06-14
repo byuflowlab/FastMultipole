@@ -8,11 +8,11 @@ using PythonPlot
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
 
-function get_velocity(system::Gravitational)
+function get_vector_field(system::Gravitational)
     return system.potential[5:7,:]
 end
 
-function get_velocity(system::VortexParticles)
+function get_vector_field(system::VortexParticles)
     return system.velocity_stretching[1:3,:]
 end
 

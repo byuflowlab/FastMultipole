@@ -189,7 +189,7 @@ User-defined function used to offload nearfield calculations to a device, such a
 
 * `target_systems`: user-defined system on which `source_system` acts
 * `target_tree::Tree`: octree object used to sort `target_systems`
-* `derivatives_switches::Union{DerivativesSwitch, NTuple{N,DerivativesSwitch}}`: determines whether the scalar potential, velocity, and or velocity gradient should be calculated
+* `derivatives_switches::Union{DerivativesSwitch, NTuple{N,DerivativesSwitch}}`: determines whether the scalar potential, vector field, and or vector gradient should be calculated
 * `source_systems`: user-defined system acting on `target_system`
 * `source_tree::Tree`: octree object used to sort `target_systems`
 * `direct_list::Vector{SVector{2,Int32}}`: each element `[i,j]` maps nearfield interaction from `source_tree.branches[j]` on `target_tree.branches[i]`
@@ -207,7 +207,7 @@ Dispatches `nearfield_device!` without having to build a `::Tree`. Performs all 
 # Arguments
 
 * `target_systems`: user-defined system on which `source_system` acts
-* `derivatives_switches::Union{DerivativesSwitch, NTuple{N,DerivativesSwitch}}`: determines whether the scalar potential, velocity, and or velocity gradient should be calculated
+* `derivatives_switches::Union{DerivativesSwitch, NTuple{N,DerivativesSwitch}}`: determines whether the scalar potential, vector field, and or vector gradient should be calculated
 * `source_systems`: user-defined system acting on `target_system`
 
 """
@@ -621,21 +621,21 @@ function downward_pass_singlethread_1!(tree::Tree{TF,<:Any}, expansion_order, la
     end
 end
 
-function downward_pass_singlethread_2!(tree::Tree{TF,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m) where TF
+function downward_pass_singlethread_2!(tree::Tree{TF,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m) where TF
 
     harmonics = initialize_harmonics(expansion_order)
     # loop over systems
     for (i_system, system) in enumerate(systems)
-        evaluate_local!(system, i_system, tree, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+        evaluate_local!(system, i_system, tree, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     end
 
 end
 
-@inline function downward_pass_singlethread!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+@inline function downward_pass_singlethread!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m)
 
     downward_pass_singlethread_1!(tree, expansion_order, lamb_helmholtz)
 
-    downward_pass_singlethread_2!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+    downward_pass_singlethread_2!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m)
 
 end
 
@@ -739,7 +739,7 @@ function downward_pass_multithread_2!(tree::Tree{TF,<:Any}, systems, derivatives
     #--- preallocate memory ---#
 
     harmonics = [initialize_harmonics(expansion_order, TF) for _ in 1:n_threads]
-    velocity_n_m = [initialize_velocity_n_m(expansion_order, TF) for _ in 1:n_threads]
+    vector_field_n_m = [initialize_vector_field_n_m(expansion_order, TF) for _ in 1:n_threads]
 
     #--- compute multipole expansion coefficients ---#
 
@@ -747,10 +747,10 @@ function downward_pass_multithread_2!(tree::Tree{TF,<:Any}, systems, derivatives
         Threads.@threads for i_thread in 1:n_threads
             leaf_assignment = leaf_assignments[i_system,i_thread]
             these_harmonics = harmonics[i_thread]
-            these_velocity_n_m = velocity_n_m[i_thread]
+            these_vector_field_n_m = vector_field_n_m[i_thread]
             for i_leaf in leaf_assignment
                 i_branch = leaf_index[i_leaf]
-                evaluate_local!(system, i_system, tree, i_branch, these_harmonics, these_velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+                evaluate_local!(system, i_system, tree, i_branch, these_harmonics, these_vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
             end
         end
     end
@@ -835,7 +835,7 @@ end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree;
     leaf_size_source=default_leaf_size(source_systems), multipole_threshold=0.4,
-    scalar_potential=false, velocity=true, velocity_gradient=false,
+    scalar_potential=false, vector_field=true, vector_gradient=false,
     farfield=true, nearfield=true, self_induced=true,
     interaction_list_method::InteractionListMethod=SelfTuningTreeStop(),
     t_source_tree=0.0, t_target_tree=0.0,
@@ -844,11 +844,11 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
     # promote derivative arguments to a vector
     scalar_potential = to_vector(scalar_potential, length(target_systems))
-    velocity = to_vector(velocity, length(target_systems))
-    velocity_gradient = to_vector(velocity_gradient, length(target_systems))
+    vector_field = to_vector(vector_field, length(target_systems))
+    vector_gradient = to_vector(vector_gradient, length(target_systems))
 
     # assemble derivatives switch
-    derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient, target_systems)
+    derivatives_switches = DerivativesSwitch(scalar_potential, vector_field, vector_gradient, target_systems)
 
     # create interaction lists
     t_lists = @elapsed begin
@@ -882,14 +882,14 @@ Dispatches `fmm!` using existing `::Tree` objects. Note that systems should be u
 
 - `m2l_list::Vector{SVector{2,Int32}}`: list of branch index pairs `[i_target, i_source]` for which multipole expansions of the source branch are to be transformed to local expansions at the target branch
 - `direct_list::Union{Vector{SVector{2,Int32}}, InteractionList}`: list of branch index pairs `[i_target, i_source]` for which interactions are to be evaluted without multipole expansion (i.e., directly); if `typeof(direct_list) <: InteractionList`, then prepared influence matrices are used rather than computing direct influences on the fly
-- `derivatives_switches::Union{DerivativesSwitch, Tuple{<:DerivativesSwitch,...}}`: switch determining which of scalar potential, vector potential, velocity, and/or velocity gradient are to be computed for each target system
+- `derivatives_switches::Union{DerivativesSwitch, Tuple{<:DerivativesSwitch,...}}`: switch determining which of scalar potential, vector potential, vector field, and/or vector gradient are to be computed for each target system
 
 # Optional Arguments
 
 - `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
-- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `vector_field::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector field from `source_systems`
+- `vector_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector gradient from `source_systems`
 - `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
 - `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
 - `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
@@ -925,8 +925,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         WARNING_FLAG_ERROR[] = false
         WARNING_FLAG_SCALAR_POTENTIAL[] = false
         WARNING_FLAG_VECTOR_POTENTIAL[] = false
-        WARNING_FLAG_VELOCITY[] = false
-        WARNING_FLAG_VELOCITY_GRADIENT[] = false
+        WARNING_FLAG_VECTOR_FIELD[] = false
+        WARNING_FLAG_VECTOR_GRADIENT[] = false
         WARNING_FLAG_STRENGTH[] = false
         WARNING_FLAG_B2M[] = false
         WARNING_FLAG_DIRECT[] = false
@@ -937,8 +937,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         WARNING_FLAG_ERROR[] = true
         WARNING_FLAG_SCALAR_POTENTIAL[] = true
         WARNING_FLAG_VECTOR_POTENTIAL[] = true
-        WARNING_FLAG_VELOCITY[] = true
-        WARNING_FLAG_VELOCITY_GRADIENT[] = true
+        WARNING_FLAG_VECTOR_FIELD[] = true
+        WARNING_FLAG_VECTOR_GRADIENT[] = true
         WARNING_FLAG_STRENGTH[] = true
         WARNING_FLAG_B2M[] = true
         WARNING_FLAG_DIRECT[] = true
@@ -1047,8 +1047,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 t_dp = 0.0
                 if downward_pass
                     t_dp = @elapsed downward_pass_singlethread_1!(target_tree, expansion_order, lamb_helmholtz)
-                    t_dp += @elapsed velocity_n_m = initialize_velocity_n_m(expansion_order, eltype(target_tree.branches[1]))
-                    t_dp += @elapsed downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, velocity_n_m)
+                    t_dp += @elapsed vector_field_n_m = initialize_vector_field_n_m(expansion_order, eltype(target_tree.branches[1]))
+                    t_dp += @elapsed downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m)
                 end
 
                 # copy results to target systems
@@ -1162,8 +1162,8 @@ end
 
 #--- estimate influence for relative error tolerance ---#
 
-@inline function get_influence(system::Matrix, j, ::Union{PowerRelativeVelocity, RotatedCoefficientsRelativeVelocity})
-    vx, vy, vz = get_velocity(system, j)
+@inline function get_influence(system::Matrix, j, ::Union{PowerRelativeVectorField, RotatedCoefficientsRelativeVectorField})
+    vx, vy, vz = get_vector_field(system, j)
     return sqrt(vx*vx + vy*vy + vz*vz)
 end
 
@@ -1180,7 +1180,7 @@ function estimate_influence!(target_systems, target_tree, source_systems, source
     #--- low-order estimate for relative error tolerance ---#
 
     _, _, estimate_tree, _ = fmm!(target_systems, source_systems; 
-        scalar_potential = true, velocity = true, velocity_gradient = false,
+        scalar_potential = true, vector_field = true, vector_gradient = false,
         leaf_size_source = to_vector(5, length(source_systems)),
         expansion_order = 3, multipole_threshold = 0.6,
         ε_tol = nothing, shrink_recenter, nearfield_device,
@@ -1206,7 +1206,7 @@ function estimate_influence!(target_systems, target_tree, source_systems, source
 
             # update influence
             set_scalar_potential!(buffer, j_buffer, get_scalar_potential(estimate, j_estimate))
-            set_velocity!(buffer, j_buffer, get_velocity(estimate, j_estimate))
+            set_vector_field!(buffer, j_buffer, get_vector_field(estimate, j_estimate))
 
         end        
     end

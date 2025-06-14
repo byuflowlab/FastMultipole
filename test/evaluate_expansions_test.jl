@@ -27,8 +27,8 @@ end
 harmonics = initialize_harmonics(expansion_order)
 derivatives_switch = DerivativesSwitch(true,true,true)
 lamb_helmholtz = Val(false)
-velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order)
-u, velocity, gradient = FastMultipole.evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
+u, vector_field, gradient = FastMultipole.evaluate_local(Δx, harmonics, vector_field_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 
 dx = x_target - xs
 dx_norm = sqrt(dx'*dx)
@@ -37,18 +37,18 @@ v_test = dx / norm(dx)^3 * mass / 4 / pi
 g_test = -SMatrix{3,3}(2*dx[1]^2 - dx[2]^2 - dx[3]^2, 3*dx[1]*dx[2], 3*dx[1]*dx[3], 3*dx[1]*dx[2], -dx[1]^2+2*dx[2]^2-dx[3]^2, 3*dx[2]*dx[3], 3*dx[1]*dx[3], 3*dx[2]*dx[3], -dx[1]^2 - dx[2]^2 + 2*dx[3]^2) / dx_norm^5 * mass / 4 / pi
 
 @test isapprox(u, ϕ_test; atol=1e-12)
-@test isapprox(velocity, v_test; atol=1e-11)
+@test isapprox(vector_field, v_test; atol=1e-11)
 @test isapprox(gradient, g_test; atol=1e-9)
 
 # finite difference check on gradient
-function get_velocity(xt, xs, mass)
+function get_vector_field(xt, xs, mass)
     dx = xt - xs
     v = dx / norm(dx)^3 * mass / 4 / pi
     return v
 end
 
 h = 1e-7
-first_column = (get_velocity(x_target+SVector{3}(h,0,0),xs,mass) - get_velocity(x_target,xs,mass)) / h
+first_column = (get_vector_field(x_target+SVector{3}(h,0,0),xs,mass) - get_vector_field(x_target,xs,mass)) / h
 
 @test isapprox(first_column, g_test[1:3,1]; atol=1e-11)
 

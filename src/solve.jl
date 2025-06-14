@@ -36,7 +36,7 @@ end
     return matrix_offset:matrix_offset + m*n - 1
 end
 
-@inline function get_vector_range(ms::Matrices, k::Int, m)
+@inline function get_vector_field_range(ms::Matrices, k::Int, m)
     # get the range of values corresponding to the k-th rhs vector
     rhs_offset = ms.rhs_offsets[k]
     return rhs_offset:rhs_offset + m - 1
@@ -44,7 +44,7 @@ end
 
 function get_matrix_vector(ms::Matrices, k::Int)
     m, n = ms.sizes[k]
-    vrange = get_vector_range(ms, k, m)
+    vrange = get_vector_field_range(ms, k, m)
     mrange = get_matrix_range(ms, k, m, n)
     mat = @view ms.data[mrange]
     return reshape(mat, m, n), view(ms.rhs, vrange)

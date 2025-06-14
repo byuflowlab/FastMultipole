@@ -13,8 +13,8 @@ Applies all interactions of `systems` acting on itself without multipole acceler
 # Optional Arguments
 
 - `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `velocity::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity from `source_systems`
-- `velocity_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a velocity gradient from `source_systems`
+- `vector_field::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector field from `source_systems`
+- `vector_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector gradient from `source_systems`
 
 """
 function direct!(systems::Tuple; args...)
@@ -40,7 +40,7 @@ function _direct!(target_system, source_system; n_threads=Threads.nthreads(), ar
 end
 
 
-function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(true, length(target_systems)), velocity=fill(true, length(target_systems)), velocity_gradient=fill(true, length(target_systems)))
+function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(true, length(target_systems)), vector_field=fill(true, length(target_systems)), vector_gradient=fill(true, length(target_systems)))
     # set up target buffers
     if isnothing(target_buffers)
         target_buffers = allocate_buffers(target_systems, true)
@@ -55,9 +55,9 @@ function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=no
 
     # ensure derivative switch information is a vector
     scalar_potential = to_vector(scalar_potential, length(target_systems))
-    velocity = to_vector(velocity, length(target_systems))
-    velocity_gradient = to_vector(velocity_gradient, length(target_systems))
-    derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient)
+    vector_field = to_vector(vector_field, length(target_systems))
+    vector_gradient = to_vector(vector_gradient, length(target_systems))
+    derivatives_switches = DerivativesSwitch(scalar_potential, vector_field, vector_gradient)
 
     for (source_system, source_buffer) in zip(source_systems, source_buffers)
         for (target_system, target_buffer, derivatives_switch) in zip(target_systems, target_buffers, derivatives_switches)
@@ -70,7 +70,7 @@ function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=no
 
 end
 
-function direct_multithread!(target_systems::Tuple, source_systems::Tuple, n_threads; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(true, length(target_systems)), velocity=fill(true, length(target_systems)), velocity_gradient=fill(true, length(target_systems)))
+function direct_multithread!(target_systems::Tuple, source_systems::Tuple, n_threads; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(true, length(target_systems)), vector_field=fill(true, length(target_systems)), vector_gradient=fill(true, length(target_systems)))
     # set up target buffers
     if isnothing(target_buffers)
         target_buffers = allocate_buffers(target_systems, true)
@@ -85,9 +85,9 @@ function direct_multithread!(target_systems::Tuple, source_systems::Tuple, n_thr
 
     # ensure derivative switch information is a vector
     scalar_potential = to_vector(scalar_potential, length(target_systems))
-    velocity = to_vector(velocity, length(target_systems))
-    velocity_gradient = to_vector(velocity_gradient, length(target_systems))
-    derivatives_switches = DerivativesSwitch(scalar_potential, velocity, velocity_gradient)
+    vector_field = to_vector(vector_field, length(target_systems))
+    vector_gradient = to_vector(vector_gradient, length(target_systems))
+    derivatives_switches = DerivativesSwitch(scalar_potential, vector_field, vector_gradient)
 
     for (source_system, source_buffer) in zip(source_systems, source_buffers)
         for (target_system, target_buffer, derivatives_switch) in zip(target_systems, target_buffers, derivatives_switches)

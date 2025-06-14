@@ -8,11 +8,11 @@ using PythonPlot
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
 
-function get_velocity(system::Gravitational)
+function get_vector_field(system::Gravitational)
     return system.potential[5:7,:]
 end
 
-function get_velocity(system::VortexParticles)
+function get_vector_field(system::VortexParticles)
     return system.velocity_stretching[1:3,:]
 end
 
@@ -25,7 +25,7 @@ function check_error(system, v_true; optargs...)
     # using expansions
     reset!(system)
     _, _, target_tree, source_tree, m2l_list, direct_list, _ = fmm!(system; optargs...)
-    v_fmm = get_velocity(system)
+    v_fmm = get_vector_field(system)
 
     # velocity error
     errs_v = v_true - v_fmm
@@ -40,7 +40,7 @@ function test_dynamic_p(system, εs_abs; optargs...)
     # get true velocity
     reset!(system)
     direct!(system)
-    v_true = get_velocity(system)
+    v_true = get_vector_field(system)
 
     # get errors
     errs_ub = zeros(length(εs_abs), 5)

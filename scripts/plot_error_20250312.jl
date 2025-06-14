@@ -8,11 +8,11 @@ using DelimitedFiles
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
 
-function get_velocity(system::Gravitational)
+function get_vector_field(system::Gravitational)
     return system.potential[5:7,:]
 end
 
-function get_velocity(system::VortexParticles)
+function get_vector_field(system::VortexParticles)
     return system.velocity_stretching[1:3,:]
 end
 
@@ -26,7 +26,7 @@ function check_error(system, v_true, ε_abs, lamb_helmholtz, bonus_expansion)
     t_fmm = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
 
     # evaluate error
-    v_fmm = get_velocity(system)
+    v_fmm = get_vector_field(system)
     diff = v_true - v_fmm
     diff .*= diff
     diff = sum(diff; dims=1)
@@ -51,7 +51,7 @@ function check_error(system, εs, bonus_expansion)
     # preliminary calcs
     reset!(system)
     direct!(system; velocity_gradient=false, velocity=true)
-    v_true = get_velocity(system)
+    v_true = get_vector_field(system)
     @show mean(sqrt.(sum(v_true .* v_true; dims=1)))
 
     # evaluate error

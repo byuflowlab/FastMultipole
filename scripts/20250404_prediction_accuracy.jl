@@ -12,11 +12,11 @@ include("../test/evaluate_multipole.jl")
 include("../test/gravitational.jl")
 include("../test/vortex.jl")
 
-function get_velocity(system::Gravitational)
+function get_vector_field(system::Gravitational)
     return system.potential[5:7,:]
 end
 
-function get_velocity(system::VortexParticles)
+function get_vector_field(system::VortexParticles)
     return system.velocity_stretching[1:3,:]
 end
 
@@ -90,7 +90,7 @@ function test_accuracy(target_systems::Tuple, source_systems::Tuple, expansion_o
         Ts = zeros(Float64, FastMultipole.length_Ts(expansion_order+1))
         eimϕs = zeros(Float64, 2, expansion_order + 2)
         harmonics = initialize_harmonics(expansion_order)
-        velocity_n_m = FastMultipole.initialize_velocity_n_m(expansion_order, Float64)
+        velocity_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order, Float64)
         derivatives_switches = DerivativesSwitch(false, true, false, target_systems)
 
         # target velocity container

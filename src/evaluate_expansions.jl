@@ -1,48 +1,48 @@
-function evaluate_local!(system, i_system, tree::Tree, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+function evaluate_local!(system, i_system, tree::Tree, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
 
     # loop over leaf branches
     for i_branch in tree.leaf_index
-        evaluate_local!(system, i_system, tree, i_branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+        evaluate_local!(system, i_system, tree, i_branch, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     end
 end
 
-function evaluate_local!(system, i_system, tree::Tree, i_branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+function evaluate_local!(system, i_system, tree::Tree, i_branch, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     branch = tree.branches[i_branch]
     local_expansion = view(tree.expansions, :, :, :, i_branch)
-    evaluate_local!(system, branch.bodies_index[i_system], harmonics, velocity_n_m, local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i_system])
+    evaluate_local!(system, branch.bodies_index[i_system], harmonics, vector_field_n_m, local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i_system])
 end
 
-# function evaluate_local!(systems::Tuple, branch::Branch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+# function evaluate_local!(systems::Tuple, branch::Branch, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
 #     for (system, bodies_index, derivatives_switch) in zip(systems, branch.bodies_index, derivatives_switches)
-#         evaluate_local!(system, bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+#         evaluate_local!(system, bodies_index, harmonics, vector_field_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
 #     end
 # end
 
 # function evaluate_local!(systems, branch::Branch{TF,<:Any}, expansion_order, lamb_helmholtz, derivatives_switches) where TF
 #     harmonics = branch.harmonics
-#     velocity_n_m = initialize_velocity_n_m(expansion_order, TF)
+#     vector_field_n_m = initialize_vector_field_n_m(expansion_order, TF)
 #     for (i, system) in enumerate(systems)
-#         evaluate_local!(system, branch.bodies_index[i], harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
+#         evaluate_local!(system, branch.bodies_index[i], harmonics, vector_field_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switches[i])
 #     end
 # end
 
-# function evaluate_local!(system, branch::SingleBranch, harmonics, velocity_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
-#     evaluate_local!(system, branch.bodies_index, harmonics, velocity_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
+# function evaluate_local!(system, branch::SingleBranch, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switch)
+#     evaluate_local!(system, branch.bodies_index, harmonics, vector_field_n_m, branch.local_expansion, branch.target_center, expansion_order, lamb_helmholtz, derivatives_switch)
 # end
 
-function evaluate_local!(system, bodies_index, harmonics, velocity_n_m, local_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
+function evaluate_local!(system, bodies_index, harmonics, vector_field_n_m, local_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
     for i_body in bodies_index
-        scalar_potential, velocity, gradient = evaluate_local(get_position(system, i_body) - expansion_center, harmonics, velocity_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+        scalar_potential, vector_field, gradient = evaluate_local(get_position(system, i_body) - expansion_center, harmonics, vector_field_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
         
         PS && set_scalar_potential!(system, i_body, scalar_potential)
 
-        VS && set_velocity!(system, i_body, velocity)
+        VS && set_vector_field!(system, i_body, vector_field)
         
-        GS && set_velocity_gradient!(system, i_body, gradient)
+        GS && set_vector_gradient!(system, i_body, gradient)
     end
 end
 
-function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion_order, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {LH,PS,VS,GS}
+function evaluate_local(Δx, harmonics, vector_field_n_m, local_expansion, expansion_order, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {LH,PS,VS,GS}
     # convert to spherical coordinates
     r, θ, ϕ = cartesian_to_spherical(Δx)
 
@@ -54,11 +54,11 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
     # scalar potential
     u = zero(eltype(local_expansion))
 
-    # velocity
+    # vector field
     vx, vy, vz = zero(eltype(local_expansion)), zero(eltype(local_expansion)), zero(eltype(local_expansion))
-    GS && ( velocity_n_m .= zero(eltype(local_expansion)) )
+    GS && ( vector_field_n_m .= zero(eltype(local_expansion)) )
 
-    # velocity gradient
+    # vector gradient
     vxx, vxy, vxz = zero(eltype(local_expansion)), zero(eltype(local_expansion)), zero(eltype(local_expansion))
     vyx, vyy, vyz = zero(eltype(local_expansion)), zero(eltype(local_expansion)), zero(eltype(local_expansion))
     vzx, vzy, vzz = zero(eltype(local_expansion)), zero(eltype(local_expansion)), zero(eltype(local_expansion))
@@ -77,13 +77,13 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
     Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
     # scalar potential
-    if PS # && !LH # scalar potential becomes non-sensical to preserve velocity when using Lamb-Helmholtz
+    if PS # && !LH # scalar potential becomes non-sensical to preserve vector field when using Lamb-Helmholtz
         ϕ_n_m_real = local_expansion[1,1,i_n_m]
         ϕ_n_m_imag = local_expansion[2,1,i_n_m]
         u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag
     end
 
-    # velocity
+    # vector
     if VS || GS
         #=
         vx = -Im[ϕ_{1}^{1}]
@@ -118,11 +118,11 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
         end
 
         if GS
-            # store components for computing velocity gradient
-            velocity_n_m[1,1,i_n_m] = vx_n_m_real # x component
-            velocity_n_m[1,2,i_n_m] = vy_n_m_real # y component
-            velocity_n_m[1,3,i_n_m] = vz_n_m_real # z component
-            velocity_n_m[2,3,i_n_m] = vz_n_m_imag # z component
+            # store components for computing vector gradient
+            vector_field_n_m[1,1,i_n_m] = vx_n_m_real # x component
+            vector_field_n_m[1,2,i_n_m] = vy_n_m_real # y component
+            vector_field_n_m[1,3,i_n_m] = vz_n_m_real # z component
+            vector_field_n_m[2,3,i_n_m] = vz_n_m_imag # z component
         end
 
     end
@@ -146,7 +146,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
             u += Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag
         end
 
-        # velocity
+        # vector
         if VS || GS
             #=
             vx = (Re[χ_1^1] - Im[ϕ_2^1]) R_n^m
@@ -193,11 +193,11 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
             end
 
             if GS
-                # store components for computing velocity gradient
-                velocity_n_m[1,1,i_n_m] = vx_n_m_real # x component
-                velocity_n_m[1,2,i_n_m] = vy_n_m_real # y component
-                velocity_n_m[1,3,i_n_m] = vz_n_m_real # z component
-                velocity_n_m[2,3,i_n_m] = vz_n_m_imag # z component
+                # store components for computing vector gradient
+                vector_field_n_m[1,1,i_n_m] = vx_n_m_real # x component
+                vector_field_n_m[1,2,i_n_m] = vy_n_m_real # y component
+                vector_field_n_m[1,3,i_n_m] = vz_n_m_real # z component
+                vector_field_n_m[2,3,i_n_m] = vz_n_m_imag # z component
             end
 
         end
@@ -219,7 +219,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                 u += 2 * (Rnm_real * ϕ_n_m_real - Rnm_imag * ϕ_n_m_imag)
             end
 
-            # velocity
+            # vector
             if VS || GS
                 #=
                 vx = (im * (ϕ_{n+1}^{m-1} + ϕ_{n+1}^{m+1}) + (n-m) χ_n^{m+1} - (n+m) χ_n^{m-1}) / 2
@@ -256,7 +256,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                     χ_n_mm1_real = local_expansion[1,2,i_n_m-1]
                     χ_n_mm1_imag = local_expansion[2,2,i_n_m-1]
 
-                    # form velocity coefficients
+                    # form vector coefficients
                     vx_n_m_real -= (n+m) * χ_n_mm1_real * 0.5
                     vx_n_m_imag -= (n+m) * χ_n_mm1_imag * 0.5
                     vy_n_m_real -= (n+m) * χ_n_mm1_imag * 0.5
@@ -275,7 +275,7 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                     χ_n_m_real = local_expansion[1,2,i_n_m]
                     χ_n_m_imag = local_expansion[2,2,i_n_m]
 
-                    # form velocity coefficients
+                    # form vector coefficients
                     vz_n_m_real += m * χ_n_m_imag
                     vz_n_m_imag -= m * χ_n_m_real
                 end
@@ -286,13 +286,13 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                 vz += 2 * (vz_n_m_real * Rnm_real - vz_n_m_imag * Rnm_imag)
 
                 if GS
-                    # store components for computing velocity gradient
-                    velocity_n_m[1,1,i_n_m] = vx_n_m_real # x component
-                    velocity_n_m[2,1,i_n_m] = vx_n_m_imag # x component
-                    velocity_n_m[1,2,i_n_m] = vy_n_m_real # y component
-                    velocity_n_m[2,2,i_n_m] = vy_n_m_imag # y component
-                    velocity_n_m[1,3,i_n_m] = vz_n_m_real # z component
-                    velocity_n_m[2,3,i_n_m] = vz_n_m_imag # z component
+                    # store components for computing vector gradient
+                    vector_field_n_m[1,1,i_n_m] = vx_n_m_real # x component
+                    vector_field_n_m[2,1,i_n_m] = vx_n_m_imag # x component
+                    vector_field_n_m[1,2,i_n_m] = vy_n_m_real # y component
+                    vector_field_n_m[2,2,i_n_m] = vy_n_m_imag # y component
+                    vector_field_n_m[1,3,i_n_m] = vz_n_m_real # z component
+                    vector_field_n_m[2,3,i_n_m] = vz_n_m_imag # z component
                 end
 
             end
@@ -314,34 +314,34 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
             # get regular harmonic
             Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
-            vg_xx_real = -velocity_n_m[2,1,i_n_m+n+2]
+            vg_xx_real = -vector_field_n_m[2,1,i_n_m+n+2]
             vxx += vg_xx_real * Rnm_real
 
-            vg_yx_real = -velocity_n_m[1,1,i_n_m+n+2]
+            vg_yx_real = -vector_field_n_m[1,1,i_n_m+n+2]
             vyx += vg_yx_real * Rnm_real
 
-            vg_zx_real = -velocity_n_m[1,1,i_n_m+n+1]
-            vg_zx_imag = -velocity_n_m[2,1,i_n_m+n+1]
+            vg_zx_real = -vector_field_n_m[1,1,i_n_m+n+1]
+            vg_zx_imag = -vector_field_n_m[2,1,i_n_m+n+1]
             vzx += vg_zx_real * Rnm_real - vg_zx_imag * Rnm_imag
 
-            vg_xy_real = -velocity_n_m[2,2,i_n_m+n+2]
+            vg_xy_real = -vector_field_n_m[2,2,i_n_m+n+2]
             vxy += vg_xy_real * Rnm_real
 
-            vg_yy_real = -velocity_n_m[1,2,i_n_m+n+2]
+            vg_yy_real = -vector_field_n_m[1,2,i_n_m+n+2]
             vyy += vg_yy_real * Rnm_real
 
-            vg_zy_real = -velocity_n_m[1,2,i_n_m+n+1]
-            vg_zy_imag = -velocity_n_m[2,2,i_n_m+n+1]
+            vg_zy_real = -vector_field_n_m[1,2,i_n_m+n+1]
+            vg_zy_imag = -vector_field_n_m[2,2,i_n_m+n+1]
             vzy += vg_zy_real * Rnm_real - vg_zy_imag * Rnm_imag
 
-            vg_xz_real = -velocity_n_m[2,3,i_n_m+n+2]
+            vg_xz_real = -vector_field_n_m[2,3,i_n_m+n+2]
             vxz += vg_xz_real * Rnm_real
 
-            vg_yz_real = -velocity_n_m[1,3,i_n_m+n+2]
+            vg_yz_real = -vector_field_n_m[1,3,i_n_m+n+2]
             vyz += vg_yz_real * Rnm_real
 
-            vg_zz_real = -velocity_n_m[1,3,i_n_m+n+1]
-            vg_zz_imag = -velocity_n_m[2,3,i_n_m+n+1]
+            vg_zz_real = -vector_field_n_m[1,3,i_n_m+n+1]
+            vg_zz_imag = -vector_field_n_m[2,3,i_n_m+n+1]
             vzz += vg_zz_real * Rnm_real - vg_zz_imag * Rnm_imag
 
 
@@ -355,40 +355,40 @@ function evaluate_local(Δx, harmonics, velocity_n_m, local_expansion, expansion
                 # get regular harmonic
                 Rnm_real, Rnm_imag = harmonics[1,1,i_n_m], harmonics[2,1,i_n_m]
 
-                vg_xx_real = -(velocity_n_m[2,1,i_n_m+n] + velocity_n_m[2,1,i_n_m+n+2]) * 0.5
-                vg_xx_imag = (velocity_n_m[1,1,i_n_m+n] + velocity_n_m[1,1,i_n_m+n+2]) * 0.5
+                vg_xx_real = -(vector_field_n_m[2,1,i_n_m+n] + vector_field_n_m[2,1,i_n_m+n+2]) * 0.5
+                vg_xx_imag = (vector_field_n_m[1,1,i_n_m+n] + vector_field_n_m[1,1,i_n_m+n+2]) * 0.5
                 vxx += 2 * (vg_xx_real * Rnm_real - vg_xx_imag * Rnm_imag)
 
-                vg_yx_real = (velocity_n_m[1,1,i_n_m+n] - velocity_n_m[1,1,i_n_m+n+2]) * 0.5
-                vg_yx_imag = (velocity_n_m[2,1,i_n_m+n] - velocity_n_m[2,1,i_n_m+n+2]) * 0.5
+                vg_yx_real = (vector_field_n_m[1,1,i_n_m+n] - vector_field_n_m[1,1,i_n_m+n+2]) * 0.5
+                vg_yx_imag = (vector_field_n_m[2,1,i_n_m+n] - vector_field_n_m[2,1,i_n_m+n+2]) * 0.5
                 vyx += 2 * (vg_yx_real * Rnm_real - vg_yx_imag * Rnm_imag)
 
-                vg_zx_real = -velocity_n_m[1,1,i_n_m+n+1]
-                vg_zx_imag = -velocity_n_m[2,1,i_n_m+n+1]
+                vg_zx_real = -vector_field_n_m[1,1,i_n_m+n+1]
+                vg_zx_imag = -vector_field_n_m[2,1,i_n_m+n+1]
                 vzx += 2 * (vg_zx_real * Rnm_real - vg_zx_imag * Rnm_imag)
 
-                vg_xy_real = -(velocity_n_m[2,2,i_n_m+n] + velocity_n_m[2,2,i_n_m+n+2]) * 0.5
-                vg_xy_imag = (velocity_n_m[1,2,i_n_m+n] + velocity_n_m[1,2,i_n_m+n+2]) * 0.5
+                vg_xy_real = -(vector_field_n_m[2,2,i_n_m+n] + vector_field_n_m[2,2,i_n_m+n+2]) * 0.5
+                vg_xy_imag = (vector_field_n_m[1,2,i_n_m+n] + vector_field_n_m[1,2,i_n_m+n+2]) * 0.5
                 vxy += 2 * (vg_xy_real * Rnm_real - vg_xy_imag * Rnm_imag)
 
-                vg_yy_real = (velocity_n_m[1,2,i_n_m+n] - velocity_n_m[1,2,i_n_m+n+2]) * 0.5
-                vg_yy_imag = (velocity_n_m[2,2,i_n_m+n] - velocity_n_m[2,2,i_n_m+n+2]) * 0.5
+                vg_yy_real = (vector_field_n_m[1,2,i_n_m+n] - vector_field_n_m[1,2,i_n_m+n+2]) * 0.5
+                vg_yy_imag = (vector_field_n_m[2,2,i_n_m+n] - vector_field_n_m[2,2,i_n_m+n+2]) * 0.5
                 vyy += 2 * (vg_yy_real * Rnm_real - vg_yy_imag * Rnm_imag)
 
-                vg_zy_real = -velocity_n_m[1,2,i_n_m+n+1]
-                vg_zy_imag = -velocity_n_m[2,2,i_n_m+n+1]
+                vg_zy_real = -vector_field_n_m[1,2,i_n_m+n+1]
+                vg_zy_imag = -vector_field_n_m[2,2,i_n_m+n+1]
                 vzy += 2 * (vg_zy_real * Rnm_real - vg_zy_imag * Rnm_imag)
 
-                vg_xz_real = -(velocity_n_m[2,3,i_n_m+n] + velocity_n_m[2,3,i_n_m+n+2]) * 0.5
-                vg_xz_imag = (velocity_n_m[1,3,i_n_m+n] + velocity_n_m[1,3,i_n_m+n+2]) * 0.5
+                vg_xz_real = -(vector_field_n_m[2,3,i_n_m+n] + vector_field_n_m[2,3,i_n_m+n+2]) * 0.5
+                vg_xz_imag = (vector_field_n_m[1,3,i_n_m+n] + vector_field_n_m[1,3,i_n_m+n+2]) * 0.5
                 vxz += 2 * (vg_xz_real * Rnm_real - vg_xz_imag * Rnm_imag)
 
-                vg_yz_real = (velocity_n_m[1,3,i_n_m+n] - velocity_n_m[1,3,i_n_m+n+2]) * 0.5
-                vg_yz_imag = (velocity_n_m[2,3,i_n_m+n] - velocity_n_m[2,3,i_n_m+n+2]) * 0.5
+                vg_yz_real = (vector_field_n_m[1,3,i_n_m+n] - vector_field_n_m[1,3,i_n_m+n+2]) * 0.5
+                vg_yz_imag = (vector_field_n_m[2,3,i_n_m+n] - vector_field_n_m[2,3,i_n_m+n+2]) * 0.5
                 vyz += 2 * (vg_yz_real * Rnm_real - vg_yz_imag * Rnm_imag)
 
-                vg_zz_real = -velocity_n_m[1,3,i_n_m+n+1]
-                vg_zz_imag = -velocity_n_m[2,3,i_n_m+n+1]
+                vg_zz_real = -vector_field_n_m[1,3,i_n_m+n+1]
+                vg_zz_imag = -vector_field_n_m[2,3,i_n_m+n+1]
                 vzz += 2 * (vg_zz_real * Rnm_real - vg_zz_imag * Rnm_imag)
 
             end

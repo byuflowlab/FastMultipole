@@ -153,7 +153,7 @@ end
 #     return PMAX
 # end
 
-# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::UniformCubesVelocity, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
+# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::UniformCubesVectorField, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
 
 #     #--- extract fields ---#
 
@@ -283,7 +283,7 @@ end
 #     return PMAX
 # end
 
-# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::LambHelmholtzΧVelocity, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
+# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::LambHelmholtzΧVectorField, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
 
 #     #--- extract fields ---#
 
@@ -317,7 +317,7 @@ end
 #     ωx, ωy, ωz = vortex_from_multipole(multipole_expansion)
 #     ωx, ωy, ωz = R * SVector{3,eltype(source_box)}(ωx, ωy, ωz)
 
-#     # estimate induced velocity by approximating a point vortex
+#     # estimate induced vector by approximating a point vortex
 #     # at the expansion center
 #     vx = ωy * r⃗[3] - ωz * r⃗[2]
 #     vy = ωz * r⃗[1] - ωx * r⃗[3]

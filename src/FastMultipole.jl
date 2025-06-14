@@ -56,11 +56,11 @@ WARNING_FLAG_SCALAR_POTENTIAL[] = true
 const WARNING_FLAG_VECTOR_POTENTIAL = Array{Bool,0}(undef)
 WARNING_FLAG_VECTOR_POTENTIAL[] = true
 
-const WARNING_FLAG_VELOCITY = Array{Bool,0}(undef)
-WARNING_FLAG_VELOCITY[] = true
+const WARNING_FLAG_VECTOR_FIELD = Array{Bool,0}(undef)
+WARNING_FLAG_VECTOR_FIELD[] = true
 
-const WARNING_FLAG_VELOCITY_GRADIENT = Array{Bool,0}(undef)
-WARNING_FLAG_VELOCITY_GRADIENT[] = true
+const WARNING_FLAG_VECTOR_GRADIENT = Array{Bool,0}(undef)
+WARNING_FLAG_VECTOR_GRADIENT[] = true
 
 const WARNING_FLAG_STRENGTH = Array{Bool,0}(undef)
 WARNING_FLAG_STRENGTH[] = true
@@ -90,7 +90,7 @@ export unsort!, resort!, unsorted_index_2_sorted_index, sorted_index_2_unsorted_
 
 include("compatibility.jl")
 
-export Body, Position, Radius, ScalarPotential, VectorPotential, Velocity, VelocityGradient, Vertex, Normal, Strength
+export Body, Position, Radius, ScalarPotential, VectorPotential, VectorField, VectorGradient, Vertex, Normal, Strength
 export Vortex, Source, Dipole, SourceDipole, SourceVortex, Point, Filament, Panel
 export get_n_bodies, buffer_element, body_to_multipole!, direct!, direct_gpu!
 
@@ -109,10 +109,6 @@ export DerivativesSwitch
 include("error.jl")
 
 export multipole_error, local_error, error
-
-include("sortwrapper.jl")
-
-export SortWrapper
 
 include("interaction_list.jl")
 
