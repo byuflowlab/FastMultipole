@@ -1290,7 +1290,6 @@ end
 #--- helper function ---#
 
 @inline function replace_branch!(branches::Vector{TB}, i_branch, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box) where TB
-    # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, lock) = branch[]
     branch = branches[i_branch]
     n_bodies = branch.n_bodies
     bodies_index = branch.bodies_index
@@ -1298,35 +1297,9 @@ end
     branch_index = branch.branch_index
     i_parent = branch.i_parent
     i_leaf = branch.i_leaf
-    # multipole_expansion = branch.multipole_expansion
-    # local_expansion = branch.local_expansion
-    # harmonics = branch.harmonics
-    lock = branch.lock
     max_influence = branch.max_influence
-    branches[i_branch] = TB(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, lock, max_influence)
+    branches[i_branch] = TB(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, new_source_center, new_target_center, new_source_radius, new_target_radius, new_source_box, new_target_box, max_influence)
 end
-
-# @inline function replace_branch!(branches::Vector{TB}, i_branch, new_charge, new_dipole) where TB
-#     # (; bodies_index, n_branches, branch_index, i_parent, center, radius, multipole_expansion, local_expansion, harmonics, lock) = branch[]
-#     branch = branches[i_branch]
-#     bodies_index = branch.bodies_index
-#     n_branches = branch.n_branches
-#     branch_index = branch.branch_index
-#     i_parent = branch.i_parent
-#     i_leaf = branch.i_leaf
-#     source_center = branch.source_center
-#     target_center = branch.target_center
-#     source_radius = branch.source_radius
-#     target_radius = branch.target_radius
-#     source_box = branch.source_box
-#     target_box = branch.target_box
-#     error = branch.error
-#     multipole_expansion = branch.multipole_expansion
-#     local_expansion = branch.local_expansion
-#     harmonics = branch.harmonics
-#     lock = branch.lock
-#     branches[i_branch] = TB(bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, new_charge, new_dipole, error, multipole_expansion, local_expansion, harmonics, lock)
-# end
 
 function initialize_expansion(expansion_order, type=Float64)
     # incrememnt expansion order to make room for error predictions

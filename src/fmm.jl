@@ -105,7 +105,6 @@ function execute_assignment!(target_buffer, i_target_buffer, target_branches, de
         target_index = target_branch.bodies_index[i_target_buffer]
 
         # compute interaction
-        # @lock target_branch.lock 
         direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
     end
 end
@@ -552,7 +551,6 @@ function execute_m2l!(target_expansions, target_branches, source_expansions, sou
         source_expansion = view(source_expansions, :, :, :, j_source)
         target_branch = target_branches[i_target]
         source_branch = source_branches[j_source]
-        # @lock target_branch.lock ( P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol) )
         P, this_error_success = multipole_to_local!(target_expansion, target_branch, source_expansion, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz, ε_tol)
         Pmax = max(P, Pmax)
         error_success = error_success && this_error_success
@@ -1234,7 +1232,6 @@ function estimate_influence!(target_systems, target_tree, source_systems, source
             target_radius = branch.target_radius
             source_box = branch.source_box
             target_box = branch.target_box
-            lock = branch.lock
             max_influence = branch.max_influence
 
             # loop over bodies 
@@ -1245,7 +1242,7 @@ function estimate_influence!(target_systems, target_tree, source_systems, source
 
             # replace branch
             target_tree.branches[i] = typeof(branch)(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, 
-                source_center, target_center, source_radius, target_radius, source_box, target_box, lock, max_influence)
+                source_center, target_center, source_radius, target_radius, source_box, target_box, max_influence)
         end
     end
 

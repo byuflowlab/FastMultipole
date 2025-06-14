@@ -203,10 +203,7 @@ Branch object used to sort more than one system into an octree. Type parameters 
 * `target_radius::TF`: distance from `center` to the farthest body center contained in this branch
 * `source_box::Vector{TF}`: vector of length 6 containing the distances from the center to faces of a rectangular prism completely enclosing all bodies with their finite radius in the negative x, positive x, negative y, positive y, negative z, and positive z directions, respectively
 * `target_box::Vector{TF}`: vector of length 3 containing the distances from the center to faces of a rectangular prism completely enclosing all body centers in the x, y, and z direction, respectively
-* multipole_expansion::Array{TF,3}`: array of size (2,2,) containing the multipole expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
-* local_expansion::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` containing the local expansion coefficients; the first index indicates real or imaginary, the second index indicates scalar potential or the second component of the Lamb-Helmholtz decomposition, and the third index `k` indicates the expansion coefficient of degree \$n\$ and order \$m\$, as \$k = p(p+1)/2 + m + 1\$
-* `harmonics::Array{TF,3}`: array of size `(2,2,(p+1)(p+2)/2)` used as storage for regular harmonics, irregular harmonics, or whatever is needed, and is indexed as multipole and local expansions
-* `lock::ReentrantLock`: lock used to avoid data race conditions when modifying this branch or its corresponding bodies
+* `max_influence::TF`: maximum influence of any body in this branch on any body in its child branches; used to enforce a relative error tolerance
 
 """
 struct Branch{TF,N}
@@ -222,19 +219,11 @@ struct Branch{TF,N}
     target_radius::TF
     source_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
     target_box::SVector{3,TF} # x, y, and z half widths of the box encapsulating all sources
-    # multipole_expansion::Array{TF,3} # multipole expansion coefficients
-    # local_expansion::Array{TF,3}     # local expansion coefficients
-    # harmonics::Array{TF,3}
-    lock::ReentrantLock
     max_influence::TF
 end
 
-# function Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius::TF, target_radius, source_box, target_box, lock, max_influence=zero(TF)) where TF
-#     Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf, source_center, target_center, source_radius, target_radius, source_box, target_box, error, lock, max_influence)
-# end
-
 function Branch(n_bodies::SVector{<:Any,Int64}, bodies_index, n_branches, branch_index, i_parent::Int, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box)
-    return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, ReentrantLock(), zero(target_radius))
+    return Branch(n_bodies, bodies_index, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box, zero(target_radius))
 end
 
 function Branch(bodies_index::SVector{<:Any,UnitRange{Int64}}, args...)
