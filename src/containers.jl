@@ -8,9 +8,9 @@ struct Radius <: Indexable end
 
 struct ScalarPotential <: Indexable end
 
-struct VectorField <: Indexable end
+struct Gradient <: Indexable end
 
-struct VectorGradient <: Indexable end
+struct Hessian <: Indexable end
 
 struct Vertex <: Indexable end
 
@@ -45,9 +45,9 @@ abstract type Panel{NS,TK} <: AbstractElement{TK} end
 """
     DerivativesSwitch
 
-Switch indicating whether the scalar potential, vector potential, vector field, and/or vector gradient should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
+Switch indicating whether the scalar potential, vector potential, gradient, and/or hessian should be computed for a target system. Information is stored as type parameters, allowing the compiler to compile away if statements.
 """
-struct DerivativesSwitch{PS,VS,GS} end
+struct DerivativesSwitch{PS,GS,HS} end
 
 """
     ExpansionSwitch
@@ -85,11 +85,11 @@ AbsoluteUpperBound(ε) = AbsoluteUpperBound{ε}()
 struct PowerAbsolutePotential{ε,BE} <: AbsoluteError end
 PowerAbsolutePotential(ε, BE::Bool=true) = PowerAbsolutePotential{ε,BE}()
 
-struct PowerAbsoluteVectorField{ε,BE} <: AbsoluteError end
-PowerAbsoluteVectorField(ε, BE::Bool=true) = PowerAbsoluteVectorField{ε,BE}()
+struct PowerAbsoluteGradient{ε,BE} <: AbsoluteError end
+PowerAbsoluteGradient(ε, BE::Bool=true) = PowerAbsoluteGradient{ε,BE}()
 
-struct RotatedCoefficientsAbsoluteVectorField{ε,BE} <: AbsoluteError end
-RotatedCoefficientsAbsoluteVectorField(ε, BE::Bool=true) = RotatedCoefficientsAbsoluteVectorField{ε,BE}()
+struct RotatedCoefficientsAbsoluteGradient{ε,BE} <: AbsoluteError end
+RotatedCoefficientsAbsoluteGradient(ε, BE::Bool=true) = RotatedCoefficientsAbsoluteGradient{ε,BE}()
 
 struct RelativeUpperBound{ε} <: RelativeError end
 RelativeUpperBound(ε) = RelativeUpperBound{ε}()
@@ -97,11 +97,11 @@ RelativeUpperBound(ε) = RelativeUpperBound{ε}()
 struct PowerRelativePotential{ε,BE} <: RelativeError end
 PowerRelativePotential(ε, BE::Bool=true) = PowerRelativePotential{ε,BE}()
 
-struct PowerRelativeVectorField{ε,BE} <: RelativeError end
-PowerRelativeVectorField(ε, BE::Bool=true) = PowerRelativeVectorField{ε,BE}()
+struct PowerRelativeGradient{ε,BE} <: RelativeError end
+PowerRelativeGradient(ε, BE::Bool=true) = PowerRelativeGradient{ε,BE}()
 
-struct RotatedCoefficientsRelativeVectorField{ε,BE} <: RelativeError end
-RotatedCoefficientsRelativeVectorField(ε, BE::Bool=true) = RotatedCoefficientsRelativeVectorField{ε,BE}()
+struct RotatedCoefficientsRelativeGradient{ε,BE} <: RelativeError end
+RotatedCoefficientsRelativeGradient(ε, BE::Bool=true) = RotatedCoefficientsRelativeGradient{ε,BE}()
 
 #------- interaction list -------#
 
@@ -223,8 +223,8 @@ Convenience system for defining locations at which the potential, vector field, 
 struct ProbeSystem{TF}
     position::Vector{SVector{3,TF}}
     scalar_potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    vector_gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 #------- SOLVERS -------#
@@ -247,7 +247,7 @@ struct FastGaussSeidel{TF,Nsys,TIL} <: AbstractSolver
     direct_list::Vector{SVector{2,Int32}}
     full_direct_list::Vector{SVector{2,Int32}}
     interaction_list_method::TIL
-    multipole_threshold::Float64
+    multipole_acceptance::Float64
     lamb_helmholtz::Bool
     strengths::Vector{TF}
     strengths_by_leaf::Vector{UnitRange{Int}}

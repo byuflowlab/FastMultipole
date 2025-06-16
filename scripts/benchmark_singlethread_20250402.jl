@@ -146,7 +146,7 @@ end
 #=
 for P in 1:3
     print("P = $P:")
-    grav_results, grav_results_direct, errs = benchmark_fmm_gravitational2(sizes; expansion_order=P, multipole_threshold=0.5, lamb_helmholtz=false, velocity=false, scalar_potential=true)
+    grav_results, grav_results_direct, errs = benchmark_fmm_gravitational2(sizes; expansion_order=P, multipole_acceptance=0.5, lamb_helmholtz=false, velocity=false, scalar_potential=true)
     println(grav_results)
     println(grav_results_direct)
     println(errs)
@@ -157,9 +157,9 @@ end
 
 # sizes = [2^n for n in 8:2:23]
 #=
-grav_results = benchmark_fmm_gravitational(sizes; expansion_order=3, multipole_threshold=0.5, leaf_size_source=50)
+grav_results = benchmark_fmm_gravitational(sizes; expansion_order=3, multipole_acceptance=0.5, leaf_size_source=50)
 println(grav_results)
-vort_results = benchmark_fmm_vortex(sizes; expansion_order=3, multipole_threshold=0.5, leaf_size_source=50)
+vort_results = benchmark_fmm_vortex(sizes; expansion_order=3, multipole_acceptance=0.5, leaf_size_source=50)
 println(vort_results)
 =#
 #=

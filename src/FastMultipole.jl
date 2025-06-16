@@ -56,11 +56,11 @@ WARNING_FLAG_SCALAR_POTENTIAL[] = true
 const WARNING_FLAG_VECTOR_POTENTIAL = Array{Bool,0}(undef)
 WARNING_FLAG_VECTOR_POTENTIAL[] = true
 
-const WARNING_FLAG_VECTOR_FIELD = Array{Bool,0}(undef)
-WARNING_FLAG_VECTOR_FIELD[] = true
+const WARNING_FLAG_gradient = Array{Bool,0}(undef)
+WARNING_FLAG_gradient[] = true
 
-const WARNING_FLAG_VECTOR_GRADIENT = Array{Bool,0}(undef)
-WARNING_FLAG_VECTOR_GRADIENT[] = true
+const WARNING_FLAG_hessian = Array{Bool,0}(undef)
+WARNING_FLAG_hessian[] = true
 
 const WARNING_FLAG_STRENGTH = Array{Bool,0}(undef)
 WARNING_FLAG_STRENGTH[] = true
@@ -90,8 +90,10 @@ export unsort!, resort!, unsorted_index_2_sorted_index, sorted_index_2_unsorted_
 
 include("compatibility.jl")
 
-export Body, Position, Radius, ScalarPotential, VectorPotential, VectorField, VectorGradient, Vertex, Normal, Strength
+export Body, Position, Radius, ScalarPotential, Gradient, Hessian, Vertex, Normal, Strength
 export Vortex, Source, Dipole, SourceDipole, SourceVortex, Point, Filament, Panel
+export PowerAbsolutePotential, PowerAbsoluteGradient, RotatedCoefficientsAbsoluteGradient
+# export PowerRelativePotential, PowerRelativeGradient, RotatedCoefficientsRelativeGradient
 export get_n_bodies, buffer_element, body_to_multipole!, direct!, direct_gpu!
 
 include("bodytomultipole.jl")

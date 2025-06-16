@@ -22,7 +22,7 @@ makedocs(;
         "Guided Examples" => "guided_examples.md",
         "Advanced Usage" => "advanced_usage.md",
         "Reference" => "reference.md",
-        "Theory" => "theory.md"
+        # "Theory" => "theory.md"
     ],
 )
 

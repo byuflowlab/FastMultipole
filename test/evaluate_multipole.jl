@@ -9,13 +9,13 @@ function evaluate_multipole!(system, target_branch, source_branch, expansion_ord
     evaluate_multipole!(system, target_branch, source_branch, harmonics, expansion_order, lamb_helmholtz, derivatives_switch)
 end
 
-function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,VS,GS}) where {PS,VS,GS}
+function evaluate_multipole!(system, bodies_index, harmonics, multipole_expansion, expansion_center, expansion_order, lamb_helmholtz, derivatives_switch::DerivativesSwitch{PS,GS,HS}) where {PS,GS,HS}
     for i_body in bodies_index
-        scalar_potential, vector_field, gradient = evaluate_multipole(FastMultipole.get_position(system, i_body) - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+        scalar_potential, gradient, gradient = evaluate_multipole(FastMultipole.get_position(system, i_body) - expansion_center, harmonics, multipole_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
         
         PS && FastMultipole.set_scalar_potential!(system, i_body, scalar_potential)
-        VS && FastMultipole.set_vector_field!(system, i_body, vector_field)
-        GS && FastMultipole.set_vector_gradient!(system, i_body, gradient)
+        GS && FastMultipole.set_gradient!(system, i_body, gradient)
+        HS && FastMultipole.set_hessian!(system, i_body, gradient)
     end
 end
 
@@ -33,7 +33,7 @@ function check_S(r,θ,ϕ,n,m)
     end
 end
 
-function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order, ::Val{LH}, ::DerivativesSwitch{PS,VS,GS}) where {LH,PS,VS,GS}
+function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order, ::Val{LH}, ::DerivativesSwitch{PS,GS,HS}) where {LH,PS,GS,HS}
     # convert to spherical coordinates
     r, θ, ϕ = FastMultipole.cartesian_to_spherical(Δx)
 
@@ -45,7 +45,7 @@ function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order
     # scalar potential
     u = zero(eltype(multipole_expansion))
 
-    # vector_field
+    # gradient
     vx, vy, vz = zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion)), zero(eltype(multipole_expansion))
 
     # vector gradient
@@ -87,8 +87,8 @@ function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order
                 u += scalar * (S_n_m_real * ϕ_n_m_real - S_n_m_imag * ϕ_n_m_imag)
             end
 
-            # vector_field
-            if VS
+            # gradient
+            if GS
 
                 # due to ϕ
                 if n < expansion_order
@@ -124,7 +124,7 @@ function evaluate_multipole(Δx, harmonics, multipole_expansion, expansion_order
             end
 
             # vector gradient
-            if GS
+            if HS
 
                 # due to ϕ
                 S_np2_mp2_real, S_np2_mp2_imag = harmonics[1,1,i_n_m+n+n+5], harmonics[2,1,i_n_m+n+n+5]

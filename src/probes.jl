@@ -1,18 +1,18 @@
 function ProbeSystem(n_bodies, TF=Float64)
     position = zeros(SVector{3,TF}, n_bodies)
     scalar_potential = zeros(TF, n_bodies)
-    vector_field = zeros(SVector{3,TF}, n_bodies)
-    vector_gradient = zeros(SMatrix{3,3,TF,9}, n_bodies)
-    return ProbeSystem{TF}(position, scalar_potential, vector_field, vector_gradient)
+    gradient = zeros(SVector{3,TF}, n_bodies)
+    hessian = zeros(SMatrix{3,3,TF,9}, n_bodies)
+    return ProbeSystem{TF}(position, scalar_potential, gradient, hessian)
 end
 
 function reset!(system::ProbeSystem{TF}) where TF
     system.scalar_potential .= zero(TF)
-    for i in eachindex(system.vector_field)
-        system.vector_field[i] = zero(SVector{3,TF})
+    for i in eachindex(system.gradient)
+        system.gradient[i] = zero(SVector{3,TF})
     end
-    for i in eachindex(system.vector_gradient)
-        system.vector_gradient[i] = zero(SMatrix{3,3,TF,9})
+    for i in eachindex(system.hessian)
+        system.hessian[i] = zero(SMatrix{3,3,TF,9})
     end
 end
 
@@ -48,13 +48,13 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
     return nothing
 end
 
-function FastMultipole.buffer_to_target_system!(target_system::ProbeSystem, i_target, ::FastMultipole.DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
+function FastMultipole.buffer_to_target_system!(target_system::ProbeSystem, i_target, ::FastMultipole.DerivativesSwitch{PS,GS,HS}, target_buffer, i_buffer) where {PS,GS,HS}
     TF = eltype(target_buffer)
     scalar_potential = PS ? FastMultipole.get_scalar_potential(target_buffer, i_buffer) : zero(TF)
-    vector_field = VS ? FastMultipole.get_vector_field(target_buffer, i_buffer) : zero(SVector{3,TF})
-    vector_gradient = GS ? FastMultipole.get_vector_field_gradient(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
+    gradient = GS ? FastMultipole.get_gradient(target_buffer, i_buffer) : zero(SVector{3,TF})
+    hessian = HS ? FastMultipole.get_hessian(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
 
     target_system.scalar_potential[i_target] = scalar_potential
-    target_system.vector_field[i_target] = vector_field
-    target_system.vector_gradient[i_target] = vector_gradient
+    target_system.gradient[i_target] = gradient
+    target_system.hessian[i_target] = hessian
 end

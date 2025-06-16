@@ -6,14 +6,14 @@ struct VortexFilaments{TF}
     core_size::Vector{TF}
     ε_tol::Vector{TF}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 # function VortexFilaments(filaments::VortexFilaments)
 #     core_size = fill(1e-3, length(filaments.potential))
 #     ε_tol = fill(1e-4, length(filaments.potential))
-#     return VortexFilaments(filaments.x, filaments.strength, core_size, ε_tol, filaments.potential, filaments.vector_field, filaments.gradient)
+#     return VortexFilaments(filaments.x, filaments.strength, core_size, ε_tol, filaments.potential, filaments.gradient, filaments.gradient)
 # end
 
 # function viz(fname, vortex_filaments::VortexFilaments)
@@ -29,7 +29,7 @@ end
 
 #     vtk_grid(fname, pts, lines) do vtk
 #         vtk["strength"] = vortex_filaments.strength
-#         vtk["vector"] = vortex_filaments.vector_field
+#         vtk["vector"] = vortex_filaments.gradient
 #     end
 # end
 
@@ -37,11 +37,11 @@ function VortexFilaments(x, strength::Vector{SVector{3,TF}};
         core_size = fill(1e-2, size(x,2)),
         ε_tol = fill(1e-4, size(x,2)),
         potential = zeros(size(x,2)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return VortexFilaments(x, strength, core_size, ε_tol, potential, vector_field, gradient)
+    return VortexFilaments(x, strength, core_size, ε_tol, potential, gradient, hessian)
 end
 
 function generate_inline_filaments(n_bodies; strength, noise=false, noise_strength=0.1)
@@ -75,10 +75,10 @@ function generate_inline_filaments(n_bodies; strength, noise=false, noise_streng
     core_size = fill(1e-2, size(x,2))
     ε_tol = fill(1e-4, size(x,2))
     potential = zeros(length(strength_vec))
-    vector_field = zeros(SVector{3,Float64}, length(strength_vec))
-    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+    gradient = zeros(SVector{3,Float64}, length(strength_vec))
+    hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, vector_field, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
 end
 
 function refine_filaments(filaments::VortexFilaments, max_length)
@@ -124,10 +124,10 @@ function refine_filaments(filaments::VortexFilaments, max_length)
     core_size = fill(1e-2, size(refined_filaments,2))
     ε_tol = fill(1e-4, size(refined_filaments,2))
     potential = zeros(length(strength_vec))
-    vector_field = zeros(SVector{3,Float64}, length(strength_vec))
-    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+    gradient = zeros(SVector{3,Float64}, length(strength_vec))
+    hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(refined_filaments, strength_vec, core_size, ε_tol, potential, vector_field, gradient)
+    return VortexFilaments(refined_filaments, strength_vec, core_size, ε_tol, potential, gradient, hessian)
 end
 
 function total_length(filaments::VortexFilaments)
@@ -173,13 +173,14 @@ function generate_vortex_filaments(ntheta; nrings=2, r=1.0, dz=1.0, strength=1e-
     core_size = fill(1e-2, size(x,2))
     ε_tol = fill(1e-4, size(x,2))
     potential = zeros(length(strength_vec))
-    vector_field = zeros(SVector{3,Float64}, length(strength_vec))
-    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+    gradient = zeros(SVector{3,Float64}, length(strength_vec))
+    hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, vector_field, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
 end
 
-function generate_filament_field(n_filaments, length_scale; strength_scale=1/n_filaments)
+function generate_filament_field(n_filaments, length_scale, seed=123; strength_scale=1/n_filaments)
+    Random.seed!(seed)
     centers = rand(SVector{3,Float64}, n_filaments)
     pts = zeros(SVector{3,Float64}, 2, n_filaments)
     strength_vec= zeros(SVector{3,Float64}, n_filaments)
@@ -192,13 +193,13 @@ function generate_filament_field(n_filaments, length_scale; strength_scale=1/n_f
     end
 
     # create filaments
-    core_size = fill(1e-2, size(x,2))
-    ε_tol = fill(1e-4, size(x,2))
+    core_size = fill(1e-2, size(pts,2))
+    ε_tol = fill(1e-4, size(pts,2))
     potential = zeros(length(strength_vec))
-    vector_field = zeros(SVector{3,Float64}, length(strength_vec))
-    gradient = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
+    gradient = zeros(SVector{3,Float64}, length(strength_vec))
+    hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, vector_field, gradient)
+    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
 end
 
 function minimum_distance(x1, x2, P)
@@ -359,8 +360,8 @@ end
 function reset!(filaments::VortexFilaments)
     filaments.potential .= zero(eltype(filaments.potential))
     for i in eachindex(filaments.potential)
-        filaments.vector_field[i] = SVector{3,Float64}(0.0,0,0)
-        filaments.gradient[i] = zero(SMatrix{3,3,Float64,9})
+        filaments.gradient[i] = SVector{3,Float64}(0.0,0,0)
+        filaments.hessian[i] = zero(SMatrix{3,3,Float64,9})
     end
 end
 
@@ -405,11 +406,11 @@ FastMultipole.get_position(system::VortexFilaments, i) = (system.x[1,i] + system
 
 function FastMultipole.reset!(system::VortexFilaments)
     system.potential .= zero(eltype(system.potential))
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
-function FastMultipole.direct!(target_system, target_index, derivatives_switch::DerivativesSwitch{PS,VS,GS}, source_system::VortexFilaments, source_buffer, source_index) where {PS,VS,GS}
+function FastMultipole.direct!(target_system, target_index, derivatives_switch::DerivativesSwitch{PS,GS,HS}, source_system::VortexFilaments, source_buffer, source_index) where {PS,GS,HS}
     for i_source in source_index
         x1 = FastMultipole.get_vertex(source_buffer, source_system, i_source, 1)
         x2 = FastMultipole.get_vertex(source_buffer, source_system, i_source, 2)
@@ -419,7 +420,7 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch::
         for i_target in target_index
             xt = FastMultipole.get_position(target_system, i_target)
 
-            if VS
+            if GS
                 # determine sign of q
                 q_mag = norm(q) * sign(dot(q, x2-x1))
 
@@ -427,7 +428,7 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch::
                 # v = vortex_filament(x1,x2,xt,q_mag)
                 v = vortex_filament_finite_core_2(x1,x2,xt,q_mag,core_size)
                 # v = vortex_filament_gauss_compressed(x1,x2,xt,q_mag,core_size)
-                FastMultipole.set_vector_field!(target_system, i_target, v)
+                FastMultipole.set_gradient!(target_system, i_target, v)
             end
         end
     end
@@ -438,10 +439,10 @@ FastMultipole.body_to_multipole!(system::VortexFilaments, args...) = FastMultipo
 function FastMultipole.buffer_to_target_system!(target_system::VortexFilaments, i_target, derivatives_switch, target_buffer, i_buffer)
 
     # extract from buffer
-    vector_field = FastMultipole.get_vector_field(target_buffer, i_buffer)
+    gradient = FastMultipole.get_gradient(target_buffer, i_buffer)
 
     # load into system
-    target_system.vector_field[i_target] += vector_field
+    target_system.gradient[i_target] += gradient
 
 end
 
@@ -462,7 +463,7 @@ function viz_filament(fname, vortex_filaments::VortexFilaments)
     # save as VTK
     vtk_grid(fname, pts, lines) do vtk
         vtk["strength"] = vortex_filaments.strength
-        vtk["vector_field"] = vortex_filaments.vector_field
+        vtk["gradient"] = vortex_filaments.gradient
     end
 end
 
@@ -471,12 +472,12 @@ end
 filaments = generate_vortex_filaments(100; nrings=50, r=1.0, dz=10.0, strength=1e-2)
 
 direct!(filaments)
-v_direct = deepcopy(filaments.vector_field)
+v_direct = deepcopy(filaments.gradient)
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=10, multipole_threshold=0.5, expansion_order=10)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=10, multipole_acceptance=0.5, expansion_order=10)
 
-v_fmm = deepcopy(filaments.vector_field)
+v_fmm = deepcopy(filaments.gradient)
 
 @show maximum(norm.(v_fmm - v_direct))
 =#
@@ -492,7 +493,7 @@ max_length = l / n_bodies / 4
 refined_filaments = refine_filaments(filaments, max_length)
 
 direct!(filaments)
-v_direct = deepcopy(filaments.vector_field)
+v_direct = deepcopy(filaments.gradient)
 
 reset!(filaments)
 direct!(filaments, refined_filaments)
@@ -503,7 +504,7 @@ v_direct_r = deepcopy(filaments.force)
 expansion_order = 15
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_threshold=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
 
 v_fmm = deepcopy(filaments.force)
 
@@ -511,7 +512,7 @@ v_fmm = deepcopy(filaments.force)
 
 # try refined filaments
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments, refined_filaments; leaf_size_source=1, multipole_threshold=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments, refined_filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
 
 v_fmm_r = deepcopy(filaments.force)
 
@@ -536,7 +537,7 @@ v_direct = deepcopy(filaments.force)
 # @show maximum(norm.(v_direct - v_direct_r))
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_threshold=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
 
 v_fmm = deepcopy(filaments.force)
 
@@ -551,11 +552,11 @@ length_scale = 1.0 / n_filaments^(1/3)
 filaments = generate_filament_field(n_filaments, length_scale; strength_scale=1/n_filaments)
 
 # direct!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_threshold=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_acceptance=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
 v_direct = deepcopy(filaments.force)
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_threshold=0.4, expansion_order=10, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_acceptance=0.4, expansion_order=10, lamb_helmholtz=true, ε_abs=nothing)
 
 v_fmm = deepcopy(filaments.force)
 

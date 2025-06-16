@@ -285,6 +285,11 @@ function allocate_source_buffer(TF, system)
     return buffer
 end
 
+"""
+    allocate_buffers(systems::Tuple, target::Bool)
+
+Allocates buffers for the given systems. If `target` is `true`, it allocates space for position, scalar potential, gradient, and hessian matrix. Otherwise, it allocates enough memory for the user-defined `source_system_to_buffer!`.
+"""
 function allocate_buffers(systems::Tuple, target::Bool)
     # determine float type
     TF = Float32
@@ -302,6 +307,11 @@ function allocate_buffers(systems::Tuple, target::Bool)
     return buffers
 end
 
+"""
+    allocate_small_buffers(systems::Tuple; target=false)
+
+Allocates small buffers for the given systems. These buffers are used for temporary storage of body positions for octree sorting.
+"""
 function allocate_small_buffers(systems::Tuple; target=false)
     # determine float type
     TF = Float32
@@ -1315,7 +1325,7 @@ function initialize_expansions(expansion_order, n_branches, type=Float64)
     return zeros(type, 2, 2, ((expansion_order+1) * (expansion_order+2)) >> 1, n_branches)
 end
 
-function initialize_vector_field_n_m(expansion_order, type=Float64)
+function initialize_gradient_n_m(expansion_order, type=Float64)
     # incrememnt expansion order to make room for error predictions
     # expansion_order += 1
 

@@ -27,29 +27,29 @@ end
 harmonics = initialize_harmonics(expansion_order)
 derivatives_switch = DerivativesSwitch(true,true,true)
 lamb_helmholtz = Val(false)
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-u, vector_field, gradient = FastMultipole.evaluate_local(Δx, harmonics, vector_field_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+u, gradient, hessian = FastMultipole.evaluate_local(Δx, harmonics, gradient_n_m, local_expansion, expansion_order, lamb_helmholtz, derivatives_switch)
 
 dx = x_target - xs
 dx_norm = sqrt(dx'*dx)
 ϕ_test = mass/dx_norm/4/pi
-v_test = dx / norm(dx)^3 * mass / 4 / pi
-g_test = -SMatrix{3,3}(2*dx[1]^2 - dx[2]^2 - dx[3]^2, 3*dx[1]*dx[2], 3*dx[1]*dx[3], 3*dx[1]*dx[2], -dx[1]^2+2*dx[2]^2-dx[3]^2, 3*dx[2]*dx[3], 3*dx[1]*dx[3], 3*dx[2]*dx[3], -dx[1]^2 - dx[2]^2 + 2*dx[3]^2) / dx_norm^5 * mass / 4 / pi
+g_test = dx / norm(dx)^3 * mass / 4 / pi
+h_test = -SMatrix{3,3}(2*dx[1]^2 - dx[2]^2 - dx[3]^2, 3*dx[1]*dx[2], 3*dx[1]*dx[3], 3*dx[1]*dx[2], -dx[1]^2+2*dx[2]^2-dx[3]^2, 3*dx[2]*dx[3], 3*dx[1]*dx[3], 3*dx[2]*dx[3], -dx[1]^2 - dx[2]^2 + 2*dx[3]^2) / dx_norm^5 * mass / 4 / pi
 
 @test isapprox(u, ϕ_test; atol=1e-12)
-@test isapprox(vector_field, v_test; atol=1e-11)
-@test isapprox(gradient, g_test; atol=1e-9)
+@test isapprox(gradient, g_test; atol=1e-11)
+@test isapprox(hessian, h_test; atol=1e-9)
 
 # finite difference check on gradient
-function get_vector_field(xt, xs, mass)
+function get_gradient(xt, xs, mass)
     dx = xt - xs
     v = dx / norm(dx)^3 * mass / 4 / pi
     return v
 end
 
 h = 1e-7
-first_column = (get_vector_field(x_target+SVector{3}(h,0,0),xs,mass) - get_vector_field(x_target,xs,mass)) / h
+first_column = (get_gradient(x_target+SVector{3}(h,0,0),xs,mass) - get_gradient(x_target,xs,mass)) / h
 
-@test isapprox(first_column, g_test[1:3,1]; atol=1e-11)
+@test isapprox(first_column, h_test[1:3,1]; atol=1e-11)
 
 end

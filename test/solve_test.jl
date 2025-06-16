@@ -38,12 +38,12 @@ n_bodies = 10
 seed = 1234
 system = generate_gravitational(seed, n_bodies)
 
-direct!(system; scalar_potential=true, vector_field=false)
+direct!(system; scalar_potential=true, gradient=false)
 phi_desired = system.potential[1, :]
 
 #--- create FGS solver ---#
 
-fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=30)
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_acceptance=0.5, leaf_size=30)
 
 #--- check influence matrix ---#
 
@@ -75,12 +75,12 @@ n_bodies = 1000
 seed = 1234
 system = generate_gravitational(seed, n_bodies)
 
-direct!(system; scalar_potential=true, vector_field=false)
+direct!(system; scalar_potential=true, gradient=false)
 system.potential[1, :] .*= -1.0
 
 #--- create FGS solver ---#
 
-fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=100) # try with leaf_size=3 for sources with no non-self influence
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_acceptance=0.5, leaf_size=100) # try with leaf_size=3 for sources with no non-self influence
 
 #--- check self influence matrices ---#
 
@@ -163,13 +163,13 @@ seed = 1234
 system = generate_gravitational(seed, n_bodies)
 derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
 
-direct!(system; scalar_potential=true, vector_field=false)
+direct!(system; scalar_potential=true, gradient=false)
 phi_desired = system.potential[1, :]
 system.potential[1, :] .*= -1.0 # invert potential to compel FGS to compute strengths
 
 #--- create FGS solver ---#
 
-fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=100) # try with leaf_size=3 for sources with no non-self influence
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_acceptance=0.5, leaf_size=100) # try with leaf_size=3 for sources with no non-self influence
 
 #--- unpack containers ---#
 
@@ -182,7 +182,7 @@ nonself_matrices = fgs.nonself_matrices
 index_map = fgs.index_map
 m2l_list = fgs.m2l_list
 direct_list = fgs.direct_list
-multipole_threshold = fgs.multipole_threshold
+multipole_acceptance = fgs.multipole_acceptance
 lamb_helmholtz = fgs.lamb_helmholtz
 strengths = fgs.strengths
 strengths_by_leaf = fgs.strengths_by_leaf
@@ -317,7 +317,7 @@ seed = 123
 system = generate_gravitational(seed, n_bodies)
 derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (system,))
 
-direct!(system; scalar_potential=true, vector_field=false)
+direct!(system; scalar_potential=true, gradient=false)
 strengths_desired = [b.strength for b in system.bodies]
 phi_desired = system.potential[1, :]
 system.potential[1, :] .*= -1.0 # invert external potential to compel FGS to compute the original strengths
@@ -330,7 +330,7 @@ end
 
 #--- create FGS solver ---#
 
-fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_threshold=0.5, leaf_size=n_bodies, lamb_helmholtz=false, shrink_recenter=false) # try with leaf_size=3 for sources with no non-self influence
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_acceptance=0.5, leaf_size=n_bodies, lamb_helmholtz=false, shrink_recenter=false) # try with leaf_size=3 for sources with no non-self influence
 
 #--- test solve! ---#
 

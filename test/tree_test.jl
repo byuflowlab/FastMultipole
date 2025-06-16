@@ -33,7 +33,7 @@
     end
 
     # test branch! function
-    expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
+    expansion_order, leaf_size, multipole_acceptance = 2, SVector{1}(1), 0.5
     tree = FastMultipole.Tree((elements,), false; expansion_order, leaf_size, shrink_recenter=false)
 
     r1 = max(max(tree.branches[1].target_box[1],tree.branches[1].target_box[2]),tree.branches[1].target_box[3])
@@ -107,7 +107,7 @@
     @test isapprox(test_source_box, source_box; atol=1e-12)
 
     # test branch! function
-    expansion_order, leaf_size, multipole_threshold = 2, SVector{1}(1), 0.5
+    expansion_order, leaf_size, multipole_acceptance = 2, SVector{1}(1), 0.5
     tree = FastMultipole.Tree((elements,), false; expansion_order, leaf_size, shrink_recenter=true)
 
     # test branch 3-5 (leaf branches)

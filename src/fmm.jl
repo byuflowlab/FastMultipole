@@ -621,21 +621,21 @@ function downward_pass_singlethread_1!(tree::Tree{TF,<:Any}, expansion_order, la
     end
 end
 
-function downward_pass_singlethread_2!(tree::Tree{TF,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m) where TF
+function downward_pass_singlethread_2!(tree::Tree{TF,<:Any}, systems, expansion_order, lamb_helmholtz, derivatives_switches, gradient_n_m) where TF
 
     harmonics = initialize_harmonics(expansion_order)
     # loop over systems
     for (i_system, system) in enumerate(systems)
-        evaluate_local!(system, i_system, tree, harmonics, vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+        evaluate_local!(system, i_system, tree, harmonics, gradient_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
     end
 
 end
 
-@inline function downward_pass_singlethread!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m)
+@inline function downward_pass_singlethread!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, gradient_n_m)
 
     downward_pass_singlethread_1!(tree, expansion_order, lamb_helmholtz)
 
-    downward_pass_singlethread_2!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m)
+    downward_pass_singlethread_2!(tree, systems, expansion_order, lamb_helmholtz, derivatives_switches, gradient_n_m)
 
 end
 
@@ -739,7 +739,7 @@ function downward_pass_multithread_2!(tree::Tree{TF,<:Any}, systems, derivatives
     #--- preallocate memory ---#
 
     harmonics = [initialize_harmonics(expansion_order, TF) for _ in 1:n_threads]
-    vector_field_n_m = [initialize_vector_field_n_m(expansion_order, TF) for _ in 1:n_threads]
+    gradient_n_m = [initialize_gradient_n_m(expansion_order, TF) for _ in 1:n_threads]
 
     #--- compute multipole expansion coefficients ---#
 
@@ -747,10 +747,10 @@ function downward_pass_multithread_2!(tree::Tree{TF,<:Any}, systems, derivatives
         Threads.@threads for i_thread in 1:n_threads
             leaf_assignment = leaf_assignments[i_system,i_thread]
             these_harmonics = harmonics[i_thread]
-            these_vector_field_n_m = vector_field_n_m[i_thread]
+            these_gradient_n_m = gradient_n_m[i_thread]
             for i_leaf in leaf_assignment
                 i_branch = leaf_index[i_leaf]
-                evaluate_local!(system, i_system, tree, i_branch, these_harmonics, these_vector_field_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
+                evaluate_local!(system, i_system, tree, i_branch, these_harmonics, these_gradient_n_m, expansion_order, lamb_helmholtz, derivatives_switches)
             end
         end
     end
@@ -800,7 +800,11 @@ end
     return SVector{n}(input for _ in 1:n)
 end
 
-fmm!(system; optargs...) = fmm!(system, system; optargs...)
+@inline function to_vector(input::Tuple, n)
+    return SVector{n}(input...)
+end
+
+fmm!(system; leaf_size=20, optargs...) = fmm!(system, system; leaf_size_source=leaf_size, leaf_size_target=leaf_size, optargs...)
 
 function fmm!(target_systems, source_systems; optargs...)
     # promote arguments to Tuples
@@ -810,6 +814,51 @@ function fmm!(target_systems, source_systems; optargs...)
     return fmm!(target_systems, source_systems; optargs...)
 end
 
+"""
+    fmm!(target_systems::Tuple, source_systems::Tuple; optargs...)
+
+Dispatches `fmm!` with automatic tree creation.
+
+**Arguments**
+
+- `target_systems::Union{Tuple, {UserDefinedSystem}}`: either a system object for which compatibility functions have been overloaded, or a tuple of system objects for which compatibility functions have been overloaded
+- `source_systems::Union{Tuple, {UserDefinedSystem}}`: either a system object for which compatibility functions have been overloaded, or a tuple of system objects for which compatibility functions have been overloaded
+
+Note: a convenience function `fmm!(system)` is provided, which is equivalent to `fmm!(system, system)`.
+
+**Optional Arguments: Allocation**
+
+- `target_buffers::Vector{<:Any}`: buffers for target systems; if not provided, buffers are allocated using [`allocate_buffers`](@ref)
+- `target_small_buffers::Vector{<:Any}`: small buffers for target systems; if not provided, small buffers are allocated using [`allocate_small_buffers`](@ref)
+- `source_buffers::Vector{<:Any}`: buffers for source systems; if not provided, buffers are allocated using [`allocate_buffers`](@ref)
+- `source_small_buffers::Vector{<:Any}`: small buffers for source systems; if not provided, small buffers are allocated using [`allocate_small_buffers`](@ref)
+
+**Optional Arguments: Tuning Parameters**
+
+- `expansion_order::Int`: order of multipole expansions; default is 5
+- `multipole_acceptance::Float64`: acceptance criterion for multipole expansions; default is 0.4
+- `leaf_size_target::Union{Nothing,Int}`: leaf size for target systems; if not provided, the minimum of the source leaf sizes is used
+- `leaf_size_source::Union{Nothing,Int}`: leaf size for source systems; if not provided, the default leaf size is used
+- `ε_tol::Union{Nothing,ErrorMethod}`: error tolerance for multipole to local translations; if not provided, no error treatment is performed
+
+**Optional Arguments: Tree Options**
+
+- `shrink_recenter::Bool`: whether to shrink and recenter branches around their bodies, accounting for finite body radius; default is `true`
+- `interaction_list_method::InteractionListMethod`: method for building interaction lists; default is `SelfTuningTreeStop()`
+
+**Optional Arguments: Additional Options**
+
+- `farfield::Bool`: whether to compute farfield interactions; default is `true`
+- `nearfield::Bool`: whether to compute nearfield interactions; default is `true`
+- `self_induced::Bool`: whether to compute self-induced interactions; default is `true`
+- `upward_pass::Bool`: whether to perform the upward pass; default is `true`
+- `horizontal_pass::Bool`: whether to perform the horizontal pass; default is `true`
+- `downward_pass::Bool`: whether to perform the downward pass; default is `true`
+- `scalar_potential::Union{Bool,AbstractVector{Bool}}`: whether to compute the scalar potential; default is `false`
+- `gradient::Union{Bool,AbstractVector{Bool}}`: whether to compute the vector field; default is `true`
+- `hessian::Union{Bool,AbstractVector{Bool}}`: whether to compute the vector gradient; default is `false`
+
+"""
 function fmm!(target_systems::Tuple, source_systems::Tuple;
     target_buffers=allocate_buffers(target_systems, true), target_small_buffers = allocate_small_buffers(target_systems),
     source_buffers=allocate_buffers(source_systems, false), source_small_buffers = allocate_small_buffers(source_systems),
@@ -834,8 +883,8 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
 end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree;
-    leaf_size_source=default_leaf_size(source_systems), multipole_threshold=0.4,
-    scalar_potential=false, vector_field=true, vector_gradient=false,
+    leaf_size_source=default_leaf_size(source_systems), multipole_acceptance=0.4,
+    scalar_potential=false, gradient=true, hessian=false,
     farfield=true, nearfield=true, self_induced=true,
     interaction_list_method::InteractionListMethod=SelfTuningTreeStop(),
     t_source_tree=0.0, t_target_tree=0.0,
@@ -844,69 +893,30 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
 
     # promote derivative arguments to a vector
     scalar_potential = to_vector(scalar_potential, length(target_systems))
-    vector_field = to_vector(vector_field, length(target_systems))
-    vector_gradient = to_vector(vector_gradient, length(target_systems))
+    gradient = to_vector(gradient, length(target_systems))
+    hessian = to_vector(hessian, length(target_systems))
 
     # assemble derivatives switch
-    derivatives_switches = DerivativesSwitch(scalar_potential, vector_field, vector_gradient, target_systems)
+    derivatives_switches = DerivativesSwitch(scalar_potential, gradient, hessian, target_systems)
 
     # create interaction lists
     t_lists = @elapsed begin
-        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_threshold, farfield, nearfield, self_induced, interaction_list_method)
+        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_acceptance, farfield, nearfield, self_induced, interaction_list_method)
         m2l_list = sort_by_target(m2l_list, target_tree.branches)
         direct_list = sort_by_target(direct_list, target_tree.branches)
     end
 
     # run fmm
-    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches, interaction_list_method; multipole_threshold, t_source_tree, t_target_tree, t_lists, optargs...)
+    return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches, interaction_list_method; multipole_acceptance, t_source_tree, t_target_tree, t_lists, optargs...)
 end
 
-"""
-    fmm!(target_tree, target_systems, source_tree, source_systems, m2l_list, direct_list, derivatives_switches; kwargs...)
-
-Dispatches `fmm!` using existing `::Tree` objects. Note that systems should be unsorted, as they will be resorted into their trees here.
-
-# Arguments
-
-- `target_tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
-- `target_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-- `source_tree::Tree`: a `<:Tree` object (see [`Tree`](@ref))
-- `source_systems`: either
-
-    - a system object for which compatibility functions have been overloaded, or
-    - a tuple of system objects for which compatibility functions have been overloaded
-
-- `m2l_list::Vector{SVector{2,Int32}}`: list of branch index pairs `[i_target, i_source]` for which multipole expansions of the source branch are to be transformed to local expansions at the target branch
-- `direct_list::Union{Vector{SVector{2,Int32}}, InteractionList}`: list of branch index pairs `[i_target, i_source]` for which interactions are to be evaluted without multipole expansion (i.e., directly); if `typeof(direct_list) <: InteractionList`, then prepared influence matrices are used rather than computing direct influences on the fly
-- `derivatives_switches::Union{DerivativesSwitch, Tuple{<:DerivativesSwitch,...}}`: switch determining which of scalar potential, vector potential, vector field, and/or vector gradient are to be computed for each target system
-
-# Optional Arguments
-
-- `multipole_threshold::Float64`: number between 0 and 1 (often denoted theta in [0,1]) controls the accuracy by determining the non-dimensional distance after which multipoles are used; 0 means an infinite distance (no error, high cost), and 1 means barely convergent (high error, low cost)
-- `scalar_potential::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a scalar potential from `source_systems`
-- `vector_field::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector field from `source_systems`
-- `vector_gradient::Bool`: either a `::Bool` or a `::AbstractVector{Bool}` of length `length(target_systems)` indicating whether each system should receive a vector gradient from `source_systems`
-- `upward_pass::Bool`: whether or not to form the multipole expansions from source bodies and translate them upward in the source tree
-- `horizontal_pass::Bool`: whether or not to transform multipole expansions from the source tree into local expansions in the target tree
-- `downward_pass::Bool`: whether or not to translate local expansions down to the leaf level of the target tree and evaluate them
-- `nearfield::Bool`: indicates whether near-field (comuted without multipoles) interactions should be included
-- `farfield::Bool`: indicates whether far-field (comuted with multipoles) interactions should be included
-- `self_induced::Bool`: indicates whether to include the interactions of each leaf-level branch on itself
-- `unsort_source_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `source_systems`
-- `unsort_target_bodies::Bool`: indicates whether or not to undo the sort operation used to generate the octree for `target_systems`
-
-"""
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree, leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple, interaction_list_method::InteractionListMethod;
     expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=true,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
     nearfield_device::Bool=false,
-    tune=false, update_target_systems=true, multipole_threshold=0.5,
+    tune=false, update_target_systems=true, multipole_acceptance=0.5,
     t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
     silence_warnings=false,
 )
@@ -925,8 +935,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         WARNING_FLAG_ERROR[] = false
         WARNING_FLAG_SCALAR_POTENTIAL[] = false
         WARNING_FLAG_VECTOR_POTENTIAL[] = false
-        WARNING_FLAG_VECTOR_FIELD[] = false
-        WARNING_FLAG_VECTOR_GRADIENT[] = false
+        WARNING_FLAG_gradient[] = false
+        WARNING_FLAG_hessian[] = false
         WARNING_FLAG_STRENGTH[] = false
         WARNING_FLAG_B2M[] = false
         WARNING_FLAG_DIRECT[] = false
@@ -937,8 +947,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
         WARNING_FLAG_ERROR[] = true
         WARNING_FLAG_SCALAR_POTENTIAL[] = true
         WARNING_FLAG_VECTOR_POTENTIAL[] = true
-        WARNING_FLAG_VECTOR_FIELD[] = true
-        WARNING_FLAG_VECTOR_GRADIENT[] = true
+        WARNING_FLAG_gradient[] = true
+        WARNING_FLAG_hessian[] = true
         WARNING_FLAG_STRENGTH[] = true
         WARNING_FLAG_B2M[] = true
         WARNING_FLAG_DIRECT[] = true
@@ -1047,8 +1057,8 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                 t_dp = 0.0
                 if downward_pass
                     t_dp = @elapsed downward_pass_singlethread_1!(target_tree, expansion_order, lamb_helmholtz)
-                    t_dp += @elapsed vector_field_n_m = initialize_vector_field_n_m(expansion_order, eltype(target_tree.branches[1]))
-                    t_dp += @elapsed downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, vector_field_n_m)
+                    t_dp += @elapsed gradient_n_m = initialize_gradient_n_m(expansion_order, eltype(target_tree.branches[1]))
+                    t_dp += @elapsed downward_pass_singlethread_2!(target_tree, target_tree.buffers, expansion_order, lamb_helmholtz, derivatives_switches, gradient_n_m)
                 end
 
                 # copy results to target systems
@@ -1147,7 +1157,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     optimized_args = (
                        leaf_size_source = leaf_size_source,
                        expansion_order = max(expansion_order, 1),
-                       multipole_threshold = multipole_threshold,
+                       multipole_acceptance = multipole_acceptance,
                       )
 
     cache = (
@@ -1162,8 +1172,8 @@ end
 
 #--- estimate influence for relative error tolerance ---#
 
-@inline function get_influence(system::Matrix, j, ::Union{PowerRelativeVectorField, RotatedCoefficientsRelativeVectorField})
-    vx, vy, vz = get_vector_field(system, j)
+@inline function get_influence(system::Matrix, j, ::Union{PowerRelativeGradient, RotatedCoefficientsRelativeGradient})
+    vx, vy, vz = get_gradient(system, j)
     return sqrt(vx*vx + vy*vy + vz*vz)
 end
 
@@ -1180,9 +1190,9 @@ function estimate_influence!(target_systems, target_tree, source_systems, source
     #--- low-order estimate for relative error tolerance ---#
 
     _, _, estimate_tree, _ = fmm!(target_systems, source_systems; 
-        scalar_potential = true, vector_field = true, vector_gradient = false,
+        scalar_potential = true, gradient = true, hessian = false,
         leaf_size_source = to_vector(5, length(source_systems)),
-        expansion_order = 3, multipole_threshold = 0.6,
+        expansion_order = 3, multipole_acceptance = 0.6,
         ε_tol = nothing, shrink_recenter, nearfield_device,
         update_target_systems = false,
         silence_warnings = true
@@ -1206,7 +1216,7 @@ function estimate_influence!(target_systems, target_tree, source_systems, source
 
             # update influence
             set_scalar_potential!(buffer, j_buffer, get_scalar_potential(estimate, j_estimate))
-            set_vector_field!(buffer, j_buffer, get_vector_field(estimate, j_estimate))
+            set_gradient!(buffer, j_buffer, get_gradient(estimate, j_estimate))
 
         end        
     end

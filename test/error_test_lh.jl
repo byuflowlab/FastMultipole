@@ -8,12 +8,12 @@ include("bodytolocal.jl")
 
 function flatten_derivatives!(jacobian)
     # vector field
-    vector_field = zeros(3)
-    vector_field[1] = jacobian[2,3] - jacobian[3,2]
-    vector_field[2] = jacobian[3,1] - jacobian[1,3]
-    vector_field[3] = jacobian[1,2] - jacobian[2,1]
+    gradient = zeros(3)
+    gradient[1] = jacobian[2,3] - jacobian[3,2]
+    gradient[2] = jacobian[3,1] - jacobian[1,3]
+    gradient[3] = jacobian[1,2] - jacobian[2,1]
 
-    return vector_field
+    return gradient
 end
 
 function Snm(r,θ,ϕ,n,m)
@@ -902,9 +902,9 @@ function local_check(x_target, dx_local, source_system::VortexParticles; seed=12
     eimϕs = zeros(Float64, 2, expansion_order+11)
     weights_tmp_1 = initialize_expansion(expansion_order+10, Float64)
     weights_tmp_2 = initialize_expansion(expansion_order+10, Float64)
-    vector_field_n_m = zeros(2,3,size(target_branch.local_expansion,3))
+    gradient_n_m = zeros(2,3,size(target_branch.local_expansion,3))
     FastMultipole.multipole_to_local!(target_branch, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, FastMultipole.ζs_mag, FastMultipole.ηs_mag, FastMultipole.Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order+10, Val(true))
-    _, v_l_check, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
+    _, v_l_check, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
 
     local_expansion_check = deepcopy(target_branch.local_expansion)
     target_branch.local_expansion .= 0.0
@@ -918,17 +918,17 @@ function local_check(x_target, dx_local, source_system::VortexParticles; seed=12
     # branch.multipole_expansion[:,2,:] .= 0.0 # we are testing just ϕ
 
     # evaluate expansion
-    _, v, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
-    _, vtrue, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(false,true,false))
+    _, v, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(false,true,false))
+    _, vtrue, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(false,true,false))
 
     this_L = deepcopy(target_branch.local_expansion)
     target_branch.local_expansion[:,2,:] .= 0.0
-    _, v_ϕonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(true,true,false))
-    _, vtrue_ϕonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(true,true,false))
+    _, v_ϕonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(true,true,false))
+    _, vtrue_ϕonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(true,true,false))
     target_branch.local_expansion .= this_L
     target_branch.local_expansion[:,1,:] .= 0.0
-    _, v_χonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(true,true,false))
-    _, vtrue_χonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, vector_field_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(true,true,false))
+    _, v_χonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order), Val(true), DerivativesSwitch(true,true,false))
+    _, vtrue_χonly, _ = FastMultipole.evaluate_local(x_target-target_center, target_branch.harmonics, gradient_n_m, target_branch.local_expansion, Val(expansion_order+20), Val(true), DerivativesSwitch(true,true,false))
     target_branch.local_expansion .= this_L
 
     # check vector field

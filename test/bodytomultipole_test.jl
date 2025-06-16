@@ -2,17 +2,17 @@ struct SourcePoints{TF}
     x::Vector{SVector{3,TF}}
     strength::Vector{TF}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function SourcePoints(x, strength::Vector{TF};
         potential = zeros(length(strength)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return SourcePoints(x, strength, potential, vector_field, gradient)
+    return SourcePoints(x, strength, potential, gradient, hessian)
 end
 
 Base.eltype(::SourcePoints{TF}) where TF = TF
@@ -26,8 +26,8 @@ FastMultipole.data_per_body(::SourcePoints) = 5
 
 function FastMultipole.reset!(system::SourcePoints{TF}) where TF
     system.potential .= zero(TF)
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 FastMultipole.strength_dims(::SourcePoints) = 1
@@ -40,17 +40,17 @@ struct SourceFilaments{TF}
     x::Matrix{SVector{3,TF}}
     strength::Vector{TF}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function SourceFilaments(x, strength::Vector{TF};
         potential = zeros(size(x,2)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return SourceFilaments(x, strength, potential, vector_field, gradient)
+    return SourceFilaments(x, strength, potential, gradient, hessian)
 end
 
 Base.eltype(::SourceFilaments{TF}) where TF = TF
@@ -67,8 +67,8 @@ FastMultipole.data_per_body(::SourceFilaments) = 11
 
 function FastMultipole.reset!(system::SourceFilaments{TF}) where TF
     system.potential .= zero(TF)
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 FastMultipole.strength_dims(::SourceFilaments) = 1
@@ -81,17 +81,17 @@ struct SourcePanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
     strength::Vector{TF}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function SourcePanels(x, strength::Vector{TF};
         potential = zeros(length(x)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return SourcePanels(x, strength, potential, vector_field, gradient)
+    return SourcePanels(x, strength, potential, gradient, hessian)
 end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::SourcePanels, i_body)
@@ -107,8 +107,8 @@ FastMultipole.data_per_body(::SourcePanels) = 16
 
 function FastMultipole.reset!(system::SourcePanels{TF}) where TF
     system.potential .= zero(TF)
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 FastMultipole.strength_dims(::SourcePanels) = 1
@@ -123,17 +123,17 @@ struct DipolePoints{TF}
     x::Vector{SVector{3,TF}}
     strength::Vector{SVector{3,TF}}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function DipolePoints(x, strength::Vector{SVector{3,TF}};
         potential = zeros(length(strength)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return DipolePoints(x, strength, potential, vector_field, gradient)
+    return DipolePoints(x, strength, potential, gradient, hessian)
 end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipolePoints, i_body)
@@ -151,8 +151,8 @@ end
 
 function FastMultipole.reset!(system::DipolePoints)
     system.potential .= zero(eltype(system))
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 function FastMultipole.get_position(system::DipolePoints, i)
@@ -171,17 +171,17 @@ struct DipoleFilaments{TF}
     x::Matrix{SVector{3,TF}}
     strength::Vector{SVector{3,TF}}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function DipoleFilaments(x, strength::Vector{SVector{3,TF}};
         potential = zeros(size(x,2)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return DipoleFilaments(x, strength, potential, vector_field, gradient)
+    return DipoleFilaments(x, strength, potential, gradient, hessian)
 end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipoleFilaments, i_body)
@@ -202,8 +202,8 @@ end
 
 function FastMultipole.reset!(system::DipoleFilaments)
     system.potential .= zero(eltype(system))
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 function FastMultipole.get_position(system::DipoleFilaments, i)
@@ -222,17 +222,17 @@ struct DipolePanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
     strength::Vector{SVector{1,TF}}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function DipolePanels(x, strength::Vector{SVector{1,TF}};
         potential = zeros(length(x)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return DipolePanels(x, strength, potential, vector_field, gradient)
+    return DipolePanels(x, strength, potential, gradient, hessian)
 end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::DipolePanels, i_body)
@@ -254,8 +254,8 @@ end
 
 function FastMultipole.reset!(system::DipolePanels)
     system.potential .= zero(eltype(system))
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 function FastMultipole.get_position(system::DipolePanels, i)
@@ -274,17 +274,17 @@ struct Vortons{TF}
     position::Vector{SVector{3,TF}}
     strength::Vector{SVector{3,TF}}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function Vortons(position::Vector{SVector{3,TF}}, strength;
         potential = zeros(length(position)),
-        vector_field = zeros(SVector{3,TF},length(position)),
-        gradient = zeros(SMatrix{3,3,TF,9},length(position))
+        gradient = zeros(SVector{3,TF},length(position)),
+        hessian = zeros(SMatrix{3,3,TF,9},length(position))
     ) where TF
 
-    return Vortons(position, strength, potential, vector_field, gradient)
+    return Vortons(position, strength, potential, gradient, hessian)
 end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::Vortons, i_body)
@@ -308,17 +308,17 @@ struct VortexPanels{TF}
     x::Vector{SVector{3,SVector{3,TF}}} # vector of groups of 3 vertices
     strength::Vector{SVector{3,TF}}
     potential::Vector{TF}
-    vector_field::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 
 function VortexPanels(x, strength::Vector{SVector{3,TF}};
         potential = zeros(length(x)),
-        vector_field = zeros(SVector{3,TF},size(x,2)),
-        gradient = zeros(SMatrix{3,3,TF,9},size(x,2))
+        gradient = zeros(SVector{3,TF},size(x,2)),
+        hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return VortexPanels(x, strength, potential, vector_field, gradient)
+    return VortexPanels(x, strength, potential, gradient, hessian)
 end
 
 function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::VortexPanels, i_body)
@@ -344,8 +344,8 @@ FastMultipole.get_position(system::VortexPanels, i) = (system.x[i][1] + system.x
 
 function FastMultipole.reset!(system::VortexPanels)
     system.potential .= zero(eltype(system.potential))
-    system.vector_field .= zero(eltype(system.vector_field))
     system.gradient .= zero(eltype(system.gradient))
+    system.hessian .= zero(eltype(system.hessian))
 end
 
 function Branch(bodies_index::UnitRange, n_branches, branch_index, i_parent, i_leaf_index, source_center, target_center, source_radius, target_radius, source_box, target_box)
@@ -435,8 +435,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(false)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(x_target - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(x_target - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 @test isapprox(v_l2b, v_analytic; atol=1e-12)
 
@@ -445,8 +445,8 @@ target_branch_2 = deepcopy(target_branch)
 target_expansion_2 = initialize_expansion(expansion_order)
 body_to_local_point!(Point{Source}, target_expansion_2, harmonics, masses.bodies[1].position - target_branch_2.target_center, masses.bodies[1].strength, expansion_order)
 
-vector_field_n_m .= 0.0
-ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(x_target - target_center, harmonics, vector_field_n_m, target_expansion_2, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m .= 0.0
+ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(x_target - target_center, harmonics, gradient_n_m, target_expansion_2, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 @test isapprox(v_l2b_2, v_analytic; atol=1e-12)
 
@@ -502,8 +502,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(false)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-vector_field_n_m = zeros(2,3,size(harmonics,3))
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m = zeros(2,3,size(harmonics,3))
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 # analytic
 q = FastMultipole.get_strength(buffer,system,1)
@@ -579,8 +579,8 @@ lamb_helmholtz = Val(true)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
 # evaluate at target
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 # evaluate multipole at target
 ϕ_m2b, v_m2b, g_m2b = evaluate_multipole(xt, branch.source_center, multipole_expansion, DerivativesSwitch(true,true,false), expansion_order, lamb_helmholtz)
@@ -592,8 +592,8 @@ vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
 target_branch_2 = deepcopy(target_branch)
 target_expansion_2 = initialize_expansion(expansion_order)
 body_to_local_point!(Point{Vortex}, target_expansion_2, harmonics, FastMultipole.get_position(system,1) - target_branch_2.target_center, FastMultipole.get_strength(buffer,system,1), expansion_order)
-vector_field_n_m .= 0.0
-ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion_2, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m .= 0.0
+ϕ_l2b_2, v_l2b_2, g_l2b_2 = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion_2, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 @test isapprox(v_l2b_2, v_l2b; atol=1e-12)
 @test isapprox(g_l2b_2, g_l2b; atol=1e-11)
@@ -605,12 +605,12 @@ gamma_over_R = q / r / (4*pi)
 
 function flatten_derivatives!(jacobian)
     # vector
-    vector_field = zeros(3)
-    vector_field[1] = jacobian[2,3] - jacobian[3,2]
-    vector_field[2] = jacobian[3,1] - jacobian[1,3]
-    vector_field[3] = jacobian[1,2] - jacobian[2,1]
+    gradient = zeros(3)
+    gradient[1] = jacobian[2,3] - jacobian[3,2]
+    gradient[2] = jacobian[3,1] - jacobian[1,3]
+    gradient[3] = jacobian[1,2] - jacobian[2,1]
 
-    return vector_field
+    return gradient
 end
 
 jacobian = zeros(3,3)
@@ -891,8 +891,8 @@ FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 lamb_helmholtz = Val(true)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, Val(true), DerivativesSwitch())
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, Val(true), DerivativesSwitch())
 
 @test isapprox(v_check, v_l2b; atol=1e-12)
 
@@ -973,8 +973,8 @@ lamb_helmholtz = Val(false)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 FastMultipole.multipole_to_local!(target_expansion_point, target_branch_point, expansion_point, branch_point, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 # repeat for point
 Hs_π2 = [1.0]
@@ -989,7 +989,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-ϕ_point, v_point, g_point = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion_point, expansion_order, lamb_helmholtz, DerivativesSwitch())
+ϕ_point, v_point, g_point = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion_point, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 @test isapprox(v_check, v_l2b; atol=1e-12)
 
@@ -1072,8 +1072,8 @@ lamb_helmholtz = Val(false)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 FastMultipole.multipole_to_local!(target_expansion_point, target_branch_point, expansion_point, branch_point, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 # repeat for point
 Hs_π2 = [1.0]
@@ -1088,7 +1088,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-ϕ_point, v_point, g_point = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion_point, expansion_order, lamb_helmholtz, DerivativesSwitch())
+ϕ_point, v_point, g_point = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion_point, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 @test isapprox(v_check, v_l2b; atol=1e-12)
 
@@ -1188,8 +1188,8 @@ lamb_helmholtz = Val(true)
 FastMultipole.multipole_to_local!(target_expansion, target_branch, multipole_expansion, branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 FastMultipole.multipole_to_local!(target_expansion_point, target_branch_point, expansion_point, branch_point, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, FastMultipole.M̃, FastMultipole.L̃, expansion_order, lamb_helmholtz)
 
-vector_field_n_m = FastMultipole.initialize_vector_field_n_m(expansion_order)
-ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
+gradient_n_m = FastMultipole.initialize_gradient_n_m(expansion_order)
+ϕ_l2b, v_l2b, g_l2b = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 # repeat for point
 Hs_π2 = [1.0]
@@ -1204,7 +1204,7 @@ FastMultipole.update_ζs_mag!(ζs_mag, 0, expansion_order)
 ηs_mag = zeros(FastMultipole.length_ηs(expansion_order))
 FastMultipole.update_ηs_mag!(ηs_mag, 0, expansion_order)
 
-ϕ_point, v_point, g_point = FastMultipole.evaluate_local(xt - target_center, harmonics, vector_field_n_m, target_expansion_point, expansion_order, lamb_helmholtz, DerivativesSwitch())
+ϕ_point, v_point, g_point = FastMultipole.evaluate_local(xt - target_center, harmonics, gradient_n_m, target_expansion_point, expansion_order, lamb_helmholtz, DerivativesSwitch())
 
 @test isapprox(v_check, v_l2b; atol=1e-12)
 

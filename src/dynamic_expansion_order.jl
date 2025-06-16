@@ -153,7 +153,7 @@ end
 #     return PMAX
 # end
 
-# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::UniformCubesVectorField, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
+# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::UniformCubesGradient, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
 
 #     #--- extract fields ---#
 
@@ -283,7 +283,7 @@ end
 #     return PMAX
 # end
 
-# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::LambHelmholtzΧVectorField, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
+# function get_P(Δx, Δy, Δz, target_branch, source_branch, ::Dynamic{PMAX,ε}, error_method::LambHelmholtzΧGradient, ::Val{check_dipole}) where {PMAX,ε,check_dipole}
 
 #     #--- extract fields ---#
 

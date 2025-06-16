@@ -355,7 +355,7 @@ end
 
 #------- try more efficient error predictors -------#
 
-function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsAbsoluteVectorField) where LH
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsAbsoluteGradient) where LH
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -546,7 +546,7 @@ function predict_error(target_branch, source_weights, source_branch, weights_tmp
     return ε_mp_power * ONE_OVER_4π, ε_l_power * ONE_OVER_4π
 end
 
-function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteVectorField) where LH
+function predict_error(target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerAbsoluteGradient) where LH
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center

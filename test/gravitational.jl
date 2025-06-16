@@ -8,8 +8,8 @@ const i_POSITION = 1:3
 const i_RADIUS = 4
 const i_STRENGTH = 5:8
 const i_POTENTIAL = 1:4
-const i_VECTOR_FIELD = 5:7
-const i_VECTOR_GRADIENT = 8:16
+const i_gradient = 5:7
+const i_hessian = 8:16
 
 #------- gravitational kernel and mass elements -------#
 
@@ -92,7 +92,7 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
                 dϕ = source_strength / r * FastMultipole.ONE_OVER_4π
                 FastMultipole.set_scalar_potential!(target_system, j_target, dϕ)
                 dF = SVector{3}(dx,dy,dz) * source_strength / (r2 * r) * FastMultipole.ONE_OVER_4π
-                FastMultipole.set_vector_field!(target_system, j_target, dF)
+                FastMultipole.set_gradient!(target_system, j_target, dF)
             end
         # end
         # if te > 0.00001; nbad += 1; end
@@ -101,17 +101,17 @@ function FastMultipole.direct!(target_system, target_index, derivatives_switch, 
     # println("nbad = $nbad")
 end
 
-function FastMultipole.buffer_to_target_system!(target_system::Gravitational, i_target, ::FastMultipole.DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
+function FastMultipole.buffer_to_target_system!(target_system::Gravitational, i_target, ::FastMultipole.DerivativesSwitch{PS,GS,HS}, target_buffer, i_buffer) where {PS,GS,HS}
     # get values
     TF = eltype(target_buffer)
     scalar_potential = PS ? FastMultipole.get_scalar_potential(target_buffer, i_buffer) : zero(TF)
-    vector_field = VS ? FastMultipole.get_vector_field(target_buffer, i_buffer) : zero(SVector{3,TF})
-    vector_gradient = GS ? FastMultipole.get_vector_field_gradient(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
+    gradient = GS ? FastMultipole.get_gradient(target_buffer, i_buffer) : zero(SVector{3,TF})
+    hessian = HS ? FastMultipole.get_hessian(target_buffer, i_buffer) : zero(SMatrix{3,3,TF,9})
 
     # update system
     target_system.potential[i_POTENTIAL[1], i_target] = scalar_potential
-    target_system.potential[i_VECTOR_FIELD, i_target] .= vector_field
-    for (jj,j) in enumerate(i_VECTOR_GRADIENT)
-        target_system.potential[j, i_target] = vector_gradient[jj]
+    target_system.potential[i_gradient, i_target] .= gradient
+    for (jj,j) in enumerate(i_hessian)
+        target_system.potential[j, i_target] = hessian[jj]
     end
 end

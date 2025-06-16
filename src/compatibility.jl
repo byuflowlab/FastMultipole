@@ -99,7 +99,7 @@ function body_to_multipole!(system, multipole_coefficients, buffer, expansion_ce
 end
 
 """
-    direct!(target_buffer, target_index, derivatives_switch::DerivativesSwitch{PS,VS,GS}, ::{UserDefinedSystem}, source_buffer, source_index) where {PS,VS,GS}
+    direct!(target_buffer, target_index, derivatives_switch::DerivativesSwitch{PS,GS,HS}, ::{UserDefinedSystem}, source_buffer, source_index) where {PS,GS,HS}
 
 Calculates direct (nearfield) interactions of `source_system` on `target_buffer`. Should be overloaded or each user-defined system object (where `{UserDefinedSystem}` is replaced with the type of the user-defined system), for all source bodies in `source_index`, at all target bodies in `target_index`, as follows:
 
@@ -121,11 +121,11 @@ for i_source in source_index
         if PS
             set_scalar_potential!(target_buffer, i_target, scalar_potential)
         end
-        if VS
-            set_vector_field!(target_buffer, i_target, vector_field)
-        end
         if GS
-            set_vector_gradient!(target_buffer, i_target, vector_gradient)
+            set_gradient!(target_buffer, i_target, gradient)
+        end
+        if HS
+            set_hessian!(target_buffer, i_target, hessian)
         end
 
     end
@@ -140,7 +140,7 @@ The following convenience getter functions are available for accessing the sourc
 * `get_strength(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int)`: returns an SVector containing the strength of the `i_body` body
 * `get_vertex(source_buffer::Matrix, source_system::{UserDefinedSystem}, i_body::Int, i_vertex::Int)`: returns an SVector containing the x, y, and z coordinates of the `i_vertex` vertex of the `i_body` body
 
-Note also that the compile time parameters `PS`, `VS`, and `GS` are used to determine whether the scalar potential and vector field should be computed, respectively. This allows us to skip unnecessary calculations and improve performance.
+Note also that the compile time parameters `PS`, `GS`, and `HS` are used to determine whether the scalar potential and vector field should be computed, respectively. This allows us to skip unnecessary calculations and improve performance.
 
 """
 function direct!(target_buffer, target_index, derivatives_switch, source_system, source_buffer, source_index)
@@ -152,7 +152,7 @@ function direct!(target_buffer, target_index, derivatives_switch, source_system,
 end
 
 """
-    buffer_to_target_system!(target_system::{UserDefinedSystem}, i_target, ::DerivativesSwitch{PS,VS,GS}, target_buffer, i_buffer) where {PS,VS,GS}
+    buffer_to_target_system!(target_system::{UserDefinedSystem}, i_target, ::DerivativesSwitch{PS,GS,HS}, target_buffer, i_buffer) where {PS,GS,HS}
 
 Compatibility function used to update target systems. It should be overloaded for each system (where `{UserDefinedSystem}` is replaced with the type of the user-defined system) to be a target and should behave as follows. For the `i_body`th body contained inside of `target_system`,
 
@@ -165,10 +165,10 @@ Note that any system acting only as a source (and not as a target) need not over
 The following convenience functions can may be used to access the buffer:
 
 * `get_scalar_potential(target_buffer, i_buffer::Int)`: returns the scalar potential induced at the `i_buffer` body in `target_buffer`
-* `get_vector_field(target_buffer, i_buffer::Int)`: returns an SVector of length 3 containing the vector field induced at the `i_buffer` body in `target_buffer`
-* `get_vector_field_gradient(target_buffer, i_buffer::Int)`: returns an SMatrix of size 3x3 containing the vector gradient induced at the `i_buffer` body in `target_buffer`
+* `get_gradient(target_buffer, i_buffer::Int)`: returns an SVector of length 3 containing the vector field induced at the `i_buffer` body in `target_buffer`
+* `get_hessian(target_buffer, i_buffer::Int)`: returns an SMatrix of size 3x3 containing the vector gradient induced at the `i_buffer` body in `target_buffer`
 
-For some slight performance improvements, the booleans `PS`, `VS`, and `GS` can be used as a switch to indicate whether the scalar potential, vector field, and vector gradient are to be stored, respectively. Since they are compile-time parameters, `if` statements relying on them will not incur a runtime cost.
+For some slight performance improvements, the booleans `PS`, `GS`, and `HS` can be used as a switch to indicate whether the scalar potential, vector field, and vector gradient are to be stored, respectively. Since they are compile-time parameters, `if` statements relying on them will not incur a runtime cost.
 
 """
 function buffer_to_target_system!(target_system, i_target, derivatives_switch, target_buffer, i_buffer)
@@ -176,7 +176,7 @@ function buffer_to_target_system!(target_system, i_target, derivatives_switch, t
 end
 
 """
-    target_influence_to_buffer!(target_buffer, i_buffer, ::DerivativesSwitch{PS,VS,GS}, target_system::{UserDefinedSystem}, i_target) where {PS,VS,GS}
+    target_influence_to_buffer!(target_buffer, i_buffer, ::DerivativesSwitch{PS,GS,HS}, target_system::{UserDefinedSystem}, i_target) where {PS,GS,HS}
 
 **NOTE:** this function is primarily used for the boundary element solver, and is not required for the FMM.
 
@@ -189,8 +189,8 @@ Updates the `target_buffer` with influences from `target_system` for the `i_targ
 The following convenience functions can may be used to access the buffer:
 
 * `set_scalar_potential!(target_buffer, i_buffer, scalar_potential)`: accumulates the `scalar_potential` to the `i_buffer` body in `target_buffer`
-* `set_vector_field!(target_buffer, i_buffer, vector_field)`: accumulates `vector_field` to the `i_buffer` body in `target_buffer`
-* `set_vector_gradient!(target_buffer, i_buffer, vector_gradient)`: accumulates `vector_gradient` to the `i_buffer` body in `target_buffer`
+* `set_gradient!(target_buffer, i_buffer, gradient)`: accumulates `gradient` to the `i_buffer` body in `target_buffer`
+* `set_hessian!(target_buffer, i_buffer, hessian)`: accumulates `hessian` to the `i_buffer` body in `target_buffer`
 
 """
 function target_influence_to_buffer!(target_buffer, i_buffer, derivatives_switch, target_system, i_target)
@@ -426,9 +426,9 @@ end
 
 get_scalar_potential(system::AbstractMatrix, i) = @inbounds system[4, i]
 
-get_vector_field(system::AbstractMatrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
+get_gradient(system::AbstractMatrix{TF}, i) where TF = @inbounds SVector{3,TF}(system[5,i], system[6,i], system[7,i])
 
-get_vector_field_gradient(system::AbstractMatrix{TF}, i) where TF =
+get_hessian(system::AbstractMatrix{TF}, i) where TF =
     @inbounds SMatrix{3,3,TF,9}(system[8, i], system[9, i], system[10, i],
     system[11, i], system[12, i], system[13, i],
     system[14, i], system[15, i], system[16, i])
@@ -448,33 +448,33 @@ function set_scalar_potential!(system::Matrix, i, scalar_potential)
 end
 
 """
-    set_vector_field!(target_buffer, i_body, vector_field)
+    set_gradient!(target_buffer, i_body, gradient)
 
-Accumulates `vector_field` to `target_buffer`.
+Accumulates `gradient` to `target_buffer`.
 
 """
-function set_vector_field!(system::Matrix, i, vector_field)
-    @inbounds system[5,i] += vector_field[1]
-    @inbounds system[6,i] += vector_field[2]
-    @inbounds system[7,i] += vector_field[3]
+function set_gradient!(system::Matrix, i, gradient)
+    @inbounds system[5,i] += gradient[1]
+    @inbounds system[6,i] += gradient[2]
+    @inbounds system[7,i] += gradient[3]
 end
 
 """
-    set_vector_gradient!(target_buffer, i_body, vector_gradient)
+    set_hessian!(target_buffer, i_body, hessian)
 
-Accumulates `vector_gradient` to `target_buffer`.
+Accumulates `hessian` to `target_buffer`.
 
 """
-function set_vector_gradient!(system::Matrix, i, vector_gradient)
-    @inbounds system[8, i] += vector_gradient[1]
-    @inbounds system[9, i] += vector_gradient[2]
-    @inbounds system[10, i] += vector_gradient[3]
-    @inbounds system[11, i] += vector_gradient[4]
-    @inbounds system[12, i] += vector_gradient[5]
-    @inbounds system[13, i] += vector_gradient[6]
-    @inbounds system[14, i] += vector_gradient[7]
-    @inbounds system[15, i] += vector_gradient[8]
-    @inbounds system[16, i] += vector_gradient[9]
+function set_hessian!(system::Matrix, i, hessian)
+    @inbounds system[8, i] += hessian[1]
+    @inbounds system[9, i] += hessian[2]
+    @inbounds system[10, i] += hessian[3]
+    @inbounds system[11, i] += hessian[4]
+    @inbounds system[12, i] += hessian[5]
+    @inbounds system[13, i] += hessian[6]
+    @inbounds system[14, i] += hessian[7]
+    @inbounds system[15, i] += hessian[8]
+    @inbounds system[16, i] += hessian[9]
 end
 
 #--- auxilliary functions ---#
