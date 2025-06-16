@@ -4,8 +4,6 @@
 
 **Author**: Ryan Anderson
 
-Hello, there!
-
 **Features**:
 
 * solves ``N``-body problems governed by the Laplace (``1/r``) kernel, with work planned to support the Helmholtz kernel in the future
