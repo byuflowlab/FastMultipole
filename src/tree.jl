@@ -396,9 +396,20 @@ function child_branches_level!(branches, buffers, sort_index, small_buffers, sor
 
                         # remove sub branches if this is the last level
                         if last_level
-                            (; n_bodies, bodies_index, n_branches, branch_index, i_parent, 
-                                i_leaf, source_center, target_center, source_radius, target_radius, 
-                                source_box, target_box, lock, max_influence) = child_branch
+                            n_bodies = child_branch.n_bodies
+                            bodies_index = child_branch.bodies_index
+                            n_branches = child_branch.n_branches
+                            branch_index = child_branch.branch_index
+                            i_parent = child_branch.i_parent
+                            i_leaf = child_branch.i_leaf
+                            source_center = child_branch.source_center
+                            target_center = child_branch.target_center
+                            source_radius = child_branch.source_radius
+                            target_radius = child_branch.target_radius
+                            source_box = child_branch.source_box
+                            target_box = child_branch.target_box
+                            max_influence = child_branch.max_influence
+
                             branch_index = 1:0
                             child_branch = typeof(child_branch)(n_bodies, bodies_index, n_branches, 
                                 branch_index, i_parent, i_leaf, source_center, target_center, 

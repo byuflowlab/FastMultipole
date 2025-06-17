@@ -25,7 +25,8 @@ function FastMultipole.strength_to_value(strength, ::Gravitational)
 end
 
 function FastMultipole.buffer_to_system_strength!(system::Gravitational, i_body, source_buffer, i_buffer)
-    (; position, radius) = system.bodies[i_body]
+    position = system.bodies[i_body].position
+    radius = system.bodies[i_body].radius
     strength = source_buffer[5, i_buffer]
     system.bodies[i_body] = eltype(system.bodies)(position, radius, strength)
 end
@@ -324,7 +325,8 @@ system.potential[1, :] .*= -1.0 # invert external potential to compel FGS to com
 
 # perturb strengths slightly
 for i in eachindex(system.bodies)
-    (; position, radius, strength) = system.bodies[i]
+    position = system.bodies[i].position
+    radius = system.bodies[i].radius
     system.bodies[i] = eltype(system.bodies)(position, radius, strength + round(strength, sigdigits=1)*100*(rand()-0.5))
 end
 
