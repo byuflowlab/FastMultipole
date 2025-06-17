@@ -327,6 +327,7 @@ system.potential[1, :] .*= -1.0 # invert external potential to compel FGS to com
 for i in eachindex(system.bodies)
     position = system.bodies[i].position
     radius = system.bodies[i].radius
+    strength = system.bodies[i].strength
     system.bodies[i] = eltype(system.bodies)(position, radius, strength + round(strength, sigdigits=1)*100*(rand()-0.5))
 end
 

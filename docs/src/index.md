@@ -27,5 +27,3 @@ pkg> add https://github.com/byuflowlab/FastMultipole.git
 * discover more features in the [Guided Examples](guided_examples.md)
 * fine-tune performance in the [Advanced Usage](advanced_usage.md) section (for FMM experts)
 * see the full [API](reference.md)
-<!-- * brush up on the [Theory](theory.md) -->
-
