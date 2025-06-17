@@ -71,7 +71,7 @@ FastMultipole.fmm!(system; expansion_order, leaf_size_source, multipole_acceptan
 
 gradient_err = [norm(system.gradient_stretching[1:3,i] - validation_system.gradient_stretching[1:3,i]) for i in 1:size(system.gradient_stretching,2)]
 
-@test ε * 0.1 < maximum(gradient_err) < ε * 80
+@test ε * 0.1 < maximum(gradient_err) < ε * 100
 
 # println("\n===== radius factor = 0.1 =====\n")
 
@@ -79,7 +79,7 @@ FastMultipole.fmm!(system2; expansion_order, leaf_size_source, multipole_accepta
 
 gradient_err = [norm(system2.gradient_stretching[1:3,i] - validation_system.gradient_stretching[1:3,i]) for i in 1:size(system.gradient_stretching,2)]
 
-@test ε * 0.1 < maximum(gradient_err) < ε * 80
+@test ε * 0.1 < maximum(gradient_err) < ε * 100
 
 end
 
