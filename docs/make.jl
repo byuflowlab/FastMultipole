@@ -12,7 +12,7 @@ makedocs(;
     authors="Ryan Anderson <rymanderson@gmail.com> and contributors",
     sitename="FastMultipole.jl",
     format=Documenter.HTML(;
-        canonical="https://flow.byu.edu/FastMultipole",
+        canonical="https://flow.byu.edu/FastMultipole.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -30,6 +30,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/byuflowlab/FastMultipole",
+    repo="github.com/byuflowlab/FastMultipole.jl",
     devbranch="main",
 )
