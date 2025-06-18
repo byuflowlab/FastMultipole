@@ -14,7 +14,7 @@ const ONE_THIRD = 1/3
 const π_over_2 = π/2
 const π2 = 2*π
 const SQRT3 = sqrt(3.0)
-const LOCAL_ERROR_SAFETY = 1.0 # guess how many cells will contribute to the local error
+const LOCAL_ERROR_SAFETY = 2.0 # guess how many cells will contribute to the local error
                                # NOTE: this doesn't apply to multipole error as that error is 
                                # highly localized and doesn't accumulate
 const DEBUG = Array{Bool,0}(undef)

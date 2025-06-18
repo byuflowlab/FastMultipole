@@ -45,7 +45,7 @@
     bodies = vcat(x,rand(1,length(m)),m',zeros(3,length(m)))
     mass = Gravitational(bodies)
 
-    FastMultipole.direct!(mass)
+    FastMultipole.direct!(mass; scalar_potential=true)
     V_tots_direct = mass.potential[1,:]
 
     for i in 1:length(V_tots)

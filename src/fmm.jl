@@ -780,7 +780,7 @@ function warn_scalar_potential_with_lh(derivatives_switches::Tuple, lamb_helmhol
         success = success && warn_scalar_potential_with_lh(switch, lamb_helmholtz)
     end
     if WARNING_FLAG_LH_POTENTIAL[] && !success
-        @warn "\nScalar potential was requested with lamb_helmholtz=$lamb_helmholtz; this may result in nonsensical potential predictions.\n"
+        @warn "\nScalar potential was requested for a source system inducing a vector potential; this may result in nonsensical scalar potential predictions.\nIf you really need the scalar_potential, check which system results in has_vector_potential(system)==true, and remove it."
     end
 end
 
@@ -804,14 +804,14 @@ end
     return SVector{n}(input...)
 end
 
-fmm!(system; leaf_size=20, optargs...) = fmm!(system, system; leaf_size_source=leaf_size, leaf_size_target=leaf_size, optargs...)
+fmm!(system, cache::Cache=Cache((system,), (system,)); leaf_size=20, optargs...) = fmm!(system, system, cache; leaf_size_source=leaf_size, leaf_size_target=leaf_size, optargs...)
 
-function fmm!(target_systems, source_systems; optargs...)
+function fmm!(target_systems, source_systems, cache::Cache=Cache(to_tuple(target_systems), to_tuple(source_systems)); optargs...)
     # promote arguments to Tuples
     target_systems = to_tuple(target_systems)
     source_systems = to_tuple(source_systems)
 
-    return fmm!(target_systems, source_systems; optargs...)
+    return fmm!(target_systems, source_systems, cache; optargs...)
 end
 
 """
@@ -824,7 +824,7 @@ Dispatches `fmm!` with automatic tree creation.
 - `target_systems::Union{Tuple, {UserDefinedSystem}}`: either a system object for which compatibility functions have been overloaded, or a tuple of system objects for which compatibility functions have been overloaded
 - `source_systems::Union{Tuple, {UserDefinedSystem}}`: either a system object for which compatibility functions have been overloaded, or a tuple of system objects for which compatibility functions have been overloaded
 
-Note: a convenience function `fmm!(system)` is provided, which is equivalent to `fmm!(system, system)`.
+Note: a convenience function `fmm!(system)` is provided, which is equivalent to `fmm!(system, system)`. This is for situations where all system(s) act on all other systems, including themselves.
 
 **Optional Arguments: Allocation**
 
@@ -859,9 +859,7 @@ Note: a convenience function `fmm!(system)` is provided, which is equivalent to 
 - `hessian::Union{Bool,AbstractVector{Bool}}`: whether to compute the vector gradient; default is `false`
 
 """
-function fmm!(target_systems::Tuple, source_systems::Tuple;
-    target_buffers=allocate_buffers(target_systems, true), target_small_buffers = allocate_small_buffers(target_systems),
-    source_buffers=allocate_buffers(source_systems, false), source_small_buffers = allocate_small_buffers(source_systems),
+function fmm!(target_systems::Tuple, source_systems::Tuple, cache::Cache=Cache(target_systems, source_systems);
     leaf_size_target=nothing,
     leaf_size_source=default_leaf_size(source_systems),
     expansion_order=5,
@@ -876,9 +874,9 @@ function fmm!(target_systems::Tuple, source_systems::Tuple;
     leaf_size_target = to_vector(isnothing(leaf_size_target) ? minimum(leaf_size_source) : leaf_size_target, length(target_systems))
 
     # create trees
-    t_target_tree = @elapsed target_tree = Tree(target_systems, true; buffers=target_buffers, small_buffers=target_small_buffers, expansion_order, leaf_size=leaf_size_target, shrink_recenter, interaction_list_method)
-    t_source_tree = @elapsed source_tree = Tree(source_systems, false; buffers=source_buffers, small_buffers=source_small_buffers, expansion_order, leaf_size=leaf_size_source, shrink_recenter, interaction_list_method)
-
+    t_target_tree = @elapsed target_tree = Tree(target_systems, true; buffers=cache.target_buffers, small_buffers=cache.target_small_buffers, expansion_order, leaf_size=leaf_size_target, shrink_recenter, interaction_list_method)
+    t_source_tree = @elapsed source_tree = Tree(source_systems, false; buffers=cache.source_buffers, small_buffers=cache.source_small_buffers, expansion_order, leaf_size=leaf_size_source, shrink_recenter, interaction_list_method)
+    
     return fmm!(target_systems, target_tree, source_systems, source_tree; expansion_order, leaf_size_source, ε_tol, t_source_tree, t_target_tree, interaction_list_method, optargs...)
 end
 
@@ -895,23 +893,23 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     scalar_potential = to_vector(scalar_potential, length(target_systems))
     gradient = to_vector(gradient, length(target_systems))
     hessian = to_vector(hessian, length(target_systems))
-
+    
     # assemble derivatives switch
     derivatives_switches = DerivativesSwitch(scalar_potential, gradient, hessian, target_systems)
 
     # create interaction lists
+    m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_acceptance, farfield, nearfield, self_induced, interaction_list_method)
     t_lists = @elapsed begin
-        m2l_list, direct_list = build_interaction_lists(target_tree.branches, source_tree.branches, leaf_size_source, multipole_acceptance, farfield, nearfield, self_induced, interaction_list_method)
         m2l_list = sort_by_target(m2l_list, target_tree.branches)
         direct_list = sort_by_target(direct_list, target_tree.branches)
-    end
+end
 
     # run fmm
     return fmm!(target_systems, target_tree, source_systems, source_tree, leaf_size_source, m2l_list, direct_list, derivatives_switches, interaction_list_method; multipole_acceptance, t_source_tree, t_target_tree, t_lists, optargs...)
 end
 
 function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, source_tree::Tree, leaf_size_source, m2l_list, direct_list, derivatives_switches::Tuple, interaction_list_method::InteractionListMethod;
-    expansion_order=5, ε_tol=nothing, lamb_helmholtz::Bool=true,
+    expansion_order=5, ε_tol=nothing,
     upward_pass::Bool=true, horizontal_pass::Bool=true, downward_pass::Bool=true,
     horizontal_pass_verbose::Bool=false,
     reset_target_tree::Bool=true, reset_source_tree::Bool=true,
@@ -920,6 +918,10 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
     t_source_tree=0.0, t_target_tree=0.0, t_lists=0.0,
     silence_warnings=false,
 )
+
+    #--- check if lamb-helmholtz decomposition is required ---#
+
+    lamb_helmholtz = has_vector_potential(source_systems)
 
     #--- check for datarace condition ---#
 
@@ -1160,7 +1162,7 @@ function fmm!(target_systems::Tuple, target_tree::Tree, source_systems::Tuple, s
                        multipole_acceptance = multipole_acceptance,
                       )
 
-    cache = (
+    cache = Cache(;
              target_buffers = target_tree.buffers,
              target_small_buffers = target_tree.small_buffers,
              source_buffers = source_tree.buffers,

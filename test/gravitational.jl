@@ -5,8 +5,8 @@ import Base: getindex, setindex!
 using FastMultipole.StaticArrays
 using Random
 const i_POSITION = 1:3
-const i_RADIUS = 4
-const i_STRENGTH = 5:8
+const i_RADIUS = 4:4
+const i_STRENGTH = 5:5
 const i_POTENTIAL = 1:4
 const i_gradient = 5:7
 const i_hessian = 8:16
@@ -26,16 +26,14 @@ end
 
 function Gravitational(bodies::Matrix)
     nbodies = size(bodies)[2]
-    bodies2 = [Body(SVector{3}(bodies[1:3,i]),bodies[4,i],bodies[5,i]) for i in 1:nbodies]
-    potential = zeros(eltype(bodies), 52,nbodies)
-    return Gravitational(bodies2,potential)
+    bodies2 = [Body(SVector{3}(bodies[1:3,i]), bodies[4,i], bodies[5,i]) for i in 1:nbodies]
+    potential = zeros(eltype(bodies), 16, nbodies)
+    return Gravitational(bodies2, potential)
 end
 
 function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_scale=1/n_bodies, bodies_fun=(x)->x)
-# function generate_gravitational(seed, n_bodies; radius_factor=0.1, strength_scale=1/n_bodies, distribution=Distributions.Uniform{Float64}(0,1), bodies_fun=(x)->x)
     Random.seed!(seed)
     bodies = rand(8,n_bodies)
-    # bodies = rand(distribution,8,n_bodies)
     bodies[4,:] ./= (n_bodies^(1/3)*2)
     bodies[4,:] .*= radius_factor
     bodies[5,:] .*= strength_scale
@@ -74,6 +72,10 @@ end
 FastMultipole.get_n_bodies(g::Gravitational) = length(g.bodies)
 
 FastMultipole.body_to_multipole!(system::Gravitational, args...) = FastMultipole.body_to_multipole!(Point{Source}, system, args...)
+
+function FastMultipole.has_vector_potential(system::Gravitational)
+    return false
+end
 
 function FastMultipole.direct!(target_system, target_index, derivatives_switch, source_system::Gravitational, source_buffer, source_index)
     # nbad = 0

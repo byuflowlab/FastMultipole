@@ -26,7 +26,7 @@ reset!(system)
 
 FastMultipole.DEBUG[] = true
 resize!(FastMultipole.DEBUG_DISTRIBUTION, 0)
-@time fmm!(system; ε_abs, lamb_helmholtz, tuned_params..., cache...)
+@time fmm!(system; ε_abs, lamb_helmholtz, tuned_params..., cache)
 FastMultipole.DEBUG[] = false
 
 v_fmm = similar(v_true)

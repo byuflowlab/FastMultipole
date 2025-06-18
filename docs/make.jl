@@ -19,8 +19,11 @@ makedocs(;
     pages=[
 		"Introduction" => "index.md",
         "Quick Start" => "quickstart.md",
-        "Guided Examples" => "guided_examples.md",
-        "Advanced Usage" => "advanced_usage.md",
+        "Gravitational Example" => "guided_examples.md",
+        "Vortex Filament Example" => "vortex_filament.md",
+        "Tuning Parameters" => "tuning.md",
+        "Multiple Systems" => "advanced_usage.md",
+        "Automated Tuning" => "advanced_usage_2.md",
         "Reference" => "reference.md",
         # "Theory" => "theory.md"
     ],

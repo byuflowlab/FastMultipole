@@ -410,6 +410,10 @@ function FastMultipole.reset!(system::VortexFilaments)
     system.hessian .= zero(eltype(system.hessian))
 end
 
+function FastMultipole.has_vector_potential(system::VortexFilaments)
+    return true
+end
+
 function FastMultipole.direct!(target_system, target_index, derivatives_switch::DerivativesSwitch{PS,GS,HS}, source_system::VortexFilaments, source_buffer, source_index) where {PS,GS,HS}
     for i_source in source_index
         x1 = FastMultipole.get_vertex(source_buffer, source_system, i_source, 1)
@@ -504,7 +508,7 @@ v_direct_r = deepcopy(filaments.force)
 expansion_order = 15
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order, ε_abs=nothing)
 
 v_fmm = deepcopy(filaments.force)
 
@@ -512,7 +516,7 @@ v_fmm = deepcopy(filaments.force)
 
 # try refined filaments
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments, refined_filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments, refined_filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order, ε_abs=nothing)
 
 v_fmm_r = deepcopy(filaments.force)
 
@@ -537,7 +541,7 @@ v_direct = deepcopy(filaments.force)
 # @show maximum(norm.(v_direct - v_direct_r))
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=1, multipole_acceptance=0.4, expansion_order=20, ε_abs=nothing)
 
 v_fmm = deepcopy(filaments.force)
 
@@ -552,11 +556,11 @@ length_scale = 1.0 / n_filaments^(1/3)
 filaments = generate_filament_field(n_filaments, length_scale; strength_scale=1/n_filaments)
 
 # direct!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_acceptance=0.4, expansion_order=20, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_acceptance=0.4, expansion_order=20, ε_abs=nothing)
 v_direct = deepcopy(filaments.force)
 
 reset!(filaments)
-optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_acceptance=0.4, expansion_order=10, lamb_helmholtz=true, ε_abs=nothing)
+optargs, target_tree, source_tree, m2l_list, direct_list, derivatives_switches, error_success = fmm!(filaments; leaf_size_source=20, multipole_acceptance=0.4, expansion_order=10, ε_abs=nothing)
 
 v_fmm = deepcopy(filaments.force)
 

@@ -184,7 +184,6 @@ index_map = fgs.index_map
 m2l_list = fgs.m2l_list
 direct_list = fgs.direct_list
 multipole_acceptance = fgs.multipole_acceptance
-lamb_helmholtz = fgs.lamb_helmholtz
 strengths = fgs.strengths
 strengths_by_leaf = fgs.strengths_by_leaf
 targets_by_branch = fgs.targets_by_branch
@@ -333,7 +332,7 @@ end
 
 #--- create FGS solver ---#
 
-fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_acceptance=0.5, leaf_size=n_bodies, lamb_helmholtz=false, shrink_recenter=false) # try with leaf_size=3 for sources with no non-self influence
+fgs = FastMultipole.FastGaussSeidel((system,), (system,); expansion_order=4, multipole_acceptance=0.5, leaf_size=n_bodies, shrink_recenter=false) # try with leaf_size=3 for sources with no non-self influence
 
 #--- test solve! ---#
 

@@ -14,8 +14,9 @@ gravitational_path = normpath(joinpath(splitdir(pathof(FastMultipole))[1], "..",
 include(gravitational_path)
 
 rand_seed = 123
-n_bodies = 1000
+n_bodies = 4000
 system = generate_gravitational(rand_seed, n_bodies)
+println("System of type $(typeof(system)) created with ", n_bodies, " bodies.")
 ```
 
 ## Evaluate The Potential at Each Body
@@ -23,12 +24,12 @@ system = generate_gravitational(rand_seed, n_bodies)
 The `fmm!` function evaluates the gravitational potential induced by `system` in-place. We can control the tradeoff between performance and accuracy with a handful of tuning parameters, but we'll stick with the defaults for this example:
 
 ```@example ex; continued = true
-fmm!(system)
+fmm!(system; scalar_potential=true)
 ```
 The resulting potential can then be accessed in the user-defined `system` object.
 
 ```@example ex
-@show system.potential[1,:]
+@show system.potential[1,1:10] # show first 10 potentials
 ```
 Let me emphasize that `system` can be _any_ user-defined object, so long as a few interface functions are defined (we'll go over those later). This allows you to use `FastMultipole` in your existing code with almost no modifications.
 
@@ -37,14 +38,20 @@ Let me emphasize that `system` can be _any_ user-defined object, so long as a fe
 By using the `direct!` function, we can check the accuracy of the `fmm!` call by evaluating the ''N''-body problem naively, without fast multipole acceleration.
 
 ```@example ex
-direct_system = deepcopy(system)
-direct_system.potential .= 0.0
+# store fmm potential
+fmm_potential = system.potential[1,:]
 
-direct!(direct_system)
+# reset the system
+system.potential .= 0.0
 
-percent_error = abs.((system.potential[1,:] .- direct_system.potential[1,:]) ./ direct_system.potential[1,:])
+# evaluate the potential directly
+direct!(system; scalar_potential=true)
+direct_potential = system.potential[1,:]
 
-@show maximum(percent_error)
+# compute the percent error
+percent_error = abs.((fmm_potential[1,:] .- direct_potential[1,:]) ./ direct_potential[1,:]) .* 100
+
+println("max percent error: ", maximum(percent_error), "%")
 ```
 
 ## Scalar-plus-Vector Potential Applications

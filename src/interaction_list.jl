@@ -11,9 +11,9 @@ function build_interaction_lists(target_branches, source_branches, source_leaf_s
         build_interaction_lists!(m2l_list, direct_list, Int32(1), Int32(1), target_branches, source_branches, source_leaf_size, multipole_acceptance, Val(farfield), Val(nearfield), Val(self_induced), method)
     end
 
-    # sort lists
-    m2l_list = sort_by(m2l_list, target_branches, source_branches, method)
-    direct_list = sort_by(direct_list, target_branches, source_branches, method)
+    # # sort lists
+    # m2l_list = sort_by(m2l_list, target_branches, source_branches, method)
+    # direct_list = sort_by(direct_list, target_branches, source_branches, method)
 
     return m2l_list, direct_list
 end
@@ -180,10 +180,10 @@ function sort_by(list, target_branches, source_branches, ::InteractionListMethod
     return list
 end
 
-function sort_by_target(direct_list, target_branches::Vector{<:Branch})
-    # count cardinality of each target leaf in direct_list
+function sort_by_target(list, target_branches::Vector{<:Branch})
+    # count cardinality of each target leaf in list
     target_counter = zeros(Int32, 2, length(target_branches))
-    for (i,j) in direct_list
+    for (i,j) in list
         target_counter[1,i] += 1
     end
 
@@ -193,11 +193,11 @@ function sort_by_target(direct_list, target_branches::Vector{<:Branch})
         target_counter[2,i] = target_counter[2,i-1] + target_counter[1,i-1]
     end
 
-    # preallocate sorted direct_list
-    sorted_direct_list = similar(direct_list)
+    # preallocate sorted list
+    sorted_list = similar(list)
 
-    # sort direct_list by source
-    for ij in direct_list
+    # sort list by source
+    for ij in list
         # get source branch index
         i = ij[1]
 
@@ -206,16 +206,16 @@ function sort_by_target(direct_list, target_branches::Vector{<:Branch})
         target_counter[2,i] += Int32(1)
 
         # place target-source pair in the sorted list
-        sorted_direct_list[i_dest] = ij
+        sorted_list[i_dest] = ij
     end
 
-    return sorted_direct_list
+    return sorted_list
 end
 
-function sort_by_source(direct_list, source_branches::Vector{<:Branch})
-    # count cardinality of each source leaf in direct_list
+function sort_by_source(list, source_branches::Vector{<:Branch})
+    # count cardinality of each source leaf in list
     source_counter = zeros(Int32, 2, length(source_branches))
-    for (i,j) in direct_list
+    for (i,j) in list
         source_counter[1,j] += Int32(1)
     end
 
@@ -225,11 +225,11 @@ function sort_by_source(direct_list, source_branches::Vector{<:Branch})
         source_counter[2,i] = source_counter[2,i-1] + source_counter[1,i-1]
     end
 
-    # preallocate sorted direct_list
-    sorted_direct_list = similar(direct_list)
+    # preallocate sorted list
+    sorted_list = similar(list)
 
-    # sort direct_list by source
-    for ij in direct_list
+    # sort list by source
+    for ij in list
         # get source branch index
         j = ij[2]
 
@@ -238,10 +238,10 @@ function sort_by_source(direct_list, source_branches::Vector{<:Branch})
         source_counter[2,j] += Int32(1)
 
         # place target-source pair in the sorted list
-        sorted_direct_list[i_dest] = ij
+        sorted_list[i_dest] = ij
     end
 
-    return sorted_direct_list
+    return sorted_list
 end
 
 @inline function update_direct_bodies!(direct_bodies::Vector{<:UnitRange}, leaf_index, bodies_index::UnitRange)

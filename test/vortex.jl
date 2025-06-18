@@ -142,6 +142,10 @@ function FastMultipole.buffer_to_target_system!(target_system::VortexParticles, 
     end
 end
 
+function FastMultipole.has_vector_potential(system::VortexParticles)
+    return true
+end
+
 Base.eltype(::VortexParticles{TF}) where TF = TF
 
 #------- additional functions -------#

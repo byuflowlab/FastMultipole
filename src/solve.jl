@@ -536,7 +536,7 @@ FastGaussSeidel(systems::Tuple; optargs...) = FastGaussSeidel(systems, systems; 
 FastGaussSeidel(target_systems, source_systems; optargs...) = FastGaussSeidel((target_systems,), (source_systems,); optargs...)
 
 function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple; 
-    expansion_order=4, multipole_acceptance=0.5, leaf_size=30, lamb_helmholtz=true,
+    expansion_order=4, multipole_acceptance=0.5, leaf_size=30,
     interaction_list_method=Barba(), shrink_recenter=true,
     derivatives_switches=DerivativesSwitch(true, true, false, target_systems)
 )
@@ -632,7 +632,6 @@ function FastGaussSeidel(target_systems::Tuple, source_systems::Tuple;
         full_direct_list,
         interaction_list_method,
         multipole_acceptance,
-        lamb_helmholtz,
         strengths,
         strengths_by_leaf,
         targets_by_branch,
@@ -814,7 +813,6 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
     full_direct_list = solver.full_direct_list
     interaction_list_method = solver.interaction_list_method
     multipole_acceptance = solver.multipole_acceptance
-    lamb_helmholtz = solver.lamb_helmholtz
     strengths = solver.strengths
     strengths_by_leaf = solver.strengths_by_leaf
     targets_by_branch = solver.targets_by_branch
@@ -862,7 +860,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
         # fmm call
         reset!(target_buffers)
         fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, empty_direct_list, derivatives_switches, interaction_list_method;
-            source_tree.expansion_order, ε_tol=nothing, lamb_helmholtz,
+            source_tree.expansion_order, ε_tol=nothing,
             upward_pass=true, horizontal_pass=true, downward_pass=true,
             # horizontal_pass_verbose::Bool=false,
             reset_target_tree=true, reset_source_tree=true,
@@ -932,7 +930,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
     # use new strengths to get the full influence (farfield was already computed)
     fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, full_direct_list, derivatives_switches, interaction_list_method;
-            expansion_order=source_tree.expansion_order, ε_tol=nothing, lamb_helmholtz,
+            expansion_order=source_tree.expansion_order, ε_tol=nothing,
             upward_pass=false, horizontal_pass=false, downward_pass=false, # just nearfield influence
             # horizontal_pass_verbose::Bool=false,
             reset_target_tree=false, reset_source_tree=false, # false now

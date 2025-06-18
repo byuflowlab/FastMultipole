@@ -46,10 +46,10 @@ function benchmark_system(source, vortex, expansion_orders)
         # benchmark FMM combined
         println("\n\tbegin combined")
         optargs, cache, _ = fmm!((source, vortex); lamb_helmholtz=true, tune=true, expansion_order)
-        t_combined_1 = @elapsed optargs, cache, _ = fmm!((source, vortex); lamb_helmholtz=true, tune=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache...)
+        t_combined_1 = @elapsed optargs, cache, _ = fmm!((source, vortex); lamb_helmholtz=true, tune=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache)
         reset!(source)
         reset!(vortex)
-        t_combined_2 = @elapsed fmm!((source, vortex); lamb_helmholtz=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache...)
+        t_combined_2 = @elapsed fmm!((source, vortex); lamb_helmholtz=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache)
         push!(ts_combined, min(t_combined_1, t_combined_2))
         
         # calculate errors
@@ -63,10 +63,10 @@ function benchmark_system(source, vortex, expansion_orders)
         # benchmark FMM source
         println("\n\tbegin source")
         optargs, source_cache, _ = fmm!((source, vortex), source; lamb_helmholtz=false, tune=true, expansion_order)
-        t_source_1 = @elapsed optargs, source_cache, _ = fmm!((source, vortex), source; lamb_helmholtz=false, tune=true, expansion_order, leaf_size_source=optargs.leaf_size_source, source_cache...)
+        t_source_1 = @elapsed optargs, source_cache, _ = fmm!((source, vortex), source; lamb_helmholtz=false, tune=true, expansion_order, leaf_size_source=optargs.leaf_size_source, source_cache)
         reset!(source)
         reset!(vortex)
-        t_source_2 = @elapsed fmm!((source, vortex), source; lamb_helmholtz=false, expansion_order, leaf_size_source=optargs.leaf_size_source, source_cache...)
+        t_source_2 = @elapsed fmm!((source, vortex), source; lamb_helmholtz=false, expansion_order, leaf_size_source=optargs.leaf_size_source, source_cache)
         push!(ts_source, min(t_source_1, t_source_2))
         
         # save velocity
@@ -76,10 +76,10 @@ function benchmark_system(source, vortex, expansion_orders)
         # benchmark FMM vortex
         println("\n\tbegin vortex")
         optargs, cache, _ = fmm!((source, vortex), vortex; lamb_helmholtz=true, tune=true, expansion_order)
-        t_vortex_1 = @elapsed optargs, cache, _ = fmm!((source, vortex), vortex; lamb_helmholtz=true, tune=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache...)
+        t_vortex_1 = @elapsed optargs, cache, _ = fmm!((source, vortex), vortex; lamb_helmholtz=true, tune=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache)
         reset!(source)
         reset!(vortex)
-        t_vortex_2 = @elapsed fmm!((source, vortex), vortex; lamb_helmholtz=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache...)
+        t_vortex_2 = @elapsed fmm!((source, vortex), vortex; lamb_helmholtz=true, expansion_order, leaf_size_source=optargs.leaf_size_source, cache)
         push!(ts_vortex, min(t_vortex_1, t_vortex_2))
 
         # calculate errors

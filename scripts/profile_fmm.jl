@@ -36,7 +36,7 @@ n_bodies = 262144
 system, optargs, cache, lamb_helmholtz = grav_system(n_bodies)
 
 direct() = direct!(system)
-fmm_prof() = fmm!(system; optargs..., cache..., lamb_helmholtz)
+fmm_prof() = fmm!(system; optargs..., cache, lamb_helmholtz)
 
 #--- VS Code Profiler
 # direct()
@@ -48,7 +48,7 @@ fmm_prof()
 # using Profile
 # using PProf
 
-# @profile fmm!(system; optargs..., cache..., lamb_helmholtz)
+# @profile fmm!(system; optargs..., cache, lamb_helmholtz)
 # Profile.clear()
-# @profile fmm!(system; optargs..., cache..., lamb_helmholtz)
+# @profile fmm!(system; optargs..., cache, lamb_helmholtz)
 # pprof()

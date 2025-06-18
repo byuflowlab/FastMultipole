@@ -248,7 +248,6 @@ struct FastGaussSeidel{TF,Nsys,TIL} <: AbstractSolver
     full_direct_list::Vector{SVector{2,Int32}}
     interaction_list_method::TIL
     multipole_acceptance::Float64
-    lamb_helmholtz::Bool
     strengths::Vector{TF}
     strengths_by_leaf::Vector{UnitRange{Int}}
     targets_by_branch::Vector{UnitRange{Int}}
@@ -258,4 +257,42 @@ struct FastGaussSeidel{TF,Nsys,TIL} <: AbstractSolver
     extra_right_hand_side::Vector{TF}
     influences_per_system::Vector{Vector{TF}}
     residual_vector::Vector{TF}
+end
+
+#--- memory cache ---#
+
+struct Cache{TF,NT,NS}
+    target_buffers::NTuple{NT, Matrix{TF}}
+    source_buffers::NTuple{NS, Matrix{TF}}
+    target_small_buffers::Vector{Matrix{TF}}
+    source_small_buffers::Vector{Matrix{TF}}
+end
+
+function Cache(; 
+    target_buffers::NTuple{NT,Matrix{TF}}, 
+    source_buffers::NTuple{NS,Matrix{TF}}, 
+    target_small_buffers::Vector{Matrix{TF}}, 
+    source_small_buffers::Vector{Matrix{TF}}
+        ) where {TF,NT,NS}
+    return Cache{TF,NT,NS}(target_buffers, source_buffers, target_small_buffers, source_small_buffers)
+end
+
+function Cache(target_systems::Tuple, source_systems::Tuple)
+    # allocate buffers
+    target_buffers = allocate_buffers(target_systems, true)
+    source_buffers = allocate_buffers(source_systems, false)
+    target_small_buffers = allocate_small_buffers(target_systems)
+    source_small_buffers = allocate_small_buffers(source_systems)
+    
+    # get type
+    TF = eltype(target_buffers[1])
+    for buffer in target_buffers
+        TF = promote_type(TF, eltype(buffer))
+    end
+    for buffer in source_buffers
+        TF = promote_type(TF, eltype(buffer))
+    end
+    
+    # return cache
+    return Cache{TF,length(target_systems),length(source_systems)}(target_buffers, source_buffers, target_small_buffers, source_small_buffers)
 end

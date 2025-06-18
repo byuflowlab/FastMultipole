@@ -292,7 +292,7 @@ Allocates buffers for the given systems. If `target` is `true`, it allocates spa
 """
 function allocate_buffers(systems::Tuple, target::Bool)
     # determine float type
-    TF = Float32
+    TF = eltype(systems[1])
     for system in systems
         TF = promote_type(TF, eltype(system))
     end
@@ -312,9 +312,9 @@ end
 
 Allocates small buffers for the given systems. These buffers are used for temporary storage of body positions for octree sorting.
 """
-function allocate_small_buffers(systems::Tuple; target=false)
+function allocate_small_buffers(systems::Tuple)
     # determine float type
-    TF = Float32
+    TF = eltype(systems[1])
     for system in systems
         TF = promote_type(TF, eltype(system))
     end

@@ -61,7 +61,7 @@ function test_error_ub(system, ϕ_true, v_true, theta)
         println("P = $p")
         # mean_phi, max_phi, mean_v, max_v, l2_phi_rel, max_phi_rel, l2_v_rel, max_v_rel
         @show leaf_size_source
-        optargs, stuff = check_error(system, ϕ_true, v_true; leaf_size_source, expansion_order=p, multipole_acceptance=theta, lamb_helmholtz=false, scalar_potential=true, cache...)
+        optargs, stuff = check_error(system, ϕ_true, v_true; leaf_size_source, expansion_order=p, multipole_acceptance=theta, lamb_helmholtz=false, scalar_potential=true, cache)
         leaf_size_source = optargs.leaf_size_source
         for i in 1:8
             res[i,p] = stuff[i]

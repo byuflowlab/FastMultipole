@@ -23,7 +23,7 @@ function check_error(system, v_true, ε_abs, lamb_helmholtz, bonus_expansion)
     optargs, cache = tune_fmm(system; ε_abs, lamb_helmholtz, bonus_expansion)
 
     # benchmark
-    t_fmm = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
 
     # evaluate error
     v_fmm = get_gradient(system)
@@ -33,12 +33,12 @@ function check_error(system, v_true, ε_abs, lamb_helmholtz, bonus_expansion)
     diff .= sqrt.(diff)
 
     # average benchmarks
-    t_fmm2 = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
-    t_fmm3 = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
-    t_fmm4 = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
-    t_fmm5 = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
-    t_fmm6 = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
-    t_fmm7 = @elapsed fmm!(system; optargs..., cache..., ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm2 = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm3 = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm4 = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm5 = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm6 = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
+    t_fmm7 = @elapsed fmm!(system; optargs..., cache, ε_abs, lamb_helmholtz, bonus_expansion)
     t_fmm = (t_fmm + t_fmm2 + t_fmm3 + t_fmm4 + t_fmm5 + t_fmm6 + t_fmm7 - max(t_fmm, t_fmm2, t_fmm3, t_fmm4, t_fmm5, t_fmm6, t_fmm7)) / 6
 
     # evaluate quartiles

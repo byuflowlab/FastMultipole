@@ -281,8 +281,21 @@ function influence!(influence, target_buffer, source_system, source_buffer)
     error("influence! not overloaded for systems of type $(typeof(source_system))")
 end
 
+function has_vector_potential(system)
+    error("has_vector_potential not overloaded for type $(typeof(system))")
+end
 
 #------- internal functions -------#
+
+#--- lamb-helmholtz ---#
+
+function has_vector_potential(systems::Tuple)
+    not_lh = true
+    for system in systems
+        not_lh = not_lh && !has_vector_potential(system)
+    end
+    return !not_lh
+end
 
 #--- source_buffer getters ---#
 

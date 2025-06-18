@@ -21,11 +21,11 @@ function benchmark_fmm_gravitational(sizes, rand_seed=123; fmm_args...)
 
         # Warm-up call to reduce noise
         reset!(system)
-        time1 = @elapsed fmm!(system; cache..., optargs...)
+        time1 = @elapsed fmm!(system; cache, optargs...)
 
         # Benchmark
         reset!(system)
-        time2 = @elapsed fmm!(system; cache..., optargs...)
+        time2 = @elapsed fmm!(system; cache, optargs...)
 
         push!(results, min(time1, time2))
     end
@@ -46,11 +46,11 @@ function benchmark_fmm_gravitational2(sizes, rand_seed=123; fmm_args...)
 
         # Warm-up call to reduce noise
         reset!(system)
-        time1 = @elapsed fmm!(system; velocity=false, lamb_helmholtz=false, scalar_potential=true, cache..., optargs...)
+        time1 = @elapsed fmm!(system; velocity=false, lamb_helmholtz=false, scalar_potential=true, cache, optargs...)
 
         # Benchmark
         reset!(system)
-        time2 = @elapsed fmm!(system; velocity=false, lamb_helmholtz=false, scalar_potential=true, cache..., optargs...)
+        time2 = @elapsed fmm!(system; velocity=false, lamb_helmholtz=false, scalar_potential=true, cache, optargs...)
         phi_fmm = get_potential(system)
 
         # get error
@@ -86,11 +86,11 @@ function benchmark_fmm_vortex(sizes, rand_seed=123; fmm_args...)
 
         # Warm-up call to reduce noise
         reset!(system)
-        time1 = @elapsed fmm!(system; cache..., lamb_helmholtz=true, fmm_args...)
+        time1 = @elapsed fmm!(system; cache, lamb_helmholtz=true, fmm_args...)
 
         # Benchmark
         reset!(system)
-        time2 = @elapsed fmm!(system; cache..., lamb_helmholtz=true, fmm_args...)
+        time2 = @elapsed fmm!(system; cache, lamb_helmholtz=true, fmm_args...)
 
         push!(results, min(time1, time2))
     end

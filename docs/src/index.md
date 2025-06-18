@@ -24,6 +24,9 @@ pkg> add https://github.com/byuflowlab/FastMultipole.git
 **Documentation**:
 
 * learn basic useage in the [Quick Start](quickstart.md) tutorial
-* discover more features in the [Guided Examples](guided_examples.md)
-* fine-tune performance in the [Advanced Usage](advanced_usage.md) section (for FMM experts)
+* see how to implement `FastMultipole` in your code in the [Gravitational Example](guided_examples.md)
+* explore more details in the [Vortex Filament Example](vortex_filament.md)
+* learn about the [Tuning Parameters](tuning.md)
+* run FMM simultaneously on multiple systems in [Multiple Systems](advanced_usage.md) section
+* fine-tune performance in the [Automated Tuning](advanced_usage_2.md)
 * see the full [API](reference.md)
