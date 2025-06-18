@@ -390,12 +390,12 @@ for i in 1:FastMultipole.get_n_bodies(system)
 end
 system_strengths = [system.bodies[i].strength for i in 1:FastMultipole.get_n_bodies(system)]
 
-system_p = sortperm(eachcol(system_positions))
+system_p = sortperm(collect(eachcol(system_positions)))
 sorted_system_positions = system_positions[:, system_p]
 sorted_system_strengths = system_strengths[system_p]
 
 # sort buffer by position
-buffer_p = sortperm(eachcol(buffer_positions))
+buffer_p = sortperm(collect(eachcol(buffer_positions)))
 sorted_buffer_positions = buffer_positions[:, buffer_p]
 sorted_buffer_strengths = buffer_strengths[buffer_p]
 
