@@ -76,7 +76,7 @@ Finally, let's explore the `leaf_size` parameter, which controls the size of the
 
 ```@example guidedex
 # try varying `leaf_size`
-println("\n#--- varying leaf size ---#\n")
+println("#--- varying leaf size ---#\n")
 
 println("leaf_size = 5")
 system.potential .= 0.0

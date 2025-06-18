@@ -11,8 +11,8 @@ struct VortexFilaments{TF}
     core_size::Vector{TF}
     ε_tol::Vector{TF}
     potential::Vector{TF}
-    force::Vector{SVector{3,TF}}
-    gradient::Vector{SMatrix{3,3,TF,9}}
+    gradient::Vector{SVector{3,TF}}
+    hessian::Vector{SMatrix{3,3,TF,9}}
 end
 ```
 Note that `x` is a 2-row matrix, where the first row contains the start point of the filament and the second row contains the end point. The `strength` field contains the strength of the vortex filament, which is a vector quantity. The `core_size` field contains the regularization radius for each filament. The `potential`, `force`, and `gradient` fields are used to store the results of the FMM call.
@@ -78,8 +78,8 @@ function FastMultipole.buffer_to_target_system!(target_system::VortexFilaments, 
 
     # load into system
     PS && (target_system.potential[i_target] += potential)
-    VS && (target_system.force[i_target] += velocity)
-    GS && (target_system.gradient[i_target] += hessian)
+    VS && (target_system.gradient[i_target] += velocity)
+    GS && (target_system.hessian[i_target] += hessian)
 
 end
 ```
