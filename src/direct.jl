@@ -41,15 +41,19 @@ end
 
 
 function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(false, length(target_systems)), gradient=fill(true, length(target_systems)), hessian=fill(false, length(target_systems)))
+    
+    # get float type
+    TF = get_type(target_systems, source_systems)
+
     # set up target buffers
     if isnothing(target_buffers)
-        target_buffers = allocate_buffers(target_systems, true)
+        target_buffers = allocate_buffers(target_systems, true, TF)
         target_to_buffer!(target_buffers, target_systems)
     end
 
     # set up source buffers
     if isnothing(source_buffers)
-        source_buffers = allocate_buffers(source_systems, false)
+        source_buffers = allocate_buffers(source_systems, false, TF)
         system_to_buffer!(source_buffers, source_systems)
     end
 
@@ -71,15 +75,19 @@ function direct!(target_systems::Tuple, source_systems::Tuple; target_buffers=no
 end
 
 function direct_multithread!(target_systems::Tuple, source_systems::Tuple, n_threads; target_buffers=nothing, source_buffers=nothing, scalar_potential=fill(false, length(target_systems)), gradient=fill(true, length(target_systems)), hessian=fill(false, length(target_systems)))
+    
+    # get float type
+    TF = get_type(target_systems, source_systems)
+    
     # set up target buffers
     if isnothing(target_buffers)
-        target_buffers = allocate_buffers(target_systems, true)
+        target_buffers = allocate_buffers(target_systems, true, TF)
         target_to_buffer!(target_buffers, target_systems)
     end
 
     # set up source buffers
     if isnothing(source_buffers)
-        source_buffers = allocate_buffers(source_systems, false)
+        source_buffers = allocate_buffers(source_systems, false, TF)
         system_to_buffer!(source_buffers, source_systems)
     end
 

@@ -365,7 +365,8 @@ derivatives_switches = FastMultipole.DerivativesSwitch(true, false, false, (syst
 
 systems = (system,)
 target = false
-source_tree = Tree(systems, target; buffers=FastMultipole.allocate_buffers(systems, target), small_buffers = FastMultipole.allocate_small_buffers(systems), expansion_order=4, leaf_size=SVector{1}(20), n_divisions=20, shrink_recenter=false, interaction_list_method=Barba())
+TF = eltype(system)
+source_tree = Tree(systems, target; buffers=FastMultipole.allocate_buffers(systems, target, TF), small_buffers = FastMultipole.allocate_small_buffers(systems, TF), expansion_order=4, leaf_size=SVector{1}(20), n_divisions=20, shrink_recenter=false, interaction_list_method=Barba())
 
 #--- modify the buffer strengths ---#
 

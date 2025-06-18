@@ -1,6 +1,6 @@
 #------- tree constructor -------#
 
-function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, target), small_buffers = allocate_small_buffers(systems), expansion_order=7, leaf_size=default_leaf_size(systems), n_divisions=20, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false, interaction_list_method=SelfTuning())
+function Tree(systems::Tuple, target::Bool, TF=get_type(systems); buffers=allocate_buffers(systems, target, TF), small_buffers = allocate_small_buffers(systems, TF), expansion_order=7, leaf_size=default_leaf_size(systems), n_divisions=20, shrink_recenter=false, allocation_safety_factor=1.0, estimate_cost=false, read_cost_file=false, write_cost_file=false, interaction_list_method=SelfTuning())
 
     # ensure `systems` isn't empty; otherwise return an empty tree
     if get_n_bodies(systems) > 0
@@ -121,8 +121,8 @@ function Tree(systems::Tuple, target::Bool; buffers=allocate_buffers(systems, ta
     return tree
 end
 
-function Tree(system, target::Bool; optargs...)
-    return Tree((system,), target; optargs...)
+function Tree(system, target::Bool, TF=eltype(system); optargs...)
+    return Tree((system,), target, TF; optargs...)
 end
 
 """
@@ -144,15 +144,16 @@ function EmptyTree(system)
 end
 
 function EmptyTree(system::Tuple)
+    TF = get_type(system)
     N = length(system)
-    branches = Vector{Branch{Float64,N}}(undef,0)
-    expansions = Array{Float64,4}(undef,0,0,0,0)
+    branches = Vector{Branch{TF,N}}(undef,0)
+    expansions = Array{TF,4}(undef,0,0,0,0)
     levels_index = Vector{UnitRange{Int64}}(undef,0)
     leaf_index = Int[]
     sort_index_list = Tuple(Int[] for _ in 1:N)
     inverse_sort_index_list = Tuple(Int[] for _ in 1:N)
-    buffer = (Matrix{Float64}(undef,0,0),)
-    small_buffer = [Matrix{Float64}(undef,0,0)]
+    buffer = (Matrix{TF}(undef,0,0),)
+    small_buffer = [Matrix{TF}(undef,0,0)]
     expansion_order = -1
     leaf_size = SVector{N}(-1 for _ in 1:N)
     return Tree(branches, expansions, levels_index, leaf_index, sort_index_list, inverse_sort_index_list, buffer, small_buffer, expansion_order, leaf_size)
@@ -171,7 +172,7 @@ end
 """
 Doesn't stop subdividing until ALL child branches have satisfied the leaf size.
 """
-function TreeByLevel(systems::Tuple, target::Bool; centerbox=center_box(systems, getTF(systems)), buffers=allocate_buffers(systems, target), small_buffers = allocate_small_buffers(systems), expansion_order=7, n_levels=5)
+function TreeByLevel(systems::Tuple, target::Bool, TF=get_type(systems); centerbox=center_box(systems, getTF(systems)), buffers=allocate_buffers(systems, target, TF), small_buffers = allocate_small_buffers(systems, TF), expansion_order=7, n_levels=5)
 
     # ensure `systems` isn't empty; otherwise return an empty tree
     if get_n_bodies(systems) > 0
@@ -285,18 +286,25 @@ function allocate_source_buffer(TF, system)
     return buffer
 end
 
+function get_type(systems::Tuple)
+    TF = eltype(first(systems))
+    for system in systems
+        TF = promote_type(TF, eltype(system))
+    end
+    return TF
+end
+
+function get_type(target_systems::Tuple, source_systems::Tuple)
+    TF = promote_type(get_type(source_systems), get_type(target_systems))
+    return TF
+end
+
 """
     allocate_buffers(systems::Tuple, target::Bool)
 
 Allocates buffers for the given systems. If `target` is `true`, it allocates space for position, scalar potential, gradient, and hessian matrix. Otherwise, it allocates enough memory for the user-defined `source_system_to_buffer!`.
 """
-function allocate_buffers(systems::Tuple, target::Bool)
-    # determine float type
-    TF = eltype(systems[1])
-    for system in systems
-        TF = promote_type(TF, eltype(system))
-    end
-
+function allocate_buffers(systems::Tuple, target::Bool, TF)
     # create buffers
     if target
         buffers = Tuple(allocate_target_buffer(TF, system) for system in systems)
@@ -312,13 +320,7 @@ end
 
 Allocates small buffers for the given systems. These buffers are used for temporary storage of body positions for octree sorting.
 """
-function allocate_small_buffers(systems::Tuple)
-    # determine float type
-    TF = eltype(systems[1])
-    for system in systems
-        TF = promote_type(TF, eltype(system))
-    end
-
+function allocate_small_buffers(systems::Tuple, TF)
     # create buffers
     small_buffers = Vector{Matrix{TF}}(undef, length(systems))
     for i in eachindex(systems)

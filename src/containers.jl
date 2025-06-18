@@ -278,20 +278,14 @@ function Cache(;
 end
 
 function Cache(target_systems::Tuple, source_systems::Tuple)
+    # get float type
+    TF = get_type(target_systems, source_systems)
+
     # allocate buffers
-    target_buffers = allocate_buffers(target_systems, true)
-    source_buffers = allocate_buffers(source_systems, false)
-    target_small_buffers = allocate_small_buffers(target_systems)
-    source_small_buffers = allocate_small_buffers(source_systems)
-    
-    # get type
-    TF = eltype(target_buffers[1])
-    for buffer in target_buffers
-        TF = promote_type(TF, eltype(buffer))
-    end
-    for buffer in source_buffers
-        TF = promote_type(TF, eltype(buffer))
-    end
+    target_buffers = allocate_buffers(target_systems, true, TF)
+    source_buffers = allocate_buffers(source_systems, false, TF)
+    target_small_buffers = allocate_small_buffers(target_systems, TF)
+    source_small_buffers = allocate_small_buffers(source_systems, TF)
     
     # return cache
     return Cache{TF,length(target_systems),length(source_systems)}(target_buffers, source_buffers, target_small_buffers, source_small_buffers)
