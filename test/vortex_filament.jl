@@ -4,7 +4,7 @@ struct VortexFilaments{TF}
     x::Matrix{SVector{3,TF}}
     strength::Vector{SVector{3,TF}}
     core_size::Vector{TF}
-    ε_tol::Vector{TF}
+    error_tolerance::Vector{TF}
     potential::Vector{TF}
     gradient::Vector{SVector{3,TF}}
     hessian::Vector{SMatrix{3,3,TF,9}}
@@ -12,8 +12,8 @@ end
 
 # function VortexFilaments(filaments::VortexFilaments)
 #     core_size = fill(1e-3, length(filaments.potential))
-#     ε_tol = fill(1e-4, length(filaments.potential))
-#     return VortexFilaments(filaments.x, filaments.strength, core_size, ε_tol, filaments.potential, filaments.gradient, filaments.gradient)
+#     error_tolerance = fill(1e-4, length(filaments.potential))
+#     return VortexFilaments(filaments.x, filaments.strength, core_size, error_tolerance, filaments.potential, filaments.gradient, filaments.gradient)
 # end
 
 # function viz(fname, vortex_filaments::VortexFilaments)
@@ -35,13 +35,13 @@ end
 
 function VortexFilaments(x, strength::Vector{SVector{3,TF}};
         core_size = fill(1e-2, size(x,2)),
-        ε_tol = fill(1e-4, size(x,2)),
+        error_tolerance = fill(1e-4, size(x,2)),
         potential = zeros(size(x,2)),
         gradient = zeros(SVector{3,TF},size(x,2)),
         hessian = zeros(SMatrix{3,3,TF,9},size(x,2))
     ) where TF
 
-    return VortexFilaments(x, strength, core_size, ε_tol, potential, gradient, hessian)
+    return VortexFilaments(x, strength, core_size, error_tolerance, potential, gradient, hessian)
 end
 
 function generate_inline_filaments(n_bodies; strength, noise=false, noise_strength=0.1)
@@ -73,12 +73,12 @@ function generate_inline_filaments(n_bodies; strength, noise=false, noise_streng
     end
     # create filaments
     core_size = fill(1e-2, size(x,2))
-    ε_tol = fill(1e-4, size(x,2))
+    error_tolerance = fill(1e-4, size(x,2))
     potential = zeros(length(strength_vec))
     gradient = zeros(SVector{3,Float64}, length(strength_vec))
     hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
+    return VortexFilaments(pts, strength_vec, core_size, error_tolerance, potential, gradient, hessian)
 end
 
 function refine_filaments(filaments::VortexFilaments, max_length)
@@ -122,12 +122,12 @@ function refine_filaments(filaments::VortexFilaments, max_length)
 
     # create filaments
     core_size = fill(1e-2, size(refined_filaments,2))
-    ε_tol = fill(1e-4, size(refined_filaments,2))
+    error_tolerance = fill(1e-4, size(refined_filaments,2))
     potential = zeros(length(strength_vec))
     gradient = zeros(SVector{3,Float64}, length(strength_vec))
     hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(refined_filaments, strength_vec, core_size, ε_tol, potential, gradient, hessian)
+    return VortexFilaments(refined_filaments, strength_vec, core_size, error_tolerance, potential, gradient, hessian)
 end
 
 function total_length(filaments::VortexFilaments)
@@ -171,12 +171,12 @@ function generate_vortex_filaments(ntheta; nrings=2, r=1.0, dz=1.0, strength=1e-
 
     # create filaments
     core_size = fill(1e-2, size(x,2))
-    ε_tol = fill(1e-4, size(x,2))
+    error_tolerance = fill(1e-4, size(x,2))
     potential = zeros(length(strength_vec))
     gradient = zeros(SVector{3,Float64}, length(strength_vec))
     hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
+    return VortexFilaments(pts, strength_vec, core_size, error_tolerance, potential, gradient, hessian)
 end
 
 function generate_filament_field(n_filaments, length_scale, seed=123; strength_scale=1/n_filaments)
@@ -194,12 +194,12 @@ function generate_filament_field(n_filaments, length_scale, seed=123; strength_s
 
     # create filaments
     core_size = fill(1e-2, size(pts,2))
-    ε_tol = fill(1e-4, size(pts,2))
+    error_tolerance = fill(1e-4, size(pts,2))
     potential = zeros(length(strength_vec))
     gradient = zeros(SVector{3,Float64}, length(strength_vec))
     hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
+    return VortexFilaments(pts, strength_vec, core_size, error_tolerance, potential, gradient, hessian)
 end
 
 function minimum_distance(x1, x2, P)
@@ -375,7 +375,7 @@ function FastMultipole.source_system_to_buffer!(buffer, i_buffer, system::Vortex
     # Γmag = norm(Γ)
     core_size = system.core_size[i_body]
     # if !iszero(Γmag)
-    #     ε = system.ε_tol[i_body]
+    #     ε = system.error_tolerance[i_body]
     #     ρ = norm(system.x[2,i_body] - system.x[1,i_body]) * 0.5
     #     d_upper = sqrt(Γmag / (4 * π * ε))
     #     d = Roots.find_zero(d -> exp(-d*d*d / (core_size * core_size * core_size)) - 4 * π * d * d / Γmag * ε, (zero(d_upper), d_upper), Roots.Brent())

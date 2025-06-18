@@ -118,4 +118,4 @@ println("\n#--- optimal leaf size ---#\n")
 t2 = @elapsed fmm!(system; scalar_potential=false, gradient=true, optargs...)
 println("\ttime cost: ", t2, " seconds")
 ```
-Note that `optargs` contains `leaf_size_source`, `expansion_order`, and `multipole_acceptance` parameters. Only `leaf_size_source` is tuned if `isnothing(ε_tol) == true`. More complete auto-tuning will be discussed in [Advanced Usage](advanced_usage.md).
+Note that `optargs` contains `leaf_size_source`, `expansion_order`, and `multipole_acceptance` parameters. Only `leaf_size_source` is tuned if `isnothing(error_tolerance) == true`. More complete auto-tuning will be discussed in [Advanced Usage](advanced_usage.md).

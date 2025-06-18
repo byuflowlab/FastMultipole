@@ -9,7 +9,7 @@ struct VortexFilaments{TF}
     x::Matrix{SVector{3,TF}}
     strength::Vector{SVector{3,TF}}
     core_size::Vector{TF}
-    ε_tol::Vector{TF}
+    error_tolerance::Vector{TF}
     potential::Vector{TF}
     gradient::Vector{SVector{3,TF}}
     hessian::Vector{SMatrix{3,3,TF,9}}
@@ -176,12 +176,12 @@ function generate_filament_field(n_filaments, length_scale; strength_scale=1/n_f
 
     # create filaments
     core_size = fill(1e-2, n_filaments)
-    ε_tol = fill(1e-4, n_filaments)
+    error_tolerance = fill(1e-4, n_filaments)
     potential = zeros(length(strength_vec))
     gradient = zeros(SVector{3,Float64}, length(strength_vec))
     hessian = zeros(SMatrix{3,3,Float64,9}, length(strength_vec))
 
-    return VortexFilaments(pts, strength_vec, core_size, ε_tol, potential, gradient, hessian)
+    return VortexFilaments(pts, strength_vec, core_size, error_tolerance, potential, gradient, hessian)
 end
 
 n_filaments = 5000

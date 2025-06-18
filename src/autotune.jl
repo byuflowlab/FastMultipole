@@ -30,7 +30,7 @@ Tune the Fast Multipole Method (FMM) parameters for optimal performance on the g
 
 **Keyword Arguments**
 
-- `ε_tol::Union{Nothing,Float64}`: the error tolerance for the FMM; if `nothing`, the FMM will simply use the `expansion_order` keyword argument to fix the expansion order
+- `error_tolerance::Union{Nothing,Float64}`: the error tolerance for the FMM; if `nothing`, the FMM will simply use the `expansion_order` keyword argument to fix the expansion order
 - `expansion_order::Int`: the max expansion order for the FMM; defaults to 4
 - `leaf_size_source::Int`: the leaf size for the source systems; defaults to `default_leaf_size(source_systems)`
 - `max_expansion_order::Int`: the maximum allowable expansion order if an error tolerance is requested; defaults to 20
@@ -51,7 +51,7 @@ Tune the Fast Multipole Method (FMM) parameters for optimal performance on the g
 
 """
 function tune_fmm(target_systems::Tuple, source_systems::Tuple;
-    ε_tol=nothing,
+    error_tolerance=nothing,
     expansion_order=4, leaf_size_source=default_leaf_size(source_systems),
     max_expansion_order=20, # max_iter=10,
     multipole_acceptances=range(0.3, stop=0.8, step=0.1),
@@ -88,9 +88,9 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
 
         # initial fmm! call with max_expansion_order to get leaf_size
         t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems, cache;
-                                                                                expansion_order=isnothing(ε_tol) ? expansion_order : max_expansion_order,
+                                                                                expansion_order=isnothing(error_tolerance) ? expansion_order : max_expansion_order,
                                                                                 leaf_size_source, multipole_acceptance,
-                                                                                ε_tol, kwargs...,
+                                                                                error_tolerance, kwargs...,
                                                                                 tune=true, update_target_systems=false,
                                                                                )
 
@@ -106,18 +106,18 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
 
         # second fmm! call with optimal leaf_size to get expansion order
         t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems, cache;
-                                                                                 expansion_order=isnothing(ε_tol) ? expansion_order : this_max_expansion_order,
+                                                                                 expansion_order=isnothing(error_tolerance) ? expansion_order : this_max_expansion_order,
                                                                                  leaf_size_source, multipole_acceptance,
-                                                                                 ε_tol, kwargs...,
+                                                                                 error_tolerance, kwargs...,
                                                                                  tune=true, update_target_systems=false,
                                                                                 )
 
         if !error_success # better run at the actual max_expansion_order
             max_expansion_order = original_max_expansion_order
             t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems, cache;
-                                                                                     expansion_order=isnothing(ε_tol) ? expansion_order : max_expansion_order,
+                                                                                     expansion_order=isnothing(error_tolerance) ? expansion_order : max_expansion_order,
                                                                                      leaf_size_source, multipole_acceptance,
-                                                                                     ε_tol, kwargs...,
+                                                                                     error_tolerance, kwargs...,
                                                                                      tune=true, update_target_systems=false,
                                                                                     )
 
@@ -129,7 +129,7 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
         t_fmm = @elapsed optargs, _, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems, cache;
                                                                                  expansion_order,
                                                                                  leaf_size_source, multipole_acceptance,
-                                                                                 ε_tol, kwargs...,
+                                                                                 error_tolerance, kwargs...,
                                                                                  tune=true, update_target_systems=false,
                                                                                 )
 
@@ -166,7 +166,7 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
             t_fmm = @elapsed optargs, cache, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems;
                                                                                         expansion_order,
                                                                                         leaf_size_source, multipole_acceptance,
-                                                                                        ε_tol, kwargs..., cache,
+                                                                                        error_tolerance, kwargs..., cache,
                                                                                         tune=true, update_target_systems=false
                                                                                        )
 
@@ -177,7 +177,7 @@ function tune_fmm(target_systems::Tuple, source_systems::Tuple;
             t_fmm = @elapsed optargs, cache, _, _, m2l_list, _, _, error_success = fmm!(target_systems, source_systems;
                                                                                         expansion_order,
                                                                                         leaf_size_source, multipole_acceptance,
-                                                                                        ε_tol, kwargs..., cache,
+                                                                                        error_tolerance, kwargs..., cache,
                                                                                         tune=true, update_target_systems=false
                                                                                        )
             if error_success # (loosely) converged

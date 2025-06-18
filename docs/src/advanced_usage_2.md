@@ -4,7 +4,7 @@ In the this section, we will describe how to impose an error tolerance. Finally,
 
 ## Satisfying an Error Tolerance
 
-`FastMultipole` can be configured to satisfy an error tolerance by dynamically adjusting the expansion order of each multipole-to-local transformation to the smallest integer that satisfies the tolerance, according to an error prediction. Users can indicate their desired error tolerance via the keyword argument `ε_tol` in the `fmm!` function. A value of `nothing` indicates no error tolerance, in which case the expansion order is fixed at whatever is passed as the `expansion_order` keyword. Otherwise, `ε_tol` should inherit from the `ErrorMethod` abstract type. The chosen type will determine how the error is predicted, and hence how the expansion order is chosen. Choices include:
+`FastMultipole` can be configured to satisfy an error tolerance by dynamically adjusting the expansion order of each multipole-to-local transformation to the smallest integer that satisfies the tolerance, according to an error prediction. Users can indicate their desired error tolerance via the keyword argument `error_tolerance` in the `fmm!` function. A value of `nothing` indicates no error tolerance, in which case the expansion order is fixed at whatever is passed as the `expansion_order` keyword. Otherwise, `error_tolerance` should inherit from the `ErrorMethod` abstract type. The chosen type will determine how the error is predicted, and hence how the expansion order is chosen. Choices include:
 
 - `PowerAbsolutePotential{tolerance}`: Constrains the magnitude of the potential error to be less than `tolerance` using a radially invariant upper bound.
 - `PowerAbsoluteGradient{tolerance}`: Constrains the magnitude of the vector field error to be less than `tolerance` using a radially invariant upper bound.
@@ -26,12 +26,12 @@ n_bodies, rand_seed = 5_000, 123
 system = generate_gravitational(rand_seed, n_bodies)
 
 # run FMM with error tolerance
-fmm!(system; scalar_potential=true, gradient=false, hessian=false, ε_tol=PowerAbsolutePotential(1e-6), expansion_order=8)
+fmm!(system; scalar_potential=true, gradient=false, hessian=false, error_tolerance=PowerAbsolutePotential(1e-6), expansion_order=8)
 
 # print potential
 println("gravitational potential:\n", system.potential[1,1:10], "...")
 ```
-This keyword argument `ε_tol=PowerAbsolutePotential(1e-6)` requests that the expansion order be dynamically adjusted to ensure that the potential error of each interaction is less than `1e-6` at each body. Note that this does ensure a perfectly conservative error bound, since many multipole-to-local transformations will be performed to any given target cell. However, the maximum error should be within an order of magnitude of the specified tolerance, and the average error will be much lower. It is also worth pointing out that the `expansion_order` keyword determines the maximum allowable expansion order; if it is too small, then `FastMultipole` will not be able to satisfy the error tolerance, and will show a warning. In this case, the expansion order is set to `8`, which is sufficient to satisfy the error tolerance.
+This keyword argument `error_tolerance=PowerAbsolutePotential(1e-6)` requests that the expansion order be dynamically adjusted to ensure that the potential error of each interaction is less than `1e-6` at each body. Note that this does ensure a perfectly conservative error bound, since many multipole-to-local transformations will be performed to any given target cell. However, the maximum error should be within an order of magnitude of the specified tolerance, and the average error will be much lower. It is also worth pointing out that the `expansion_order` keyword determines the maximum allowable expansion order; if it is too small, then `FastMultipole` will not be able to satisfy the error tolerance, and will show a warning. In this case, the expansion order is set to `8`, which is sufficient to satisfy the error tolerance.
 
 ```@example advancedex2
 # verify error
@@ -46,7 +46,7 @@ It is also worth noting that the expansion order is never allowed to be less tha
 ```@example advancedex2
 # run FMM with error tolerance
 system.potential .= 0.0
-fmm!(system; scalar_potential=true, gradient=false, hessian=false, ε_tol=PowerAbsolutePotential(1e-2))
+fmm!(system; scalar_potential=true, gradient=false, hessian=false, error_tolerance=PowerAbsolutePotential(1e-2))
 
 # check error
 phi_fmm = system.potential[1,:]
@@ -64,7 +64,7 @@ As a rule of thumb, `PowerAbsolutePotential` and `PowerAbsoluteGradient` are bes
 Say I wanted the optimal tuning parameters for the gravitational potential of a system of point masses, with a maximum error tolerance of `1e-4`. I would call the function as follows:
 
 ```@example advancedex2
-opt_params, cache = tune_fmm(system; ε_tol=PowerAbsolutePotential(1e-4), scalar_potential=true, gradient=false, hessian=false)
+opt_params, cache = tune_fmm(system; error_tolerance=PowerAbsolutePotential(1e-4), scalar_potential=true, gradient=false, hessian=false)
 println("Optimal parameters: ", opt_params)
 ```
 This will return a named tuple of the optimal parameters, which can then be passed to the `fmm!` function. The `cache` is a preallocated buffer that can be used to reduce memory allocations during the FMM call.
@@ -73,7 +73,7 @@ This will return a named tuple of the optimal parameters, which can then be pass
 # run FMM without default parameters
 println("Default Tuning Parameters:")
 system.potential .= 0.0
-t1 = @elapsed fmm!(system; scalar_potential=true, gradient=false, hessian=false, ε_tol=PowerAbsolutePotential(1e-4))
+t1 = @elapsed fmm!(system; scalar_potential=true, gradient=false, hessian=false, error_tolerance=PowerAbsolutePotential(1e-4))
 
 # verify error
 phi_fmm = system.potential[1,:]
@@ -82,7 +82,7 @@ println("\ttime cost: ", t1, " seconds")
 
 # run FMM with optimal parameters
 println("Optimal Tuning Parameters:")
-t2 = @elapsed fmm!(system, cache; scalar_potential=true, gradient=false, hessian=false, ε_tol=PowerAbsolutePotential(1e-4), opt_params...)
+t2 = @elapsed fmm!(system, cache; scalar_potential=true, gradient=false, hessian=false, error_tolerance=PowerAbsolutePotential(1e-4), opt_params...)
 
 # verify error
 println("\tmax error: ", maximum(abs.(phi_direct .- phi_fmm)))

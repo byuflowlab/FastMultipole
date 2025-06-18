@@ -687,10 +687,10 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, error_success
 end
 
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsRelativeGradient{ε_tol,BE}) where {LH,ε_tol,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::RotatedCoefficientsRelativeGradient{ET,BE}) where {LH,ET,BE}
     
     # scale error tolerance by max influence
-    ε = target_branch.max_influence * ε_tol
+    ε = target_branch.max_influence * ET
 
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -971,10 +971,10 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, error_success
 end
 
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerRelativePotential{ε_tol,BE}) where {LH,ε_tol,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerRelativePotential{ET,BE}) where {LH,ET,BE}
     
     # scale error tolerance by max influence
-    ε = target_branch.max_influence * ε_tol
+    ε = target_branch.max_influence * ET
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -1264,10 +1264,10 @@ function multipole_to_local!(target_weights, target_branch, source_weights, sour
     return expansion_order, error_success
 end
 
-function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerRelativeGradient{ε_tol,BE}) where {LH,ε_tol,BE}
+function multipole_to_local!(target_weights, target_branch, source_weights, source_branch, weights_tmp_1, weights_tmp_2, weights_tmp_3, Ts, eimϕs, ζs_mag, ηs_mag, Hs_π2, M̃, L̃, expansion_order, lamb_helmholtz::Val{LH}, ::PowerRelativeGradient{ET,BE}) where {LH,ET,BE}
     
     # scale error tolerance by max influence    
-    ε = target_branch.max_influence * ε_tol
+    ε = target_branch.max_influence * ET
     
     # translation vector
     Δx = target_branch.target_center - source_branch.source_center
@@ -1673,7 +1673,7 @@ multipole_to_local!(target_weights, target_branch, source_weights, source_branch
 #     return n, false
 # end
 
-# function multipole_upper_bound(A, r, ρ, expansion_order, ε_tol)
+# function multipole_upper_bound(A, r, ρ, expansion_order, ET)
 #     inv_r = 1 / r
 #     rho_by_r = ρ * inv_r
 #     base_factor = A * inv_r / ((r - ρ) * (r - ρ))
@@ -1683,7 +1683,7 @@ multipole_to_local!(target_weights, target_branch, source_weights, source_branch
 #         linear_term = (P + 1) * ρ - (P + 2) * r
 #         err_ub = base_factor * power_term * linear_term
 
-#         if abs(err_ub) < ε_tol
+#         if abs(err_ub) < ET
 #             return P, true
 #         end
 
@@ -1693,7 +1693,7 @@ multipole_to_local!(target_weights, target_branch, source_weights, source_branch
 #     return expansion_order, false
 # end
 
-# function local_upper_bound(A, r, ρ, expansion_order, ε_tol)
+# function local_upper_bound(A, r, ρ, expansion_order, ET)
 #     inv_ρ = 1 / ρ
 #     inv_diff = 1 / (ρ - r)
 #     r_by_ρ = r * inv_ρ
@@ -1704,7 +1704,7 @@ multipole_to_local!(target_weights, target_branch, source_weights, source_branch
 #         linear_term = (P + 1) * inv_ρ + inv_diff * r_by_ρ
 #         err_ub = base_factor * power_term * linear_term
 
-#         if err_ub < ε_tol
+#         if err_ub < ET
 #             return P, true
 #         end
 

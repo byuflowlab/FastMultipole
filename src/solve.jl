@@ -860,7 +860,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
         # fmm call
         reset!(target_buffers)
         fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, empty_direct_list, derivatives_switches, interaction_list_method;
-            source_tree.expansion_order, ε_tol=nothing,
+            source_tree.expansion_order, error_tolerance=nothing,
             upward_pass=true, horizontal_pass=true, downward_pass=true,
             # horizontal_pass_verbose::Bool=false,
             reset_target_tree=true, reset_source_tree=true,
@@ -930,7 +930,7 @@ function solve!(target_systems::Tuple, source_systems::Tuple, solver::FastGaussS
 
     # use new strengths to get the full influence (farfield was already computed)
     fmm!(target_systems, target_tree, source_systems, source_tree, source_tree.leaf_size, m2l_list, full_direct_list, derivatives_switches, interaction_list_method;
-            expansion_order=source_tree.expansion_order, ε_tol=nothing,
+            expansion_order=source_tree.expansion_order, error_tolerance=nothing,
             upward_pass=false, horizontal_pass=false, downward_pass=false, # just nearfield influence
             # horizontal_pass_verbose::Bool=false,
             reset_target_tree=false, reset_source_tree=false, # false now
