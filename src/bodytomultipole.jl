@@ -685,7 +685,8 @@ function body_to_multipole_quad!(element::Type{<:Panel}, system, multipole_coeff
         xv = x3 - x1
 
         # get normal
-        normal = get_normal(buffer, system, i_body)
+        normal = cross(x2-x1, x3-x1)
+        normal /= norm(normal)
 
         # get strength
         strength = get_strength(buffer, system, i_body)
@@ -704,10 +705,7 @@ function body_to_multipole_quad!(element::Type{<:Panel}, system, multipole_coeff
 
         # get normal
         normal = cross(x2-x1, x3-x1) 
-        normal / norm(normal)
-
-        # get strength
-        strength = get_strength(buffer, system, i_body)
+        normal /= norm(normal)
 
         # update values
         body_to_multipole_panel!(element, multipole_coefficients, harmonics, x0, xu, xv, normal, strength, expansion_order)
